@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Camera, CheckCircle, XCircle, Home, Edit2, Trash2, Car, Activity, Wifi, HelpCircle, RotateCcw } from 'lucide-react';
 import { useLPRDetections } from '@/react-app/hooks/useApi';
+import { supabase } from '@/integrations/supabase/client';
 import CadastroMoradorModal from '@/react-app/components/CadastroMoradorModal';
 import EditarVeiculoMoradorModal from '@/react-app/components/EditarVeiculoMoradorModal';
 import MonitoramentoHelp from '@/react-app/pages/MonitoramentoHelp';
@@ -20,7 +21,8 @@ export default function Monitoramento() {
   const {
     latestDetection,
     detectionHistory,
-    loading
+    loading,
+    refetch
   } = useLPRDetections();
   const carregarVeiculos = async () => {
     try {
@@ -62,16 +64,15 @@ export default function Monitoramento() {
       return;
     }
     try {
-      const response = await fetch('/api/lpr/detections', {
-        method: 'DELETE'
-      });
-      if (response.ok) {
-        alert('Histórico de detecções limpo com sucesso!');
-        window.location.reload();
-      } else {
-        const errorData = await response.json();
-        alert(errorData.error || 'Erro ao limpar histórico');
-      }
+      const { error } = await supabase
+        .from('lpr_deteccoes')
+        .delete()
+        .neq('id', 0); // Deleta todos os registros
+
+      if (error) throw error;
+      
+      alert('Histórico de detecções limpo com sucesso!');
+      refetch();
     } catch (err) {
       console.error('Erro ao limpar histórico:', err);
       alert('Erro ao limpar histórico');
