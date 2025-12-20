@@ -496,19 +496,35 @@ export function useConfiguracoes() {
       setLoading(true);
       setError(null);
 
-      // Limpar visitantes ativos
+      // Deletar TODOS os visitantes
       const { error: visitantesError } = await supabase
         .from('visitantes')
-        .update({ is_ativo: false, hora_saida: new Date().toISOString() })
-        .eq('is_ativo', true);
+        .delete()
+        .gte('id', 0); // Deleta todos os registros
 
       if (visitantesError) throw visitantesError;
 
-      // Liberar todos os prismas
+      // Deletar TODOS os veículos de moradores
+      const { error: veiculosError } = await supabase
+        .from('veiculos_moradores')
+        .delete()
+        .gte('id', 0); // Deleta todos os registros
+
+      if (veiculosError) throw veiculosError;
+
+      // Deletar TODAS as detecções LPR
+      const { error: deteccoesError } = await supabase
+        .from('lpr_deteccoes')
+        .delete()
+        .gte('id', 0); // Deleta todos os registros
+
+      if (deteccoesError) throw deteccoesError;
+
+      // Resetar todos os prismas (liberar mas manter)
       const { error: prismasError } = await supabase
         .from('prismas_magneticos')
         .update({ is_em_uso: false, visitante_id: null })
-        .eq('is_em_uso', true);
+        .gte('id', 0);
 
       if (prismasError) throw prismasError;
 
