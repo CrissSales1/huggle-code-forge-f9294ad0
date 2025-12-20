@@ -87,17 +87,48 @@ export default function Configuracoes() {
     setSenhaSeguranca('');
   };
 
+  // Função para buscar todos os registros de uma tabela (sem limite de 1000)
+  const fetchAllRecords = async (tableName: 'visitantes' | 'veiculos_moradores' | 'lpr_deteccoes' | 'prismas_magneticos') => {
+    const allRecords: any[] = [];
+    const pageSize = 1000;
+    let page = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from(tableName)
+        .select('*')
+        .order('id', { ascending: true })
+        .range(page * pageSize, (page + 1) * pageSize - 1);
+
+      if (error) {
+        console.error(`Erro ao buscar ${tableName}:`, error);
+        break;
+      }
+
+      if (data && data.length > 0) {
+        allRecords.push(...data);
+        page++;
+        hasMore = data.length === pageSize;
+      } else {
+        hasMore = false;
+      }
+    }
+
+    return allRecords;
+  };
+
   // Exportar backup completo
   const handleExportarBackup = async () => {
     setExportando(true);
     
     try {
-      // Buscar todos os dados de todas as tabelas
+      // Buscar todos os dados de todas as tabelas (sem limite de 1000)
       const [visitantes, veiculos, deteccoes, prismas, config] = await Promise.all([
-        supabase.from('visitantes').select('*').order('id', { ascending: true }),
-        supabase.from('veiculos_moradores').select('*').order('id', { ascending: true }),
-        supabase.from('lpr_deteccoes').select('*').order('id', { ascending: true }),
-        supabase.from('prismas_magneticos').select('*').order('id', { ascending: true }),
+        fetchAllRecords('visitantes'),
+        fetchAllRecords('veiculos_moradores'),
+        fetchAllRecords('lpr_deteccoes'),
+        fetchAllRecords('prismas_magneticos'),
         supabase.from('configuracoes_sistema').select('*'),
       ]);
 
@@ -108,10 +139,10 @@ export default function Configuracoes() {
           sistema: 'PortaCerta - Sistema de Controle de Acesso',
         },
         tabelas: {
-          visitantes: visitantes.data || [],
-          veiculos_moradores: veiculos.data || [],
-          lpr_deteccoes: deteccoes.data || [],
-          prismas_magneticos: prismas.data || [],
+          visitantes: visitantes,
+          veiculos_moradores: veiculos,
+          lpr_deteccoes: deteccoes,
+          prismas_magneticos: prismas,
           configuracoes_sistema: config.data || [],
         },
       };
