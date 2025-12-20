@@ -704,6 +704,18 @@ export function useLPRDetections() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Função para mapear dados do banco para o formato da UI
+  const mapDetectionData = (data: any) => {
+    if (!data) return null;
+    return {
+      id: data.id,
+      placa: data.placa_detectada,
+      confidence: data.confidence,
+      timestamp: data.timestamp,
+      morador: data.is_morador ? { casa: data.casa_morador } : null,
+    };
+  };
+
   const fetchLatest = useCallback(async () => {
     try {
       const { data, error: queryError } = await supabase
@@ -716,7 +728,7 @@ export function useLPRDetections() {
       if (queryError) throw queryError;
 
       if (data) {
-        setLatestDetection(data);
+        setLatestDetection(mapDetectionData(data));
       }
     } catch (err) {
       console.error('Erro ao buscar última detecção:', err);
@@ -734,7 +746,7 @@ export function useLPRDetections() {
 
       if (queryError) throw queryError;
 
-      setDetectionHistory(data || []);
+      setDetectionHistory((data || []).map(mapDetectionData));
     } catch (err) {
       console.error('Erro ao buscar histórico:', err);
     }
