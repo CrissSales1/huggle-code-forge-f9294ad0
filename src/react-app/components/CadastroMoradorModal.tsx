@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { X, Save, Car } from 'lucide-react';
 import { normalizarNumeroCasa } from '@/react-app/utils/formatters';
+import { supabase } from '@/integrations/supabase/client';
 
 interface CadastroMoradorModalProps {
   isOpen: boolean;
@@ -26,21 +27,14 @@ export default function CadastroMoradorModal({ isOpen, onClose, onSuccess }: Cad
     setError(null);
 
     try {
-      const response = await fetch('/api/moradores/veiculos', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      const { error: insertError } = await supabase
+        .from('veiculos_moradores')
+        .insert({
           placa_veiculo: placa.toUpperCase(),
           casa: normalizarNumeroCasa(casa),
-        }),
-      });
+        });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Erro ao cadastrar veículo');
-      }
+      if (insertError) throw insertError;
 
       setPlaca('');
       setCasa('');
