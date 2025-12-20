@@ -697,12 +697,13 @@ export function useEstatisticas(periodo: '7' | '30' | '90') {
   return { estatisticas, loading, error };
 }
 
-// Hook para monitoramento LPR (Rekor Scout)
+// Hook para monitoramento LPR (Rekor Scout) com Realtime
 export function useLPRDetections() {
   const [latestDetection, setLatestDetection] = useState<any>(null);
   const [detectionHistory, setDetectionHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
 
   // Função para mapear dados do banco para o formato da UI
   const mapDetectionData = (data: any) => {
@@ -716,59 +717,69 @@ export function useLPRDetections() {
     };
   };
 
-  const fetchLatest = useCallback(async () => {
+  const fetchInitialData = useCallback(async () => {
     try {
-      const { data, error: queryError } = await supabase
+      setLoading(true);
+      
+      // Buscar última detecção
+      const { data: latest, error: latestError } = await supabase
         .from('lpr_deteccoes')
         .select('*')
         .order('timestamp', { ascending: false })
         .limit(1)
         .maybeSingle();
 
-      if (queryError) throw queryError;
+      if (latestError) throw latestError;
+      if (latest) setLatestDetection(mapDetectionData(latest));
 
-      if (data) {
-        setLatestDetection(mapDetectionData(data));
-      }
-    } catch (err) {
-      console.error('Erro ao buscar última detecção:', err);
-      setError(err instanceof Error ? err.message : 'Erro ao buscar detecção');
-    }
-  }, []);
-
-  const fetchHistory = useCallback(async (limite: number = 10) => {
-    try {
-      const { data, error: queryError } = await supabase
+      // Buscar histórico
+      const { data: history, error: historyError } = await supabase
         .from('lpr_deteccoes')
         .select('*')
         .order('timestamp', { ascending: false })
-        .limit(limite);
+        .limit(10);
 
-      if (queryError) throw queryError;
-
-      setDetectionHistory((data || []).map(mapDetectionData));
+      if (historyError) throw historyError;
+      setDetectionHistory((history || []).map(mapDetectionData));
+      
     } catch (err) {
-      console.error('Erro ao buscar histórico:', err);
+      console.error('Erro ao buscar detecções:', err);
+      setError(err instanceof Error ? err.message : 'Erro ao buscar detecções');
+    } finally {
+      setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      await Promise.all([fetchLatest(), fetchHistory()]);
-      setLoading(false);
+    // Carregar dados iniciais
+    fetchInitialData();
+
+    // Configurar Realtime - escuta novas inserções instantaneamente
+    const channel = supabase
+      .channel('lpr-deteccoes-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'lpr_deteccoes'
+        },
+        (payload) => {
+          console.log('Nova detecção recebida via Realtime:', payload.new);
+          const novaDeteccao = mapDetectionData(payload.new);
+          setLatestDetection(novaDeteccao);
+          setDetectionHistory(prev => [novaDeteccao, ...prev.slice(0, 9)]);
+        }
+      )
+      .subscribe((status) => {
+        console.log('Status da conexão Realtime:', status);
+        setIsConnected(status === 'SUBSCRIBED');
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
     };
+  }, [fetchInitialData]);
 
-    fetchData();
-
-    // Polling a cada 3 segundos para buscar novas detecções
-    const interval = setInterval(() => {
-      fetchLatest();
-      fetchHistory();
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, [fetchLatest, fetchHistory]);
-
-  return { latestDetection, detectionHistory, loading, error, refetch: fetchLatest };
+  return { latestDetection, detectionHistory, loading, error, isConnected, refetch: fetchInitialData };
 }
