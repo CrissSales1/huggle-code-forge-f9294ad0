@@ -77,21 +77,21 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-4 sm:mb-6">
         <StatsCard
           title="Vagas de Visitantes Disponíveis"
-          value={stats?.vagas_visitantes_disponiveis || 0}
+          value={stats?.vagas_disponiveis || 0}
           icon={Car}
           color="green"
           loading={loadingStats}
         />
         <StatsCard
           title="Prismas Magnéticos Disponíveis"
-          value={stats?.prismas_magneticos_disponiveis || 0}
+          value={stats?.prismas_disponiveis || 0}
           icon={Hash}
           color="blue"
           loading={loadingStats}
         />
         <StatsCard
           title="Total de Visitantes Ativos"
-          value={stats?.total_visitantes_ativos || 0}
+          value={stats?.visitantes_ativos || 0}
           icon={Users}
           color="purple"
           loading={loadingStats}
