@@ -4,8 +4,8 @@ import Modal from './Modal';
 import CameraModal from './CameraModal';
 import SelecionarVisitanteModal from './SelecionarVisitanteModal';
 import { usePrismasDisponiveis, useVisitanteActions } from '@/react-app/hooks/useApi';
+import { normalizarNumeroCasa } from '@/react-app/utils/formatters';
 import type { VisitanteType } from '@/shared/types';
-
 
 interface CadastroVisitanteModalProps {
   isOpen: boolean;
@@ -187,7 +187,7 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
 
     const sucesso = await cadastrarVisitante({
       nome: nome.trim(),
-      casa_visitada: casaVisitada.trim(),
+      casa_visitada: normalizarNumeroCasa(casaVisitada.trim()),
       placa_veiculo: placaVeiculo.trim().toUpperCase(),
       numero_prisma: prismaSelecionado,
       estacionar_vaga_morador: estacionarVagaMorador,

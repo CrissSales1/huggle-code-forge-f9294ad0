@@ -11,6 +11,32 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Função para normalizar números de casa
+  const normalizarNumeroCasa = (valor: string): string => {
+    if (!valor) return valor;
+    
+    const valorTrimmed = valor.trim().toUpperCase();
+    
+    // Se for apenas um dígito de 1-9, adiciona zero à esquerda
+    if (/^[1-9]$/.test(valorTrimmed)) {
+      return `0${valorTrimmed}`;
+    }
+    
+    // Se tiver formato "CASA X", "APT X", etc. com um dígito, normaliza
+    const match = valorTrimmed.match(/^(CASA|APT|APTO|APARTAMENTO|BLOCO|BL)\s*([1-9])$/i);
+    if (match) {
+      return `${match[1]} 0${match[2]}`;
+    }
+    
+    // Se terminar com espaço + um dígito de 1-9, normaliza
+    const matchFinal = valorTrimmed.match(/^(.+\s)([1-9])$/);
+    if (matchFinal) {
+      return `${matchFinal[1]}0${matchFinal[2]}`;
+    }
+    
+    return valorTrimmed;
+  };
+
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -32,7 +58,7 @@ serve(async (req) => {
       for (let i = 0; i < tabelas.visitantes.length; i += batchSize) {
         const batch = tabelas.visitantes.slice(i, i + batchSize).map((v: any) => ({
           nome: v.nome,
-          casa_visitada: v.casa_visitada,
+          casa_visitada: normalizarNumeroCasa(v.casa_visitada),
           placa_veiculo: v.placa_veiculo,
           numero_prisma: v.numero_prisma,
           estacionar_vaga_morador: v.estacionar_vaga_morador === 1 || v.estacionar_vaga_morador === true,
@@ -68,7 +94,7 @@ serve(async (req) => {
           .from("veiculos_moradores")
           .upsert({
             placa_veiculo: v.placa_veiculo,
-            casa: v.casa,
+            casa: normalizarNumeroCasa(v.casa),
             created_at: v.created_at,
             updated_at: v.updated_at,
           }, { onConflict: "id", ignoreDuplicates: false });

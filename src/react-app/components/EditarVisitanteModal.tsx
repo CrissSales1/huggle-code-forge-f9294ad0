@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import Modal from './Modal';
 import { useVisitanteActions } from '@/react-app/hooks/useApi';
+import { normalizarNumeroCasa } from '@/react-app/utils/formatters';
 import type { VisitanteAtivo } from '@/shared/types';
 
 interface EditarVisitanteModalProps {
@@ -39,7 +40,7 @@ export default function EditarVisitanteModal({ isOpen, onClose, visitante, onSuc
     const sucesso = await editarVisitante({
       id: visitante.id!,
       nome: nome.trim(),
-      casa_visitada: casaVisitada.trim(),
+      casa_visitada: normalizarNumeroCasa(casaVisitada.trim()),
       placa_veiculo: placaVeiculo.trim().toUpperCase(),
       estacionar_vaga_morador: estacionarVagaMorador,
       observacoes: observacoes.trim() || undefined,

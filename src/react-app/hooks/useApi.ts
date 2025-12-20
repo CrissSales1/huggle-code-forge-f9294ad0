@@ -346,7 +346,15 @@ export function useRelatorios() {
         query = query.ilike('nome', `%${filtros.nome}%`);
       }
       if (filtros.casa_visitada) {
-        query = query.ilike('casa_visitada', `%${filtros.casa_visitada}%`);
+        // Buscar tanto o valor original quanto a versão normalizada (ex: "1" busca "01" também)
+        const casaNormalizada = filtros.casa_visitada;
+        const casaSemZero = casaNormalizada.replace(/^0/, '');
+        if (casaNormalizada !== casaSemZero) {
+          // Se foi normalizado, busca ambos
+          query = query.or(`casa_visitada.ilike.%${casaNormalizada}%,casa_visitada.ilike.%${casaSemZero}%`);
+        } else {
+          query = query.ilike('casa_visitada', `%${casaNormalizada}%`);
+        }
       }
       if (filtros.placa_veiculo) {
         query = query.ilike('placa_veiculo', `%${filtros.placa_veiculo}%`);
