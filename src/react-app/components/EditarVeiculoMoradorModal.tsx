@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Save, Car } from 'lucide-react';
 import { normalizarNumeroCasa } from '@/react-app/utils/formatters';
+import { supabase } from '@/integrations/supabase/client';
 
 interface EditarVeiculoMoradorModalProps {
   isOpen: boolean;
@@ -38,21 +39,15 @@ export default function EditarVeiculoMoradorModal({ isOpen, onClose, onSuccess, 
     setError(null);
 
     try {
-      const response = await fetch(`/api/moradores/veiculos/${veiculo.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      const { error: updateError } = await supabase
+        .from('veiculos_moradores')
+        .update({
           placa_veiculo: placa.toUpperCase(),
           casa: normalizarNumeroCasa(casa),
-        }),
-      });
+        })
+        .eq('id', veiculo.id);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Erro ao editar veículo');
-      }
+      if (updateError) throw updateError;
 
       setPlaca('');
       setCasa('');
