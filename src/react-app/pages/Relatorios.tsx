@@ -220,44 +220,44 @@ export default function Relatorios() {
   const paginasNavegacao = gerarPaginasNavegacao();
 
   return (
-    <div className="container mx-auto px-4 lg:px-6 py-4 lg:py-8">
+    <div className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 lg:py-6 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Busca de Visitantes</h1>
-        <p className="text-gray-600 mt-1">Encontre e analise visitantes no histórico do sistema</p>
+      <div className="mb-4 sm:mb-6 lg:mb-8">
+        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">Busca de Visitantes</h1>
+        <p className="text-gray-600 mt-0.5 sm:mt-1 text-xs sm:text-sm lg:text-base">Encontre e analise visitantes no histórico do sistema</p>
       </div>
 
       {/* Filtros sempre visíveis */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Filtros de Busca</h2>
+      <div className="bg-white rounded-lg sm:rounded-xl border border-gray-200 p-3 sm:p-4 lg:p-6 mb-4 sm:mb-6">
+        <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">Filtros de Busca</h2>
         
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4 mb-4">
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2 sm:gap-3 lg:gap-4 mb-3 sm:mb-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
               Data Inicial
             </label>
             <input
               type="date"
               value={filtros.data_inicial}
               onChange={(e) => setFiltros({...filtros, data_inicial: e.target.value, pagina: 1})}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
           
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
               Data Final
             </label>
             <input
               type="date"
               value={filtros.data_final}
               onChange={(e) => setFiltros({...filtros, data_final: e.target.value, pagina: 1})}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
           
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+          <div className="col-span-2 sm:col-span-1">
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
               Nome do Visitante
             </label>
             <input
@@ -265,48 +265,48 @@ export default function Relatorios() {
               value={filtros.nome}
               onChange={(e) => setFiltros({...filtros, nome: e.target.value.toUpperCase(), pagina: 1})}
               placeholder="Digite o nome..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase"
+              className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase"
             />
           </div>
           
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
               Casa Visitada
             </label>
             <input
               type="text"
               value={filtros.casa_visitada}
               onChange={(e) => setFiltros({...filtros, casa_visitada: e.target.value.toUpperCase(), pagina: 1})}
-              placeholder="Digite a casa..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase"
+              placeholder="Casa..."
+              className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase"
             />
           </div>
           
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
               Placa do Veículo
             </label>
             <input
               type="text"
               value={filtros.placa_veiculo}
               onChange={(e) => setFiltros({...filtros, placa_veiculo: e.target.value.toUpperCase(), pagina: 1})}
-              placeholder="Digite a placa..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Placa..."
+              className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
         </div>
         
-        <div className="flex justify-end space-x-3">
+        <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
           <button
             onClick={handleLimparFiltros}
-            className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+            className="px-3 sm:px-4 py-2 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
           >
-            Limpar Filtros
+            Limpar
           </button>
           <button
             onClick={() => handleBuscar(1)}
             disabled={loading}
-            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+            className="flex items-center justify-center space-x-1.5 sm:space-x-2 px-4 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 text-sm"
           >
             <Search className="w-4 h-4" />
             <span>{loading ? 'Buscando...' : 'Buscar'}</span>
@@ -322,37 +322,37 @@ export default function Relatorios() {
 
       {/* Estatísticas */}
       {estatisticas && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 mb-6">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex items-center space-x-2 mb-2">
-              <FileText className="w-5 h-5 text-blue-600" />
-              <span className="text-sm font-medium text-blue-900">Total de Visitas</span>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 lg:gap-4 mb-4 sm:mb-6">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 sm:p-3 lg:p-4">
+            <div className="flex items-center space-x-1 sm:space-x-2 mb-1 sm:mb-2">
+              <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
+              <span className="text-[10px] sm:text-xs lg:text-sm font-medium text-blue-900">Total</span>
             </div>
-            <p className="text-2xl font-bold text-blue-900">{estatisticas.totalVisitas}</p>
+            <p className="text-lg sm:text-xl lg:text-2xl font-bold text-blue-900">{estatisticas.totalVisitas}</p>
           </div>
           
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-            <div className="flex items-center space-x-2 mb-2">
-              <TrendingUp className="w-5 h-5 text-green-600" />
-              <span className="text-sm font-medium text-green-900">Finalizadas</span>
+          <div className="bg-green-50 border border-green-200 rounded-lg p-2 sm:p-3 lg:p-4">
+            <div className="flex items-center space-x-1 sm:space-x-2 mb-1 sm:mb-2">
+              <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
+              <span className="text-[10px] sm:text-xs lg:text-sm font-medium text-green-900">Finalizadas</span>
             </div>
-            <p className="text-2xl font-bold text-green-900">{estatisticas.visitasFinalizadas}</p>
+            <p className="text-lg sm:text-xl lg:text-2xl font-bold text-green-900">{estatisticas.visitasFinalizadas}</p>
           </div>
           
-          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-            <div className="flex items-center space-x-2 mb-2">
-              <Clock className="w-5 h-5 text-orange-600" />
-              <span className="text-sm font-medium text-orange-900">Ativas</span>
+          <div className="bg-orange-50 border border-orange-200 rounded-lg p-2 sm:p-3 lg:p-4">
+            <div className="flex items-center space-x-1 sm:space-x-2 mb-1 sm:mb-2">
+              <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-orange-600" />
+              <span className="text-[10px] sm:text-xs lg:text-sm font-medium text-orange-900">Ativas</span>
             </div>
-            <p className="text-2xl font-bold text-orange-900">{estatisticas.visitasAtivas}</p>
+            <p className="text-lg sm:text-xl lg:text-2xl font-bold text-orange-900">{estatisticas.visitasAtivas}</p>
           </div>
           
-          <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-            <div className="flex items-center space-x-2 mb-2">
-              <Clock className="w-5 h-5 text-purple-600" />
-              <span className="text-sm font-medium text-purple-900">Tempo Médio</span>
+          <div className="bg-purple-50 border border-purple-200 rounded-lg p-2 sm:p-3 lg:p-4">
+            <div className="flex items-center space-x-1 sm:space-x-2 mb-1 sm:mb-2">
+              <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-purple-600" />
+              <span className="text-[10px] sm:text-xs lg:text-sm font-medium text-purple-900">Tempo Médio</span>
             </div>
-            <p className="text-2xl font-bold text-purple-900">
+            <p className="text-lg sm:text-xl lg:text-2xl font-bold text-purple-900">
               {Math.floor(estatisticas.tempoMedioPermanencia)}h{Math.floor((estatisticas.tempoMedioPermanencia % 1) * 60)}m
             </p>
           </div>
@@ -360,37 +360,39 @@ export default function Relatorios() {
       )}
 
       {/* Resultados */}
-      <div className="bg-white rounded-lg border border-gray-200">
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold text-gray-900">
-              Resultados da Busca
+      <div className="bg-white rounded-lg sm:rounded-xl border border-gray-200">
+        <div className="p-3 sm:p-4 lg:p-6 border-b border-gray-200">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-0">
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-lg lg:text-xl font-semibold text-gray-900">
+                Resultados
+              </h2>
               {resultado.total_registros > 0 && (
-                <span className="ml-2 text-sm text-gray-500">
-                  ({resultado.total_registros} registros{resultado.total_paginas > 1 && ` - ${resultado.total_paginas} páginas`})
+                <span className="text-xs sm:text-sm text-gray-500">
+                  {resultado.total_registros} registros{resultado.total_paginas > 1 && ` • ${resultado.total_paginas} páginas`}
                 </span>
               )}
-            </h2>
+            </div>
             
             {resultado.visitantes.length > 0 && (
               <button 
                 onClick={exportarDados}
-                className="flex items-center space-x-2 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                className="flex items-center justify-center space-x-1.5 sm:space-x-2 px-3 sm:px-4 py-2 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors self-start sm:self-auto"
               >
                 <Download className="w-4 h-4" />
-                <span>Exportar CSV</span>
+                <span className="hidden sm:inline">Exportar</span> <span>CSV</span>
               </button>
             )}
           </div>
         </div>
         
-        <div className="p-6">
+        <div className="p-3 sm:p-4 lg:p-6">
           {resultado.visitantes.length === 0 ? (
-            <div className="text-center py-12">
-              <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum resultado encontrado</h3>
-              <p className="text-gray-500">
-                Use os filtros acima para buscar visitantes no histórico.
+            <div className="text-center py-8 sm:py-12">
+              <FileText className="w-12 h-12 sm:w-16 sm:h-16 text-gray-300 mx-auto mb-3 sm:mb-4" />
+              <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-1 sm:mb-2">Nenhum resultado encontrado</h3>
+              <p className="text-gray-500 text-sm">
+                Use os filtros acima para buscar visitantes.
               </p>
             </div>
           ) : (
@@ -502,37 +504,36 @@ export default function Relatorios() {
 
               {/* Paginação */}
               {resultado.total_paginas > 1 && (
-                <div className="mt-6 flex items-center justify-between border-t border-gray-200 pt-6">
-                  <div className="flex items-center text-sm text-gray-500">
+                <div className="mt-4 sm:mt-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t border-gray-200 pt-4 sm:pt-6">
+                  <div className="text-xs sm:text-sm text-gray-500 text-center sm:text-left">
                     <span>
-                      Mostrando {((resultado.pagina_atual - 1) * resultado.limite_por_pagina) + 1} até{' '}
-                      {Math.min(resultado.pagina_atual * resultado.limite_por_pagina, resultado.total_registros)} de{' '}
-                      {resultado.total_registros} registros
+                      {((resultado.pagina_atual - 1) * resultado.limite_por_pagina) + 1}-
+                      {Math.min(resultado.pagina_atual * resultado.limite_por_pagina, resultado.total_registros)} de {resultado.total_registros}
                     </span>
                   </div>
                   
-                  <div className="flex items-center space-x-1">
+                  <div className="flex items-center justify-center gap-1">
                     {/* Botão Anterior */}
                     <button
                       onClick={() => handleMudarPagina(resultado.pagina_atual - 1)}
                       disabled={resultado.pagina_atual === 1 || loading}
-                      className="flex items-center px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="flex items-center px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <ChevronLeft className="w-4 h-4 mr-1" />
-                      Anterior
+                      <ChevronLeft className="w-3 h-3 sm:w-4 sm:h-4" />
+                      <span className="hidden sm:inline ml-1">Anterior</span>
                     </button>
 
                     {/* Números das páginas */}
-                    <div className="hidden sm:flex space-x-1">
-                      {paginasNavegacao.map((pagina, index) => (
+                    <div className="flex gap-1">
+                      {paginasNavegacao.slice(0, 5).map((pagina, index) => (
                         <div key={index}>
                           {pagina === '...' ? (
-                            <span className="px-3 py-2 text-sm text-gray-500">...</span>
+                            <span className="px-2 py-1.5 text-xs sm:text-sm text-gray-500">...</span>
                           ) : (
                             <button
                               onClick={() => handleMudarPagina(pagina as number)}
                               disabled={loading}
-                              className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                              className={`px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-md transition-colors ${
                                 pagina === resultado.pagina_atual
                                   ? 'bg-blue-600 text-white'
                                   : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50'
@@ -549,10 +550,10 @@ export default function Relatorios() {
                     <button
                       onClick={() => handleMudarPagina(resultado.pagina_atual + 1)}
                       disabled={resultado.pagina_atual === resultado.total_paginas || loading}
-                      className="flex items-center px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="flex items-center px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Próxima
-                      <ChevronRight className="w-4 h-4 ml-1" />
+                      <span className="hidden sm:inline mr-1">Próxima</span>
+                      <ChevronRight className="w-3 h-3 sm:w-4 sm:h-4" />
                     </button>
                   </div>
                 </div>

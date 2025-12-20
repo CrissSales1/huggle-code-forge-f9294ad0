@@ -37,7 +37,7 @@ function App() {
             <PrivateRoute>
               <div className="min-h-screen bg-gray-50">
                 <Header />
-                <main className="pt-[60px] sm:pt-[65px] lg:pt-[120px] pb-6">
+                <main className="pt-[56px] sm:pt-[60px] lg:pt-[112px] pb-4 sm:pb-6">
                   <Routes>
                     <Route path="/" element={<Dashboard />} />
                     <Route path="/cadastro" element={<Cadastro />} />
