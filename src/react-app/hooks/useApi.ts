@@ -566,13 +566,32 @@ export function useEstatisticas(periodo: '7' | '30' | '90') {
         const dias = parseInt(periodo);
         const dataInicio = new Date(agora.getTime() - dias * 24 * 60 * 60 * 1000);
 
-        const { data: visitantes, error: queryError } = await supabase
-          .from('visitantes')
-          .select('*')
-          .gte('hora_entrada', dataInicio.toISOString())
-          .order('hora_entrada', { ascending: false });
+        // Buscar TODOS os visitantes usando paginação para evitar limite de 1000
+        let allVisitantes: any[] = [];
+        let page = 0;
+        const pageSize = 1000;
+        let hasMore = true;
 
-        if (queryError) throw queryError;
+        while (hasMore) {
+          const { data: pageData, error: queryError } = await supabase
+            .from('visitantes')
+            .select('*')
+            .gte('hora_entrada', dataInicio.toISOString())
+            .order('hora_entrada', { ascending: false })
+            .range(page * pageSize, (page + 1) * pageSize - 1);
+
+          if (queryError) throw queryError;
+
+          if (pageData && pageData.length > 0) {
+            allVisitantes = [...allVisitantes, ...pageData];
+            page++;
+            hasMore = pageData.length === pageSize;
+          } else {
+            hasMore = false;
+          }
+        }
+
+        const visitantes = allVisitantes;
 
         const totalVisitantes = visitantes?.length || 0;
         const mediaPorDia = dias > 0 ? (totalVisitantes / dias).toFixed(1) : '0';
