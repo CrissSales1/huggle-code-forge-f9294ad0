@@ -26,33 +26,35 @@ export default function Monitoramento() {
   } = useLPRDetections();
   const carregarVeiculos = async () => {
     try {
-      const response = await fetch('/api/moradores/veiculos');
-      if (response.ok) {
-        const data = await response.json();
-        setVeiculos(data);
-      }
+      const { data, error } = await supabase
+        .from('veiculos_moradores')
+        .select('*')
+        .order('casa', { ascending: true });
+      
+      if (error) throw error;
+      setVeiculos(data || []);
     } catch (err) {
       console.error('Erro ao carregar veículos:', err);
     }
   };
+
   const handleEditarVeiculo = (veiculo: VeiculoMorador) => {
     setVeiculoSelecionado(veiculo);
     setShowEditarModal(true);
   };
+
   const handleExcluirVeiculo = async (id: number) => {
     if (!confirm('Tem certeza que deseja excluir este veículo?')) {
       return;
     }
     try {
-      const response = await fetch(`/api/moradores/veiculos/${id}`, {
-        method: 'DELETE'
-      });
-      if (response.ok) {
-        await carregarVeiculos();
-      } else {
-        const errorData = await response.json();
-        alert(errorData.error || 'Erro ao excluir veículo');
-      }
+      const { error } = await supabase
+        .from('veiculos_moradores')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      await carregarVeiculos();
     } catch (err) {
       console.error('Erro ao excluir veículo:', err);
       alert('Erro ao excluir veículo');
