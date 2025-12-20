@@ -55,6 +55,7 @@ export const EditarVisitanteSchema = z.object({
     
     return formatoAntigo.test(placaLimpa) || formatoMercosul.test(placaLimpa);
   }, "Formato de placa inválido. Use ABC1234 ou ABC1A23"),
+  numero_prisma: z.number().optional().nullable(),
   estacionar_vaga_morador: z.union([z.boolean(), z.number()]).transform(val => Boolean(val)).optional(),
   observacoes: z.string().optional().nullable(),
   liberado_por: z.string().optional().nullable(),
@@ -122,14 +123,31 @@ export type CadastroVeiculoMoradorType = z.infer<typeof CadastroVeiculoMoradorSc
 
 // Tipos para estatísticas do dashboard
 export interface DashboardStats {
-  vagas_visitantes_disponiveis: number;
-  prismas_magneticos_disponiveis: number;
-  total_visitantes_ativos: number;
+  vagas_disponiveis: number;
+  vagas_ocupadas: number;
+  total_vagas: number;
+  prismas_disponiveis: number;
+  prismas_em_uso: number;
+  total_prismas: number;
+  visitantes_ativos: number;
 }
 
-export interface VisitanteAtivo extends VisitanteType {
-  tempo_permanencia_horas: number;
-  alerta_permanencia_prolongada: boolean;
+export interface VisitanteAtivo {
+  id: number;
+  nome: string;
+  casa_visitada: string;
+  placa_veiculo: string;
+  numero_prisma: number | null;
+  estacionar_vaga_morador: boolean | null;
+  hora_entrada: string;
+  hora_saida: string | null;
+  is_ativo: boolean | null;
+  observacoes: string | null;
+  liberado_por: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  tempo_permanencia_horas?: number;
+  alerta_permanencia_prolongada?: boolean;
 }
 
 export interface RelatorioResultado {

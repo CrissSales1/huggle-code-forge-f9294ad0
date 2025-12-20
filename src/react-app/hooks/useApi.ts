@@ -1,42 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-
-// Utility function for retrying failed requests
-const fetchWithRetry = async (url: string, options: RequestInit = {}, maxRetries = 3) => {
-  let lastError: Error;
-  
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-      
-      const response = await fetch(url, {
-        ...options,
-        signal: controller.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          ...options.headers,
-        },
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      return response;
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-      
-      if (attempt < maxRetries) {
-        console.warn(`Tentativa ${attempt} falhou, tentando novamente em ${attempt * 1000}ms...`);
-        await new Promise(resolve => setTimeout(resolve, attempt * 1000));
-      }
-    }
-  }
-  
-  throw lastError!;
-};
+import { supabase } from '@/integrations/supabase/client';
 import type {
   CadastroVisitanteType,
   VisitanteAtivo,
@@ -59,12 +22,48 @@ export function useDashboardStats() {
     try {
       setLoading(true);
       setError(null);
-      
-      const response = await fetchWithRetry('/api/dashboard/stats');
-      const data = await response.json();
-      setStats(data);
+
+      // Buscar configurações
+      const { data: config, error: configError } = await supabase
+        .from('configuracoes_sistema')
+        .select('*')
+        .limit(1)
+        .single();
+
+      if (configError) throw configError;
+
+      // Buscar visitantes ativos
+      const { data: visitantesAtivos, error: visitantesError } = await supabase
+        .from('visitantes')
+        .select('*')
+        .eq('is_ativo', true);
+
+      if (visitantesError) throw visitantesError;
+
+      // Buscar prismas em uso
+      const { data: prismasEmUso, error: prismasError } = await supabase
+        .from('prismas_magneticos')
+        .select('*')
+        .eq('is_em_uso', true);
+
+      if (prismasError) throw prismasError;
+
+      // Calcular vagas em uso (visitantes que NÃO estacionam na vaga do morador)
+      const vagasEmUso = visitantesAtivos?.filter(v => !v.estacionar_vaga_morador).length || 0;
+
+      const dashboardStats: DashboardStats = {
+        vagas_disponiveis: (config?.total_vagas_visitantes || 10) - vagasEmUso,
+        vagas_ocupadas: vagasEmUso,
+        total_vagas: config?.total_vagas_visitantes || 10,
+        prismas_disponiveis: (config?.total_prismas_magneticos || 20) - (prismasEmUso?.length || 0),
+        prismas_em_uso: prismasEmUso?.length || 0,
+        total_prismas: config?.total_prismas_magneticos || 20,
+        visitantes_ativos: visitantesAtivos?.length || 0,
+      };
+
+      setStats(dashboardStats);
     } catch (err) {
-      console.error('Erro no fetch das estatísticas:', err);
+      console.error('Erro ao buscar estatísticas:', err);
       setError(err instanceof Error ? err.message : 'Erro de conexão com o servidor');
     } finally {
       setLoading(false);
@@ -88,12 +87,18 @@ export function useVisitantesAtivos() {
     try {
       setLoading(true);
       setError(null);
-      
-      const response = await fetchWithRetry('/api/visitantes/ativos');
-      const data = await response.json();
-      setVisitantes(data);
+
+      const { data, error: queryError } = await supabase
+        .from('visitantes')
+        .select('*')
+        .eq('is_ativo', true)
+        .order('hora_entrada', { ascending: false });
+
+      if (queryError) throw queryError;
+
+      setVisitantes(data as VisitanteAtivo[] || []);
     } catch (err) {
-      console.error('Erro no fetch dos visitantes ativos:', err);
+      console.error('Erro ao buscar visitantes ativos:', err);
       setError(err instanceof Error ? err.message : 'Erro de conexão com o servidor');
     } finally {
       setLoading(false);
@@ -117,12 +122,18 @@ export function usePrismasDisponiveis() {
     try {
       setLoading(true);
       setError(null);
-      
-      const response = await fetchWithRetry('/api/prismas/disponiveis');
-      const data = await response.json();
-      setPrismas(data);
+
+      const { data, error: queryError } = await supabase
+        .from('prismas_magneticos')
+        .select('*')
+        .eq('is_em_uso', false)
+        .order('numero', { ascending: true });
+
+      if (queryError) throw queryError;
+
+      setPrismas(data as PrismaMagneticoType[] || []);
     } catch (err) {
-      console.error('Erro no fetch dos prismas disponíveis:', err);
+      console.error('Erro ao buscar prismas disponíveis:', err);
       setError(err instanceof Error ? err.message : 'Erro de conexão com o servidor');
     } finally {
       setLoading(false);
@@ -145,15 +156,40 @@ export function useVisitanteActions() {
     try {
       setLoading(true);
       setError(null);
-      
-      await fetchWithRetry('/api/visitantes', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      });
-      
+
+      // Inserir visitante
+      const { data: visitante, error: insertError } = await supabase
+        .from('visitantes')
+        .insert({
+          nome: data.nome,
+          casa_visitada: data.casa_visitada,
+          placa_veiculo: data.placa_veiculo,
+          numero_prisma: data.numero_prisma,
+          estacionar_vaga_morador: data.estacionar_vaga_morador || false,
+          hora_entrada: new Date().toISOString(),
+          is_ativo: true,
+          observacoes: data.observacoes,
+          liberado_por: data.liberado_por,
+        })
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+
+      // Atualizar prisma se foi selecionado
+      if (data.numero_prisma && visitante) {
+        const { error: prismaError } = await supabase
+          .from('prismas_magneticos')
+          .update({ is_em_uso: true, visitante_id: visitante.id })
+          .eq('numero', data.numero_prisma);
+
+        if (prismaError) throw prismaError;
+      }
+
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro de conexão com o servidor');
+      console.error('Erro ao cadastrar visitante:', err);
+      setError(err instanceof Error ? err.message : 'Erro ao cadastrar visitante');
       return false;
     } finally {
       setLoading(false);
@@ -164,23 +200,41 @@ export function useVisitanteActions() {
     try {
       setLoading(true);
       setError(null);
-      
-      const response = await fetch('/api/visitantes/saida', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ id }),
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Erro ao registrar saída');
+
+      // Buscar visitante
+      const { data: visitante, error: fetchError } = await supabase
+        .from('visitantes')
+        .select('numero_prisma')
+        .eq('id', id)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      // Atualizar visitante
+      const { error: updateError } = await supabase
+        .from('visitantes')
+        .update({
+          is_ativo: false,
+          hora_saida: new Date().toISOString(),
+        })
+        .eq('id', id);
+
+      if (updateError) throw updateError;
+
+      // Liberar prisma se existir
+      if (visitante?.numero_prisma) {
+        const { error: prismaError } = await supabase
+          .from('prismas_magneticos')
+          .update({ is_em_uso: false, visitante_id: null })
+          .eq('numero', visitante.numero_prisma);
+
+        if (prismaError) throw prismaError;
       }
-      
+
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro desconhecido');
+      console.error('Erro ao registrar saída:', err);
+      setError(err instanceof Error ? err.message : 'Erro ao registrar saída');
       return false;
     } finally {
       setLoading(false);
@@ -191,71 +245,55 @@ export function useVisitanteActions() {
     try {
       setLoading(true);
       setError(null);
-      
-      console.log('Enviando dados para edição:', JSON.stringify(data, null, 2));
-      
-      const response = await fetch(`/api/visitantes/${data.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      });
-      
-      console.log('Resposta recebida:', response.status, response.statusText);
-      
-      if (!response.ok) {
-        let errorMessage = 'Erro ao editar visitante';
-        
-        try {
-          const errorData = await response.json();
-          console.error('Dados do erro:', errorData);
-          
-          // Priorizar as mensagens de erro mais específicas
-          if (errorData && typeof errorData === 'object') {
-            if (errorData.details && typeof errorData.details === 'string') {
-              errorMessage = errorData.details;
-            } else if (errorData.error && typeof errorData.error === 'string') {
-              errorMessage = errorData.error;
-            } else if (errorData.message && typeof errorData.message === 'string') {
-              errorMessage = errorData.message;
-            } else if (errorData.validation_errors && Array.isArray(errorData.validation_errors)) {
-              const validationMessages = errorData.validation_errors.map((issue: any) => {
-                const path = issue.path && issue.path.length > 0 ? issue.path.join('.') + ': ' : '';
-                return path + (issue.message || 'erro de validação');
-              });
-              errorMessage = validationMessages.join('; ');
-            }
-          }
-        } catch (parseError) {
-          console.error('Erro ao fazer parse da resposta de erro:', parseError);
-          errorMessage = `Erro HTTP ${response.status}: ${response.statusText}`;
-        }
-        
-        console.error('Mensagem de erro final:', errorMessage);
-        setError(errorMessage);
-        return false;
+
+      // Buscar visitante atual para verificar prisma anterior
+      const { data: visitanteAtual, error: fetchError } = await supabase
+        .from('visitantes')
+        .select('numero_prisma')
+        .eq('id', data.id)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      const prismaAnterior = visitanteAtual?.numero_prisma;
+      const novoPrisma = data.numero_prisma;
+
+      // Atualizar visitante
+      const { error: updateError } = await supabase
+        .from('visitantes')
+        .update({
+          nome: data.nome,
+          casa_visitada: data.casa_visitada,
+          placa_veiculo: data.placa_veiculo,
+          numero_prisma: data.numero_prisma,
+          estacionar_vaga_morador: data.estacionar_vaga_morador,
+          observacoes: data.observacoes,
+          liberado_por: data.liberado_por,
+        })
+        .eq('id', data.id);
+
+      if (updateError) throw updateError;
+
+      // Liberar prisma anterior se mudou
+      if (prismaAnterior && prismaAnterior !== novoPrisma) {
+        await supabase
+          .from('prismas_magneticos')
+          .update({ is_em_uso: false, visitante_id: null })
+          .eq('numero', prismaAnterior);
       }
-      
-      const responseData = await response.json();
-      console.log('Dados da resposta de sucesso:', responseData);
-      
+
+      // Ocupar novo prisma se foi selecionado
+      if (novoPrisma && novoPrisma !== prismaAnterior) {
+        await supabase
+          .from('prismas_magneticos')
+          .update({ is_em_uso: true, visitante_id: data.id })
+          .eq('numero', novoPrisma);
+      }
+
       return true;
     } catch (err) {
-      let errorMessage = 'Erro de conexão ao editar visitante';
-      
-      if (err instanceof Error) {
-        errorMessage = err.message;
-      } else if (typeof err === 'string') {
-        errorMessage = err;
-      } else {
-        errorMessage = 'Erro desconhecido';
-      }
-      
-      console.error('Erro de rede/conexão:', errorMessage);
-      console.error('Objeto de erro completo:', err);
-      
-      setError(errorMessage);
+      console.error('Erro ao editar visitante:', err);
+      setError(err instanceof Error ? err.message : 'Erro ao editar visitante');
       return false;
     } finally {
       setLoading(false);
@@ -264,13 +302,16 @@ export function useVisitanteActions() {
 
   const buscarVisitantes = async (termo: string): Promise<VisitanteType[]> => {
     try {
-      const response = await fetch(`/api/visitantes/buscar?termo=${encodeURIComponent(termo)}`);
-      if (!response.ok) {
-        throw new Error('Erro ao buscar visitantes');
-      }
-      
-      const data = await response.json();
-      return data;
+      const { data, error: queryError } = await supabase
+        .from('visitantes')
+        .select('*')
+        .or(`nome.ilike.%${termo}%,placa_veiculo.ilike.%${termo}%`)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (queryError) throw queryError;
+
+      return data as VisitanteType[] || [];
     } catch (err) {
       console.error('Erro ao buscar visitantes:', err);
       return [];
@@ -289,24 +330,54 @@ export function useRelatorios() {
     try {
       setLoading(true);
       setError(null);
-      
-      const response = await fetch('/api/relatorios', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(filtros),
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Erro ao gerar relatório');
+
+      let query = supabase
+        .from('visitantes')
+        .select('*', { count: 'exact' });
+
+      // Aplicar filtros
+      if (filtros.data_inicial) {
+        query = query.gte('hora_entrada', filtros.data_inicial);
       }
-      
-      const data = await response.json();
-      return data;
+      if (filtros.data_final) {
+        query = query.lte('hora_entrada', filtros.data_final);
+      }
+      if (filtros.nome) {
+        query = query.ilike('nome', `%${filtros.nome}%`);
+      }
+      if (filtros.casa_visitada) {
+        query = query.ilike('casa_visitada', `%${filtros.casa_visitada}%`);
+      }
+      if (filtros.placa_veiculo) {
+        query = query.ilike('placa_veiculo', `%${filtros.placa_veiculo}%`);
+      }
+
+      // Paginação
+      const limite = filtros.limite || 100;
+      const pagina = filtros.pagina || 1;
+      const offset = (pagina - 1) * limite;
+
+      query = query
+        .order('hora_entrada', { ascending: false })
+        .range(offset, offset + limite - 1);
+
+      const { data, error: queryError, count } = await query;
+
+      if (queryError) throw queryError;
+
+      const totalRegistros = count || 0;
+      const totalPaginas = Math.ceil(totalRegistros / limite);
+
+      return {
+        visitantes: data as VisitanteType[] || [],
+        total_registros: totalRegistros,
+        pagina_atual: pagina,
+        total_paginas: totalPaginas,
+        limite_por_pagina: limite,
+      };
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro desconhecido');
+      console.error('Erro ao gerar relatório:', err);
+      setError(err instanceof Error ? err.message : 'Erro ao gerar relatório');
       return {
         visitantes: [],
         total_registros: 0,
@@ -332,16 +403,19 @@ export function useConfiguracoes() {
     try {
       setLoading(true);
       setError(null);
-      
-      const response = await fetch('/api/configuracoes');
-      if (!response.ok) {
-        throw new Error('Erro ao carregar configurações');
-      }
-      
-      const data = await response.json();
-      setConfiguracoes(data);
+
+      const { data, error: queryError } = await supabase
+        .from('configuracoes_sistema')
+        .select('*')
+        .limit(1)
+        .single();
+
+      if (queryError) throw queryError;
+
+      setConfiguracoes(data as ConfiguracoesSistemaType);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro desconhecido');
+      console.error('Erro ao carregar configurações:', err);
+      setError(err instanceof Error ? err.message : 'Erro ao carregar configurações');
     } finally {
       setLoading(false);
     }
@@ -355,24 +429,22 @@ export function useConfiguracoes() {
     try {
       setLoading(true);
       setError(null);
-      
-      const response = await fetch('/api/configuracoes', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Erro ao atualizar configurações');
-      }
-      
+
+      const { error: updateError } = await supabase
+        .from('configuracoes_sistema')
+        .update({
+          total_vagas_visitantes: data.total_vagas_visitantes,
+          total_prismas_magneticos: data.total_prismas_magneticos,
+        })
+        .eq('id', 1);
+
+      if (updateError) throw updateError;
+
       await refetch();
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro desconhecido');
+      console.error('Erro ao atualizar configurações:', err);
+      setError(err instanceof Error ? err.message : 'Erro ao atualizar configurações');
       return false;
     } finally {
       setLoading(false);
@@ -383,19 +455,27 @@ export function useConfiguracoes() {
     try {
       setLoading(true);
       setError(null);
-      
-      const response = await fetch('/api/dados', {
-        method: 'DELETE',
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Erro ao limpar banco de dados');
-      }
-      
+
+      // Limpar visitantes ativos
+      const { error: visitantesError } = await supabase
+        .from('visitantes')
+        .update({ is_ativo: false, hora_saida: new Date().toISOString() })
+        .eq('is_ativo', true);
+
+      if (visitantesError) throw visitantesError;
+
+      // Liberar todos os prismas
+      const { error: prismasError } = await supabase
+        .from('prismas_magneticos')
+        .update({ is_em_uso: false, visitante_id: null })
+        .eq('is_em_uso', true);
+
+      if (prismasError) throw prismasError;
+
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro desconhecido');
+      console.error('Erro ao limpar banco de dados:', err);
+      setError(err instanceof Error ? err.message : 'Erro ao limpar banco de dados');
       return false;
     } finally {
       setLoading(false);
@@ -416,16 +496,60 @@ export function useEstatisticas(periodo: string) {
       try {
         setLoading(true);
         setError(null);
-        
-        const response = await fetch(`/api/estatisticas?periodo=${periodo}`);
-        if (!response.ok) {
-          throw new Error('Erro ao carregar estatísticas');
+
+        // Calcular data de início baseado no período
+        const agora = new Date();
+        let dataInicio: Date;
+
+        switch (periodo) {
+          case 'hoje':
+            dataInicio = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
+            break;
+          case 'semana':
+            dataInicio = new Date(agora.getTime() - 7 * 24 * 60 * 60 * 1000);
+            break;
+          case 'mes':
+            dataInicio = new Date(agora.getFullYear(), agora.getMonth(), 1);
+            break;
+          default:
+            dataInicio = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
         }
-        
-        const data = await response.json();
-        setEstatisticas(data);
+
+        const { data: visitantes, error: queryError } = await supabase
+          .from('visitantes')
+          .select('*')
+          .gte('hora_entrada', dataInicio.toISOString())
+          .order('hora_entrada', { ascending: false });
+
+        if (queryError) throw queryError;
+
+        // Calcular estatísticas
+        const totalVisitantes = visitantes?.length || 0;
+        const visitantesAtivos = visitantes?.filter(v => v.is_ativo).length || 0;
+        const visitantesFinalizados = totalVisitantes - visitantesAtivos;
+
+        // Tempo médio de permanência
+        const visitantesComSaida = visitantes?.filter(v => v.hora_saida) || [];
+        let tempoMedio = 0;
+        if (visitantesComSaida.length > 0) {
+          const totalMinutos = visitantesComSaida.reduce((acc, v) => {
+            const entrada = new Date(v.hora_entrada).getTime();
+            const saida = new Date(v.hora_saida!).getTime();
+            return acc + (saida - entrada) / (1000 * 60);
+          }, 0);
+          tempoMedio = totalMinutos / visitantesComSaida.length;
+        }
+
+        setEstatisticas({
+          total_visitantes: totalVisitantes,
+          visitantes_ativos: visitantesAtivos,
+          visitantes_finalizados: visitantesFinalizados,
+          tempo_medio_permanencia: Math.round(tempoMedio),
+          visitantes_por_dia: visitantes || [],
+        });
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Erro desconhecido');
+        console.error('Erro ao carregar estatísticas:', err);
+        setError(err instanceof Error ? err.message : 'Erro ao carregar estatísticas');
       } finally {
         setLoading(false);
       }
@@ -446,28 +570,35 @@ export function useLPRDetections() {
 
   const fetchLatest = useCallback(async () => {
     try {
-      const response = await fetch('/api/lpr/latest-detection');
-      if (!response.ok) {
-        throw new Error('Erro ao buscar última detecção');
-      }
-      const data = await response.json();
+      const { data, error: queryError } = await supabase
+        .from('lpr_deteccoes')
+        .select('*')
+        .order('timestamp', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (queryError) throw queryError;
+
       if (data) {
         setLatestDetection(data);
       }
     } catch (err) {
       console.error('Erro ao buscar última detecção:', err);
-      setError(err instanceof Error ? err.message : 'Erro desconhecido');
+      setError(err instanceof Error ? err.message : 'Erro ao buscar detecção');
     }
   }, []);
 
   const fetchHistory = useCallback(async (limite: number = 10) => {
     try {
-      const response = await fetch(`/api/lpr/detections?limite=${limite}`);
-      if (!response.ok) {
-        throw new Error('Erro ao buscar histórico');
-      }
-      const data = await response.json();
-      setDetectionHistory(data);
+      const { data, error: queryError } = await supabase
+        .from('lpr_deteccoes')
+        .select('*')
+        .order('timestamp', { ascending: false })
+        .limit(limite);
+
+      if (queryError) throw queryError;
+
+      setDetectionHistory(data || []);
     } catch (err) {
       console.error('Erro ao buscar histórico:', err);
     }
@@ -481,7 +612,7 @@ export function useLPRDetections() {
     };
 
     fetchData();
-    
+
     // Polling a cada 3 segundos para buscar novas detecções
     const interval = setInterval(() => {
       fetchLatest();

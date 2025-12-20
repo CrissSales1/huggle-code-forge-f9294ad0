@@ -27,7 +27,7 @@ export default function EditarVisitanteModal({ isOpen, onClose, visitante, onSuc
       setPlacaVeiculo(visitante.placa_veiculo);
       setObservacoes(visitante.observacoes || '');
       setLiberadoPor(visitante.liberado_por || '');
-      setEstacionarVagaMorador(visitante.estacionar_vaga_morador);
+      setEstacionarVagaMorador(visitante.estacionar_vaga_morador ?? false);
     }
   }, [visitante]);
 

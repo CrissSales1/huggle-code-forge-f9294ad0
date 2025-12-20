@@ -1,13 +1,11 @@
 import path from "path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import { cloudflare } from "@cloudflare/vite-plugin";
-import { mochaPlugins } from "@getmocha/vite-plugins";
 
 export default defineConfig({
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  plugins: [...mochaPlugins(process.env as any), react(), cloudflare()],
+  plugins: [react()],
   server: {
+    port: 8080,
     allowedHosts: true,
   },
   build: {
@@ -15,7 +13,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": path.resolve(__dirname, "./src/react-app"),
     },
   },
 });
