@@ -430,6 +430,7 @@ export function useConfiguracoes() {
       setLoading(true);
       setError(null);
 
+      // Atualizar configurações
       const { error: updateError } = await supabase
         .from('configuracoes_sistema')
         .update({
@@ -439,6 +440,45 @@ export function useConfiguracoes() {
         .eq('id', 1);
 
       if (updateError) throw updateError;
+
+      // Buscar prismas existentes
+      const { data: prismasExistentes, error: prismasError } = await supabase
+        .from('prismas_magneticos')
+        .select('numero')
+        .order('numero', { ascending: true });
+
+      if (prismasError) throw prismasError;
+
+      const numerosExistentes = prismasExistentes?.map(p => p.numero) || [];
+      const totalDesejado = data.total_prismas_magneticos;
+
+      // Criar prismas que faltam
+      const prismasParaCriar: { numero: number; is_em_uso: boolean }[] = [];
+      for (let i = 1; i <= totalDesejado; i++) {
+        if (!numerosExistentes.includes(i)) {
+          prismasParaCriar.push({ numero: i, is_em_uso: false });
+        }
+      }
+
+      if (prismasParaCriar.length > 0) {
+        const { error: insertError } = await supabase
+          .from('prismas_magneticos')
+          .insert(prismasParaCriar);
+
+        if (insertError) throw insertError;
+      }
+
+      // Remover prismas excedentes (apenas os que não estão em uso)
+      const prismasParaRemover = numerosExistentes.filter(n => n > totalDesejado);
+      if (prismasParaRemover.length > 0) {
+        const { error: deleteError } = await supabase
+          .from('prismas_magneticos')
+          .delete()
+          .in('numero', prismasParaRemover)
+          .eq('is_em_uso', false);
+
+        if (deleteError) throw deleteError;
+      }
 
       await refetch();
       return true;
