@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2, XCircle, ExternalLink } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ExternalLink } from 'lucide-react';
 
 export default function MonitoramentoHelp() {
   const webhookUrl = window.location.origin + '/api/rekorscout/webhook';
