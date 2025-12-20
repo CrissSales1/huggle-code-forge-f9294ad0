@@ -25,8 +25,10 @@ export default function Configuracoes() {
   
   const [totalVagas, setTotalVagas] = useState(configuracoes?.total_vagas_visitantes || 10);
   const [totalPrismas, setTotalPrismas] = useState(configuracoes?.total_prismas_magneticos || 20);
-  const [showConfirmacaoLimpeza, setShowConfirmacaoLimpeza] = useState(false);
-  const [senhaSeguranca, setSenhaSeguranca] = useState('');
+  // Estados para proteção da exclusão
+  const [exclusaoDesbloqueada, setExclusaoDesbloqueada] = useState(false);
+  const [senhaExclusao, setSenhaExclusao] = useState('');
+  const [erroSenhaExclusao, setErroSenhaExclusao] = useState(false);
   const [mostrarSucesso, setMostrarSucesso] = useState(false);
   
   // Estados para proteção do backup
@@ -70,26 +72,33 @@ export default function Configuracoes() {
     }
   };
 
-  const handleLimparBanco = async () => {
-    if (senhaSeguranca !== 'excluirtudo') {
-      return;
+  // Validar senha da exclusão
+  const handleDesbloquearExclusao = () => {
+    if (senhaExclusao.toLowerCase() === 'excluirtudo') {
+      setExclusaoDesbloqueada(true);
+      setErroSenhaExclusao(false);
+      setSenhaExclusao('');
+    } else {
+      setErroSenhaExclusao(true);
     }
+  };
 
+  const handleBloquearExclusao = () => {
+    setExclusaoDesbloqueada(false);
+    setSenhaExclusao('');
+    setErroSenhaExclusao(false);
+  };
+
+  const handleLimparBanco = async () => {
     const sucesso = await limparBancoDados();
     if (sucesso) {
-      setShowConfirmacaoLimpeza(false);
-      setSenhaSeguranca('');
+      setExclusaoDesbloqueada(false);
       setMostrarSucesso(true);
       
       setTimeout(() => {
         setMostrarSucesso(false);
       }, 5000);
     }
-  };
-
-  const cancelarLimpeza = () => {
-    setShowConfirmacaoLimpeza(false);
-    setSenhaSeguranca('');
   };
 
   // Validar senha do backup
@@ -743,9 +752,20 @@ export default function Configuracoes() {
       {/* Gestão de Dados - Limpar Banco */}
       <div className="bg-white rounded-lg border border-gray-200">
         <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center space-x-2">
-            <Trash2 className="w-5 h-5 text-red-600" />
-            <h2 className="text-xl font-semibold text-gray-900">Gestão de Dados</h2>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Trash2 className="w-5 h-5 text-red-600" />
+              <h2 className="text-xl font-semibold text-gray-900">Gestão de Dados</h2>
+            </div>
+            {exclusaoDesbloqueada && (
+              <button
+                onClick={handleBloquearExclusao}
+                className="flex items-center space-x-1 px-3 py-1 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <Lock className="w-4 h-4" />
+                <span>Bloquear</span>
+              </button>
+            )}
           </div>
           <p className="text-gray-600 mt-1">
             Limpe todos os dados do sistema (visitantes e histórico)
@@ -753,80 +773,69 @@ export default function Configuracoes() {
         </div>
         
         <div className="p-6">
-          {!showConfirmacaoLimpeza ? (
+          {/* Tela de desbloqueio */}
+          {!exclusaoDesbloqueada ? (
+            <div className="max-w-md mx-auto text-center">
+              <div className="p-4 bg-red-50 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center">
+                <Lock className="w-10 h-10 text-red-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Área Protegida</h3>
+              <p className="text-sm text-gray-600 mb-6">
+                Esta é uma operação crítica que remove permanentemente todos os dados. Digite a senha para desbloquear.
+              </p>
+              
+              <div className="space-y-4">
+                <div>
+                  <input
+                    type="password"
+                    value={senhaExclusao}
+                    onChange={(e) => {
+                      setSenhaExclusao(e.target.value);
+                      setErroSenhaExclusao(false);
+                    }}
+                    onKeyDown={(e) => e.key === 'Enter' && handleDesbloquearExclusao()}
+                    placeholder="Digite a senha de acesso"
+                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 ${
+                      erroSenhaExclusao ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                  />
+                  {erroSenhaExclusao && (
+                    <p className="text-sm text-red-600 mt-1">Senha incorreta. Tente novamente.</p>
+                  )}
+                </div>
+                
+                <button
+                  onClick={handleDesbloquearExclusao}
+                  className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Desbloquear Acesso</span>
+                </button>
+              </div>
+            </div>
+          ) : (
             <div>
-              <div className="bg-red-50 border border-red-200 p-4 rounded-lg mb-4">
+              <div className="bg-red-50 border border-red-200 p-4 rounded-lg mb-6">
                 <div className="flex items-start space-x-3">
                   <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
                   <div>
                     <h3 className="text-sm font-medium text-red-800">Atenção!</h3>
                     <p className="text-sm text-red-700 mt-1">
                       Esta ação irá remover permanentemente todos os dados de visitantes, 
-                      histórico de entradas e saídas. Esta operação não pode ser desfeita.
+                      veículos de moradores e histórico de detecções. Esta operação não pode ser desfeita.
                     </p>
                   </div>
                 </div>
               </div>
               
-              <div className="flex justify-start">
-                <button
-                  onClick={() => setShowConfirmacaoLimpeza(true)}
-                  className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  <span>Limpar Banco de Dados</span>
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="bg-red-50 border border-red-200 p-4 rounded-lg">
-                <div className="flex items-start space-x-3">
-                  <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <h3 className="text-sm font-medium text-red-800">
-                      Confirmação de Segurança
-                    </h3>
-                    <p className="text-sm text-red-700 mt-1">
-                      Para confirmar que realmente deseja excluir todos os dados, digite a senha de segurança abaixo.
-                    </p>
-                  </div>
-                </div>
-              </div>
-              
-              <div>
-                <label htmlFor="senhaSeguranca" className="block text-sm font-medium text-gray-700 mb-2">
-                  Senha de segurança
-                </label>
-                <input
-                  type="password"
-                  id="senhaSeguranca"
-                  value={senhaSeguranca}
-                  onChange={(e) => setSenhaSeguranca(e.target.value)}
-                  placeholder="Digite a senha de segurança"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                  disabled={loading}
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Digite a senha de segurança para confirmar a exclusão
-                </p>
-              </div>
-              
-              <div className="flex justify-start space-x-3">
-                <button
-                  onClick={cancelarLimpeza}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-                  disabled={loading}
-                >
-                  Cancelar
-                </button>
+              <div className="flex justify-center">
                 <button
                   onClick={handleLimparBanco}
-                  disabled={loading || senhaSeguranca !== 'excluirtudo'}
-                  className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={loading}
+                  className="flex items-center space-x-2 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Trash2 className="w-4 h-4" />
-                  <span>{loading ? 'Limpando...' : 'Confirmar Exclusão'}</span>
+                  <Trash2 className="w-5 h-5" />
+                  <span>{loading ? 'Limpando...' : 'Limpar Banco de Dados'}</span>
                 </button>
               </div>
             </div>
