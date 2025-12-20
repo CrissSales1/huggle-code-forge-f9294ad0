@@ -226,8 +226,8 @@ export default function CameraModal({ isOpen, onClose, onPlacaDetected }: Camera
       
       console.log('📤 Enviando para Plate Recognizer...');
 
-      // Chamar API de reconhecimento
-      const visionResponse = await fetch('/api/vision/detect-plate', {
+      // Chamar Edge Function do Plate Recognizer
+      const visionResponse = await fetch('https://kbgftpiyzfmabrncpnas.supabase.co/functions/v1/detect-plate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

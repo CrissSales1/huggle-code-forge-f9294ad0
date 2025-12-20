@@ -1,1 +1,4 @@
 project_id = "kbgftpiyzfmabrncpnas"
+
+[functions.detect-plate]
+verify_jwt = false
