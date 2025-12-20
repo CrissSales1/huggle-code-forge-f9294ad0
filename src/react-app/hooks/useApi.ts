@@ -28,7 +28,7 @@ export function useDashboardStats() {
         .from('configuracoes_sistema')
         .select('*')
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (configError) throw configError;
 
@@ -408,7 +408,7 @@ export function useConfiguracoes() {
         .from('configuracoes_sistema')
         .select('*')
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (queryError) throw queryError;
 
@@ -486,7 +486,7 @@ export function useConfiguracoes() {
 }
 
 // Hook para estatísticas detalhadas
-export function useEstatisticas(periodo: string) {
+export function useEstatisticas(periodo: '7' | '30' | '90') {
   const [estatisticas, setEstatisticas] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -497,23 +497,10 @@ export function useEstatisticas(periodo: string) {
         setLoading(true);
         setError(null);
 
-        // Calcular data de início baseado no período
+        // Calcular data de início baseado no período (em dias)
         const agora = new Date();
-        let dataInicio: Date;
-
-        switch (periodo) {
-          case 'hoje':
-            dataInicio = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
-            break;
-          case 'semana':
-            dataInicio = new Date(agora.getTime() - 7 * 24 * 60 * 60 * 1000);
-            break;
-          case 'mes':
-            dataInicio = new Date(agora.getFullYear(), agora.getMonth(), 1);
-            break;
-          default:
-            dataInicio = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
-        }
+        const dias = parseInt(periodo);
+        const dataInicio = new Date(agora.getTime() - dias * 24 * 60 * 60 * 1000);
 
         const { data: visitantes, error: queryError } = await supabase
           .from('visitantes')
@@ -523,29 +510,114 @@ export function useEstatisticas(periodo: string) {
 
         if (queryError) throw queryError;
 
-        // Calcular estatísticas
         const totalVisitantes = visitantes?.length || 0;
-        const visitantesAtivos = visitantes?.filter(v => v.is_ativo).length || 0;
-        const visitantesFinalizados = totalVisitantes - visitantesAtivos;
+        const mediaPorDia = dias > 0 ? (totalVisitantes / dias).toFixed(1) : '0';
 
         // Tempo médio de permanência
         const visitantesComSaida = visitantes?.filter(v => v.hora_saida) || [];
-        let tempoMedio = 0;
+        let tempoMedioMinutos = 0;
         if (visitantesComSaida.length > 0) {
           const totalMinutos = visitantesComSaida.reduce((acc, v) => {
             const entrada = new Date(v.hora_entrada).getTime();
             const saida = new Date(v.hora_saida!).getTime();
             return acc + (saida - entrada) / (1000 * 60);
           }, 0);
-          tempoMedio = totalMinutos / visitantesComSaida.length;
+          tempoMedioMinutos = totalMinutos / visitantesComSaida.length;
         }
 
+        // Formatar tempo médio
+        const horas = Math.floor(tempoMedioMinutos / 60);
+        const minutos = Math.round(tempoMedioMinutos % 60);
+        const tempoMedioPermanencia = horas > 0 ? `${horas}h ${minutos}m` : `${minutos}m`;
+
+        // Taxa de ocupação (simulada como % de visitantes ativos / total vagas)
+        const taxaOcupacaoMedia = totalVisitantes > 0 ? Math.min(100, Math.round((totalVisitantes / dias) * 10)) : 0;
+
+        // Visitantes por dia
+        const visitantesPorDia: { data: string; visitantes: number }[] = [];
+        for (let i = dias - 1; i >= 0; i--) {
+          const dia = new Date(agora.getTime() - i * 24 * 60 * 60 * 1000);
+          const diaStr = dia.toISOString().split('T')[0];
+          const count = visitantes?.filter(v => v.hora_entrada.startsWith(diaStr)).length || 0;
+          visitantesPorDia.push({ data: diaStr, visitantes: count });
+        }
+
+        // Horários de pico (0-23h)
+        const horariosPico: { hora: number; visitantes: number }[] = [];
+        for (let h = 0; h < 24; h++) {
+          const count = visitantes?.filter(v => new Date(v.hora_entrada).getHours() === h).length || 0;
+          horariosPico.push({ hora: h, visitantes: count });
+        }
+
+        // Distribuição de tempo de permanência
+        const distribuicaoTempo = [
+          { name: '< 1h', quantidade: visitantesComSaida.filter(v => {
+            const diff = (new Date(v.hora_saida!).getTime() - new Date(v.hora_entrada).getTime()) / (1000 * 60);
+            return diff < 60;
+          }).length },
+          { name: '1-2h', quantidade: visitantesComSaida.filter(v => {
+            const diff = (new Date(v.hora_saida!).getTime() - new Date(v.hora_entrada).getTime()) / (1000 * 60);
+            return diff >= 60 && diff < 120;
+          }).length },
+          { name: '2-4h', quantidade: visitantesComSaida.filter(v => {
+            const diff = (new Date(v.hora_saida!).getTime() - new Date(v.hora_entrada).getTime()) / (1000 * 60);
+            return diff >= 120 && diff < 240;
+          }).length },
+          { name: '> 4h', quantidade: visitantesComSaida.filter(v => {
+            const diff = (new Date(v.hora_saida!).getTime() - new Date(v.hora_entrada).getTime()) / (1000 * 60);
+            return diff >= 240;
+          }).length },
+        ];
+
+        // Visitantes por dia da semana
+        const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+        const visitantesPorDiaSemana = diasSemana.map((dia, index) => ({
+          dia,
+          visitantes: visitantes?.filter(v => new Date(v.hora_entrada).getDay() === index).length || 0,
+        }));
+
+        // Top visitantes recorrentes (por nome)
+        const visitantesPorNome: { [key: string]: { nome: string; casa_visitada: string; total_visitas: number } } = {};
+        visitantes?.forEach(v => {
+          if (visitantesPorNome[v.nome]) {
+            visitantesPorNome[v.nome].total_visitas++;
+          } else {
+            visitantesPorNome[v.nome] = { nome: v.nome, casa_visitada: v.casa_visitada, total_visitas: 1 };
+          }
+        });
+        const visitantesRecorrentes = Object.values(visitantesPorNome)
+          .sort((a, b) => b.total_visitas - a.total_visitas)
+          .slice(0, 5);
+
+        // Maior tempo de permanência
+        const maiorTempoPermanencia = visitantesComSaida
+          .map(v => {
+            const diffMs = new Date(v.hora_saida!).getTime() - new Date(v.hora_entrada).getTime();
+            const diffHoras = Math.floor(diffMs / (1000 * 60 * 60));
+            const diffMinutos = Math.round((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+            return {
+              nome: v.nome,
+              casa_visitada: v.casa_visitada,
+              hora_entrada: v.hora_entrada,
+              tempo_permanencia: diffHoras > 0 ? `${diffHoras}h ${diffMinutos}m` : `${diffMinutos}m`,
+              total_minutos: diffMs / (1000 * 60),
+            };
+          })
+          .sort((a, b) => b.total_minutos - a.total_minutos)
+          .slice(0, 5);
+
         setEstatisticas({
-          total_visitantes: totalVisitantes,
-          visitantes_ativos: visitantesAtivos,
-          visitantes_finalizados: visitantesFinalizados,
-          tempo_medio_permanencia: Math.round(tempoMedio),
-          visitantes_por_dia: visitantes || [],
+          totalVisitantes,
+          mediaPorDia,
+          tempoMedioPermanencia,
+          taxaOcupacaoMedia,
+          visitantesPorDia,
+          horariosPico,
+          distribuicaoTempo,
+          visitantesPorDiaSemana,
+          visitantesRecorrentes,
+          maiorTempoPermanencia,
+          alertas: [],
         });
       } catch (err) {
         console.error('Erro ao carregar estatísticas:', err);
