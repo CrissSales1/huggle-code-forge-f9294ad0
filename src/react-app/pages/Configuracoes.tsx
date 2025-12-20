@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Save, Trash2, AlertTriangle, Settings as SettingsIcon, Hash, Car, CheckCircle, Upload, Download, Database, Loader2, FileJson, HardDrive } from 'lucide-react';
+import { Save, Trash2, AlertTriangle, Settings as SettingsIcon, Hash, Car, CheckCircle, Upload, Download, Database, Loader2, FileJson, HardDrive, Lock, ShieldCheck } from 'lucide-react';
 import { useConfiguracoes } from '@/react-app/hooks/useApi';
 import StatsCard from '@/react-app/components/StatsCard';
 import { supabase } from '@/integrations/supabase/client';
@@ -28,6 +28,11 @@ export default function Configuracoes() {
   const [showConfirmacaoLimpeza, setShowConfirmacaoLimpeza] = useState(false);
   const [senhaSeguranca, setSenhaSeguranca] = useState('');
   const [mostrarSucesso, setMostrarSucesso] = useState(false);
+  
+  // Estados para proteção do backup
+  const [backupDesbloqueado, setBackupDesbloqueado] = useState(false);
+  const [senhaBackup, setSenhaBackup] = useState('');
+  const [erroSenhaBackup, setErroSenhaBackup] = useState(false);
   
   // Estados para exportação
   const [exportando, setExportando] = useState(false);
@@ -85,6 +90,24 @@ export default function Configuracoes() {
   const cancelarLimpeza = () => {
     setShowConfirmacaoLimpeza(false);
     setSenhaSeguranca('');
+  };
+
+  // Validar senha do backup
+  const handleDesbloquearBackup = () => {
+    if (senhaBackup.toLowerCase() === 'backup') {
+      setBackupDesbloqueado(true);
+      setErroSenhaBackup(false);
+      setSenhaBackup('');
+    } else {
+      setErroSenhaBackup(true);
+    }
+  };
+
+  const handleBloquearBackup = () => {
+    setBackupDesbloqueado(false);
+    setSenhaBackup('');
+    setErroSenhaBackup(false);
+    setImportResult(null);
   };
 
   // Função para buscar todos os registros de uma tabela (sem limite de 1000)
@@ -468,9 +491,20 @@ export default function Configuracoes() {
       {/* Backup e Restauração */}
       <div className="bg-white rounded-lg border border-gray-200 mb-8">
         <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center space-x-2">
-            <HardDrive className="w-5 h-5 text-purple-600" />
-            <h2 className="text-xl font-semibold text-gray-900">Backup e Restauração</h2>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <HardDrive className="w-5 h-5 text-purple-600" />
+              <h2 className="text-xl font-semibold text-gray-900">Backup e Restauração</h2>
+            </div>
+            {backupDesbloqueado && (
+              <button
+                onClick={handleBloquearBackup}
+                className="flex items-center space-x-1 px-3 py-1 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <Lock className="w-4 h-4" />
+                <span>Bloquear</span>
+              </button>
+            )}
           </div>
           <p className="text-gray-600 mt-1">
             Faça backup completo dos dados ou restaure de um backup anterior
@@ -478,186 +512,230 @@ export default function Configuracoes() {
         </div>
         
         <div className="p-6">
-          {/* Resultado de operação */}
-          {importResult && (
-            <div className={`p-4 rounded-lg mb-6 ${
-              importResult.success 
-                ? 'bg-green-50 border border-green-200' 
-                : 'bg-red-50 border border-red-200'
-            }`}>
-              <div className="flex items-start space-x-3">
-                <CheckCircle className={`w-5 h-5 mt-0.5 flex-shrink-0 ${
-                  importResult.success ? 'text-green-600' : 'text-red-600'
-                }`} />
+          {/* Tela de desbloqueio */}
+          {!backupDesbloqueado ? (
+            <div className="max-w-md mx-auto text-center">
+              <div className="p-4 bg-purple-50 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center">
+                <Lock className="w-10 h-10 text-purple-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Área Protegida (LGPD)</h3>
+              <p className="text-sm text-gray-600 mb-6">
+                O acesso ao backup de dados é restrito. Digite a senha para desbloquear as funções de backup e restauração.
+              </p>
+              
+              <div className="space-y-4">
                 <div>
-                  <h3 className={`text-sm font-medium ${
-                    importResult.success ? 'text-green-800' : 'text-red-800'
-                  }`}>
-                    {importResult.message}
-                  </h3>
-                  {importResult.detalhes && (
-                    <p className={`text-sm mt-1 ${
-                      importResult.success ? 'text-green-700' : 'text-red-700'
-                    }`}>
-                      {importResult.detalhes}
-                    </p>
+                  <input
+                    type="password"
+                    value={senhaBackup}
+                    onChange={(e) => {
+                      setSenhaBackup(e.target.value);
+                      setErroSenhaBackup(false);
+                    }}
+                    onKeyDown={(e) => e.key === 'Enter' && handleDesbloquearBackup()}
+                    placeholder="Digite a senha de acesso"
+                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 ${
+                      erroSenhaBackup ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                  />
+                  {erroSenhaBackup && (
+                    <p className="text-sm text-red-600 mt-1">Senha incorreta. Tente novamente.</p>
                   )}
                 </div>
+                
+                <button
+                  onClick={handleDesbloquearBackup}
+                  className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Desbloquear Acesso</span>
+                </button>
               </div>
             </div>
-          )}
-
-          {/* Progress de importação */}
-          {importProgress && (
-            <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-6">
-              <div className="flex items-center space-x-3">
-                <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
-                <span className="text-sm text-blue-800">{importProgress}</span>
-              </div>
-            </div>
-          )}
-
-          {/* Cards de Exportar e Importar */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Exportar Backup */}
-            <div className="border border-gray-200 rounded-lg p-6 bg-gray-50">
-              <div className="flex items-center space-x-3 mb-4">
-                <div className="p-2 bg-green-100 rounded-lg">
-                  <Download className="w-6 h-6 text-green-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900">Exportar Backup</h3>
-                  <p className="text-sm text-gray-600">Baixe todos os dados</p>
-                </div>
-              </div>
-              
-              <p className="text-sm text-gray-600 mb-4">
-                Gera um arquivo JSON com todos os dados do sistema: visitantes, veículos de moradores, 
-                detecções LPR, prismas e configurações.
-              </p>
-              
-              <button
-                onClick={handleExportarBackup}
-                disabled={exportando}
-                className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {exportando ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Download className="w-4 h-4" />
-                )}
-                <span>{exportando ? 'Exportando...' : 'Exportar Backup'}</span>
-              </button>
-            </div>
-
-            {/* Importar Backup */}
-            <div className="border border-gray-200 rounded-lg p-6 bg-gray-50">
-              <div className="flex items-center space-x-3 mb-4">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <Upload className="w-6 h-6 text-blue-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900">Importar Backup</h3>
-                  <p className="text-sm text-gray-600">Restaure de um arquivo</p>
-                </div>
-              </div>
-              
-              <p className="text-sm text-gray-600 mb-4">
-                Selecione um arquivo de backup JSON exportado anteriormente para restaurar os dados no sistema.
-              </p>
-              
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".json"
-                onChange={handleArquivoSelecionado}
-                className="hidden"
-              />
-              
-              <button
-                onClick={handleSelecionarArquivo}
-                disabled={importando}
-                className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {importando ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <FileJson className="w-4 h-4" />
-                )}
-                <span>{importando ? 'Importando...' : 'Selecionar Arquivo'}</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Modal de confirmação de importação */}
-          {showConfirmacaoImport && dadosParaImportar && (
-            <div className="mt-6 p-4 border border-blue-200 bg-blue-50 rounded-lg">
-              <div className="flex items-start space-x-3 mb-4">
-                <Database className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                <div>
-                  <h3 className="text-sm font-medium text-blue-800">Confirmar Importação</h3>
-                  <p className="text-sm text-blue-700 mt-1">
-                    Arquivo de backup de {dadosParaImportar.metadata?.data_exportacao 
-                      ? new Date(dadosParaImportar.metadata.data_exportacao).toLocaleDateString('pt-BR', {
-                          day: '2-digit',
-                          month: '2-digit', 
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })
-                      : 'data desconhecida'}
-                  </p>
-                </div>
-              </div>
-              
-              <div className="bg-white rounded-lg p-4 mb-4">
-                <h4 className="text-sm font-medium text-gray-700 mb-2">Dados a importar:</h4>
-                <ul className="text-sm text-gray-600 space-y-1">
-                  <li>• {dadosParaImportar.tabelas.visitantes?.length || 0} visitantes</li>
-                  <li>• {dadosParaImportar.tabelas.veiculos_moradores?.length || 0} veículos de moradores</li>
-                  <li>• {dadosParaImportar.tabelas.lpr_deteccoes?.length || 0} detecções LPR</li>
-                </ul>
-              </div>
-              
-              <label className="flex items-center space-x-2 mb-4 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={limparAntesImportar}
-                  onChange={(e) => setLimparAntesImportar(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700">
-                  Limpar dados existentes antes de importar
-                </span>
-              </label>
-              
-              {limparAntesImportar && (
-                <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-lg mb-4">
-                  <div className="flex items-start space-x-2">
-                    <AlertTriangle className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
-                    <p className="text-xs text-yellow-800">
-                      Atenção: Todos os dados atuais serão removidos antes da importação!
-                    </p>
+          ) : (
+            <>
+              {/* Resultado de operação */}
+              {importResult && (
+                <div className={`p-4 rounded-lg mb-6 ${
+                  importResult.success 
+                    ? 'bg-green-50 border border-green-200' 
+                    : 'bg-red-50 border border-red-200'
+                }`}>
+                  <div className="flex items-start space-x-3">
+                    <CheckCircle className={`w-5 h-5 mt-0.5 flex-shrink-0 ${
+                      importResult.success ? 'text-green-600' : 'text-red-600'
+                    }`} />
+                    <div>
+                      <h3 className={`text-sm font-medium ${
+                        importResult.success ? 'text-green-800' : 'text-red-800'
+                      }`}>
+                        {importResult.message}
+                      </h3>
+                      {importResult.detalhes && (
+                        <p className={`text-sm mt-1 ${
+                          importResult.success ? 'text-green-700' : 'text-red-700'
+                        }`}>
+                          {importResult.detalhes}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
-              
-              <div className="flex space-x-3">
-                <button
-                  onClick={cancelarImportacao}
-                  className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleConfirmarImportacao}
-                  className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  <Upload className="w-4 h-4" />
-                  <span>Confirmar Importação</span>
-                </button>
+
+              {/* Progress de importação */}
+              {importProgress && (
+                <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-6">
+                  <div className="flex items-center space-x-3">
+                    <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+                    <span className="text-sm text-blue-800">{importProgress}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Cards de Exportar e Importar */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Exportar Backup */}
+                <div className="border border-gray-200 rounded-lg p-6 bg-gray-50">
+                  <div className="flex items-center space-x-3 mb-4">
+                    <div className="p-2 bg-green-100 rounded-lg">
+                      <Download className="w-6 h-6 text-green-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900">Exportar Backup</h3>
+                      <p className="text-sm text-gray-600">Baixe todos os dados</p>
+                    </div>
+                  </div>
+                  
+                  <p className="text-sm text-gray-600 mb-4">
+                    Gera um arquivo JSON com todos os dados do sistema: visitantes, veículos de moradores, 
+                    detecções LPR, prismas e configurações.
+                  </p>
+                  
+                  <button
+                    onClick={handleExportarBackup}
+                    disabled={exportando}
+                    className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {exportando ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4" />
+                    )}
+                    <span>{exportando ? 'Exportando...' : 'Exportar Backup'}</span>
+                  </button>
+                </div>
+
+                {/* Importar Backup */}
+                <div className="border border-gray-200 rounded-lg p-6 bg-gray-50">
+                  <div className="flex items-center space-x-3 mb-4">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <Upload className="w-6 h-6 text-blue-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900">Importar Backup</h3>
+                      <p className="text-sm text-gray-600">Restaure de um arquivo</p>
+                    </div>
+                  </div>
+                  
+                  <p className="text-sm text-gray-600 mb-4">
+                    Selecione um arquivo de backup JSON exportado anteriormente para restaurar os dados no sistema.
+                  </p>
+                  
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".json"
+                    onChange={handleArquivoSelecionado}
+                    className="hidden"
+                  />
+                  
+                  <button
+                    onClick={handleSelecionarArquivo}
+                    disabled={importando}
+                    className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {importando ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <FileJson className="w-4 h-4" />
+                    )}
+                    <span>{importando ? 'Importando...' : 'Selecionar Arquivo'}</span>
+                  </button>
+                </div>
               </div>
-            </div>
+
+              {/* Modal de confirmação de importação */}
+              {showConfirmacaoImport && dadosParaImportar && (
+                <div className="mt-6 p-4 border border-blue-200 bg-blue-50 rounded-lg">
+                  <div className="flex items-start space-x-3 mb-4">
+                    <Database className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <h3 className="text-sm font-medium text-blue-800">Confirmar Importação</h3>
+                      <p className="text-sm text-blue-700 mt-1">
+                        Arquivo de backup de {dadosParaImportar.metadata?.data_exportacao 
+                          ? new Date(dadosParaImportar.metadata.data_exportacao).toLocaleDateString('pt-BR', {
+                              day: '2-digit',
+                              month: '2-digit', 
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })
+                          : 'data desconhecida'}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-white rounded-lg p-4 mb-4">
+                    <h4 className="text-sm font-medium text-gray-700 mb-2">Dados a importar:</h4>
+                    <ul className="text-sm text-gray-600 space-y-1">
+                      <li>• {dadosParaImportar.tabelas.visitantes?.length || 0} visitantes</li>
+                      <li>• {dadosParaImportar.tabelas.veiculos_moradores?.length || 0} veículos de moradores</li>
+                      <li>• {dadosParaImportar.tabelas.lpr_deteccoes?.length || 0} detecções LPR</li>
+                    </ul>
+                  </div>
+                  
+                  <label className="flex items-center space-x-2 mb-4 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={limparAntesImportar}
+                      onChange={(e) => setLimparAntesImportar(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-700">
+                      Limpar dados existentes antes de importar
+                    </span>
+                  </label>
+                  
+                  {limparAntesImportar && (
+                    <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-lg mb-4">
+                      <div className="flex items-start space-x-2">
+                        <AlertTriangle className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+                        <p className="text-xs text-yellow-800">
+                          Atenção: Todos os dados atuais serão removidos antes da importação!
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div className="flex space-x-3">
+                    <button
+                      onClick={cancelarImportacao}
+                      className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={handleConfirmarImportacao}
+                      className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      <Upload className="w-4 h-4" />
+                      <span>Confirmar Importação</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
