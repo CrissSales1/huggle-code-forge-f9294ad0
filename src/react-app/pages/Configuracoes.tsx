@@ -380,11 +380,11 @@ export default function Configuracoes() {
     );
 
   return (
-    <div className="container mx-auto px-4 lg:px-6 py-4 lg:py-8">
+    <div className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 lg:py-6 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Configurações do Sistema</h1>
-        <p className="text-gray-600 mt-1">Gerencie as configurações e dados do sistema</p>
+      <div className="mb-4 sm:mb-6 lg:mb-8">
+        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">Configurações do Sistema</h1>
+        <p className="text-gray-600 mt-0.5 sm:mt-1 text-xs sm:text-sm lg:text-base">Gerencie as configurações e dados do sistema</p>
       </div>
 
       {/* Alerta de sucesso */}
@@ -403,16 +403,16 @@ export default function Configuracoes() {
 
       {/* Configurações Atuais */}
       {configuracoes && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 mb-6 lg:mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-2 gap-2 sm:gap-3 lg:gap-4 mb-4 sm:mb-6 lg:mb-8">
           <StatsCard
-            title="Total de Vagas de Visitantes"
+            title="Vagas de Visitantes"
             value={configuracoes.total_vagas_visitantes}
             icon={Car}
             color="green"
             loading={loading}
           />
           <StatsCard
-            title="Total de Prismas Magnéticos"
+            title="Prismas Magnéticos"
             value={configuracoes.total_prismas_magneticos}
             icon={Hash}
             color="blue"
@@ -422,22 +422,22 @@ export default function Configuracoes() {
       )}
 
       {/* Gestão de Recursos */}
-      <div className="bg-white rounded-lg border border-gray-200 mb-8">
-        <div className="p-6 border-b border-gray-200">
+      <div className="bg-white rounded-lg sm:rounded-xl border border-gray-200 mb-4 sm:mb-6 lg:mb-8">
+        <div className="p-3 sm:p-4 lg:p-6 border-b border-gray-200">
           <div className="flex items-center space-x-2">
-            <SettingsIcon className="w-5 h-5 text-gray-600" />
-            <h2 className="text-xl font-semibold text-gray-900">Gestão de Recursos</h2>
+            <SettingsIcon className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" />
+            <h2 className="text-base sm:text-lg lg:text-xl font-semibold text-gray-900">Gestão de Recursos</h2>
           </div>
-          <p className="text-gray-600 mt-1">
-            Ajuste o número total de vagas e prismas disponíveis no condomínio
+          <p className="text-gray-600 mt-0.5 sm:mt-1 text-xs sm:text-sm">
+            Ajuste vagas e prismas disponíveis
           </p>
         </div>
         
-        <div className="p-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
+        <div className="p-3 sm:p-4 lg:p-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 lg:gap-6">
             <div>
-              <label htmlFor="vagas" className="block text-sm font-medium text-gray-700 mb-2">
-                Número Total de Vagas de Visitantes
+              <label htmlFor="vagas" className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
+                Vagas de Visitantes
               </label>
               <input
                 type="number"
@@ -446,16 +446,16 @@ export default function Configuracoes() {
                 max="999"
                 value={totalVagas}
                 onChange={(e) => setTotalVagas(parseInt(e.target.value) || 1)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
-              <p className="text-xs text-gray-500 mt-1">
-                Quantidade total de vagas destinadas aos visitantes
+              <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1">
+                Total de vagas para visitantes
               </p>
             </div>
             
             <div>
-              <label htmlFor="prismas" className="block text-sm font-medium text-gray-700 mb-2">
-                Número Total de Prismas Magnéticos
+              <label htmlFor="prismas" className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
+                Prismas Magnéticos
               </label>
               <input
                 type="number"
@@ -464,75 +464,75 @@ export default function Configuracoes() {
                 max="999"
                 value={totalPrismas}
                 onChange={(e) => setTotalPrismas(parseInt(e.target.value) || 1)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
-              <p className="text-xs text-gray-500 mt-1">
-                Quantidade total de prismas magnéticos disponíveis
+              <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1">
+                Total de prismas disponíveis
               </p>
             </div>
           </div>
           
           {configuracoesAlteradas && (
-            <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="mt-3 sm:mt-4 lg:mt-6 p-2 sm:p-3 lg:p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <div className="flex items-center space-x-2 text-blue-800">
-                <AlertTriangle className="w-4 h-4" />
-                <span className="text-sm font-medium">Alterações pendentes</span>
+                <AlertTriangle className="w-3 h-3 sm:w-4 sm:h-4" />
+                <span className="text-xs sm:text-sm font-medium">Alterações pendentes</span>
               </div>
-              <p className="text-sm text-blue-700 mt-1">
-                Você tem alterações não salvas. Clique em "Salvar Configurações" para aplicá-las.
+              <p className="text-[10px] sm:text-xs lg:text-sm text-blue-700 mt-0.5 sm:mt-1">
+                Salve para aplicar as alterações.
               </p>
             </div>
           )}
           
-          <div className="flex justify-end mt-6">
+          <div className="flex justify-end mt-3 sm:mt-4 lg:mt-6">
             <button
               onClick={handleSalvarConfiguracoes}
               disabled={loading || !configuracoesAlteradas}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center space-x-1.5 sm:space-x-2 px-3 sm:px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Save className="w-4 h-4" />
-              <span>{loading ? 'Salvando...' : 'Salvar Configurações'}</span>
+              <span>{loading ? 'Salvando...' : 'Salvar'}</span>
             </button>
           </div>
         </div>
       </div>
 
       {/* Backup e Restauração */}
-      <div className="bg-white rounded-lg border border-gray-200 mb-8">
-        <div className="p-6 border-b border-gray-200">
+      <div className="bg-white rounded-lg sm:rounded-xl border border-gray-200 mb-4 sm:mb-6 lg:mb-8">
+        <div className="p-3 sm:p-4 lg:p-6 border-b border-gray-200">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <HardDrive className="w-5 h-5 text-purple-600" />
-              <h2 className="text-xl font-semibold text-gray-900">Backup e Restauração</h2>
+              <HardDrive className="w-4 h-4 sm:w-5 sm:h-5 text-purple-600" />
+              <h2 className="text-base sm:text-lg lg:text-xl font-semibold text-gray-900">Backup e Restauração</h2>
             </div>
             {backupDesbloqueado && (
               <button
                 onClick={handleBloquearBackup}
-                className="flex items-center space-x-1 px-3 py-1 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                className="flex items-center space-x-1 px-2 sm:px-3 py-1 text-xs sm:text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
               >
-                <Lock className="w-4 h-4" />
-                <span>Bloquear</span>
+                <Lock className="w-3 h-3 sm:w-4 sm:h-4" />
+                <span className="hidden sm:inline">Bloquear</span>
               </button>
             )}
           </div>
-          <p className="text-gray-600 mt-1">
-            Faça backup completo dos dados ou restaure de um backup anterior
+          <p className="text-gray-600 mt-0.5 sm:mt-1 text-xs sm:text-sm">
+            Backup e restauração de dados
           </p>
         </div>
         
-        <div className="p-6">
+        <div className="p-3 sm:p-4 lg:p-6">
           {/* Tela de desbloqueio */}
           {!backupDesbloqueado ? (
-            <div className="max-w-md mx-auto text-center">
-              <div className="p-4 bg-purple-50 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center">
-                <Lock className="w-10 h-10 text-purple-600" />
+            <div className="max-w-sm sm:max-w-md mx-auto text-center">
+              <div className="p-3 sm:p-4 bg-purple-50 rounded-full w-14 h-14 sm:w-16 sm:h-16 lg:w-20 lg:h-20 mx-auto mb-3 sm:mb-4 flex items-center justify-center">
+                <Lock className="w-7 h-7 sm:w-8 sm:h-8 lg:w-10 lg:h-10 text-purple-600" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Área Protegida (LGPD)</h3>
-              <p className="text-sm text-gray-600 mb-6">
-                O acesso ao backup de dados é restrito. Digite a senha para desbloquear as funções de backup e restauração.
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-1 sm:mb-2">Área Protegida (LGPD)</h3>
+              <p className="text-xs sm:text-sm text-gray-600 mb-4 sm:mb-6">
+                Digite a senha para desbloquear.
               </p>
               
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4">
                 <div>
                   <input
                     type="password"
@@ -542,22 +542,22 @@ export default function Configuracoes() {
                       setErroSenhaBackup(false);
                     }}
                     onKeyDown={(e) => e.key === 'Enter' && handleDesbloquearBackup()}
-                    placeholder="Digite a senha de acesso"
-                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 ${
+                    placeholder="Digite a senha"
+                    className={`w-full px-3 sm:px-4 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 ${
                       erroSenhaBackup ? 'border-red-500' : 'border-gray-300'
                     }`}
                   />
                   {erroSenhaBackup && (
-                    <p className="text-sm text-red-600 mt-1">Senha incorreta. Tente novamente.</p>
+                    <p className="text-xs sm:text-sm text-red-600 mt-1">Senha incorreta.</p>
                   )}
                 </div>
                 
                 <button
                   onClick={handleDesbloquearBackup}
-                  className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                  className="w-full flex items-center justify-center space-x-1.5 sm:space-x-2 px-3 sm:px-4 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
                 >
                   <ShieldCheck className="w-4 h-4" />
-                  <span>Desbloquear Acesso</span>
+                  <span>Desbloquear</span>
                 </button>
               </div>
             </div>
@@ -603,52 +603,51 @@ export default function Configuracoes() {
               )}
 
               {/* Cards de Exportar e Importar */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 lg:gap-6">
                 {/* Exportar Backup */}
-                <div className="border border-gray-200 rounded-lg p-6 bg-gray-50">
-                  <div className="flex items-center space-x-3 mb-4">
-                    <div className="p-2 bg-green-100 rounded-lg">
-                      <Download className="w-6 h-6 text-green-600" />
+                <div className="border border-gray-200 rounded-lg p-3 sm:p-4 lg:p-6 bg-gray-50">
+                  <div className="flex items-center space-x-2 sm:space-x-3 mb-3 sm:mb-4">
+                    <div className="p-1.5 sm:p-2 bg-green-100 rounded-lg">
+                      <Download className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-green-600" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-gray-900">Exportar Backup</h3>
-                      <p className="text-sm text-gray-600">Baixe todos os dados</p>
+                      <h3 className="font-semibold text-gray-900 text-sm sm:text-base">Exportar Backup</h3>
+                      <p className="text-[10px] sm:text-xs lg:text-sm text-gray-600">Baixe todos os dados</p>
                     </div>
                   </div>
                   
-                  <p className="text-sm text-gray-600 mb-4">
-                    Gera um arquivo JSON com todos os dados do sistema: visitantes, veículos de moradores, 
-                    detecções LPR, prismas e configurações.
+                  <p className="text-[10px] sm:text-xs lg:text-sm text-gray-600 mb-3 sm:mb-4 hidden sm:block">
+                    Gera um arquivo JSON com todos os dados do sistema.
                   </p>
                   
                   <button
                     onClick={handleExportarBackup}
                     disabled={exportando}
-                    className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full flex items-center justify-center space-x-1.5 sm:space-x-2 px-3 sm:px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {exportando ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
                       <Download className="w-4 h-4" />
                     )}
-                    <span>{exportando ? 'Exportando...' : 'Exportar Backup'}</span>
+                    <span>{exportando ? 'Exportando...' : 'Exportar'}</span>
                   </button>
                 </div>
 
                 {/* Importar Backup */}
-                <div className="border border-gray-200 rounded-lg p-6 bg-gray-50">
-                  <div className="flex items-center space-x-3 mb-4">
-                    <div className="p-2 bg-blue-100 rounded-lg">
-                      <Upload className="w-6 h-6 text-blue-600" />
+                <div className="border border-gray-200 rounded-lg p-3 sm:p-4 lg:p-6 bg-gray-50">
+                  <div className="flex items-center space-x-2 sm:space-x-3 mb-3 sm:mb-4">
+                    <div className="p-1.5 sm:p-2 bg-blue-100 rounded-lg">
+                      <Upload className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-blue-600" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-gray-900">Importar Backup</h3>
-                      <p className="text-sm text-gray-600">Restaure de um arquivo</p>
+                      <h3 className="font-semibold text-gray-900 text-sm sm:text-base">Importar Backup</h3>
+                      <p className="text-[10px] sm:text-xs lg:text-sm text-gray-600">Restaure de um arquivo</p>
                     </div>
                   </div>
                   
-                  <p className="text-sm text-gray-600 mb-4">
-                    Selecione um arquivo de backup JSON exportado anteriormente para restaurar os dados no sistema.
+                  <p className="text-[10px] sm:text-xs lg:text-sm text-gray-600 mb-3 sm:mb-4 hidden sm:block">
+                    Selecione um arquivo JSON para restaurar.
                   </p>
                   
                   <input
@@ -662,14 +661,14 @@ export default function Configuracoes() {
                   <button
                     onClick={handleSelecionarArquivo}
                     disabled={importando}
-                    className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full flex items-center justify-center space-x-1.5 sm:space-x-2 px-3 sm:px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {importando ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
                       <FileJson className="w-4 h-4" />
                     )}
-                    <span>{importando ? 'Importando...' : 'Selecionar Arquivo'}</span>
+                    <span>{importando ? 'Importando...' : 'Selecionar'}</span>
                   </button>
                 </div>
               </div>
@@ -750,41 +749,41 @@ export default function Configuracoes() {
       </div>
 
       {/* Gestão de Dados - Limpar Banco */}
-      <div className="bg-white rounded-lg border border-gray-200">
-        <div className="p-6 border-b border-gray-200">
+      <div className="bg-white rounded-lg sm:rounded-xl border border-gray-200">
+        <div className="p-3 sm:p-4 lg:p-6 border-b border-gray-200">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <Trash2 className="w-5 h-5 text-red-600" />
-              <h2 className="text-xl font-semibold text-gray-900">Gestão de Dados</h2>
+              <Trash2 className="w-4 h-4 sm:w-5 sm:h-5 text-red-600" />
+              <h2 className="text-base sm:text-lg lg:text-xl font-semibold text-gray-900">Gestão de Dados</h2>
             </div>
             {exclusaoDesbloqueada && (
               <button
                 onClick={handleBloquearExclusao}
-                className="flex items-center space-x-1 px-3 py-1 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                className="flex items-center space-x-1 px-2 sm:px-3 py-1 text-xs sm:text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
               >
-                <Lock className="w-4 h-4" />
-                <span>Bloquear</span>
+                <Lock className="w-3 h-3 sm:w-4 sm:h-4" />
+                <span className="hidden sm:inline">Bloquear</span>
               </button>
             )}
           </div>
-          <p className="text-gray-600 mt-1">
-            Limpe todos os dados do sistema (visitantes e histórico)
+          <p className="text-gray-600 mt-0.5 sm:mt-1 text-xs sm:text-sm">
+            Limpar todos os dados
           </p>
         </div>
         
-        <div className="p-6">
+        <div className="p-3 sm:p-4 lg:p-6">
           {/* Tela de desbloqueio */}
           {!exclusaoDesbloqueada ? (
-            <div className="max-w-md mx-auto text-center">
-              <div className="p-4 bg-red-50 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center">
-                <Lock className="w-10 h-10 text-red-600" />
+            <div className="max-w-sm sm:max-w-md mx-auto text-center">
+              <div className="p-3 sm:p-4 bg-red-50 rounded-full w-14 h-14 sm:w-16 sm:h-16 lg:w-20 lg:h-20 mx-auto mb-3 sm:mb-4 flex items-center justify-center">
+                <Lock className="w-7 h-7 sm:w-8 sm:h-8 lg:w-10 lg:h-10 text-red-600" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Área Protegida</h3>
-              <p className="text-sm text-gray-600 mb-6">
-                Esta é uma operação crítica que remove permanentemente todos os dados. Digite a senha para desbloquear.
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-1 sm:mb-2">Área Protegida</h3>
+              <p className="text-xs sm:text-sm text-gray-600 mb-4 sm:mb-6">
+                Operação crítica. Digite a senha.
               </p>
               
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4">
                 <div>
                   <input
                     type="password"
@@ -794,35 +793,34 @@ export default function Configuracoes() {
                       setErroSenhaExclusao(false);
                     }}
                     onKeyDown={(e) => e.key === 'Enter' && handleDesbloquearExclusao()}
-                    placeholder="Digite a senha de acesso"
-                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 ${
+                    placeholder="Digite a senha"
+                    className={`w-full px-3 sm:px-4 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 ${
                       erroSenhaExclusao ? 'border-red-500' : 'border-gray-300'
                     }`}
                   />
                   {erroSenhaExclusao && (
-                    <p className="text-sm text-red-600 mt-1">Senha incorreta. Tente novamente.</p>
+                    <p className="text-xs sm:text-sm text-red-600 mt-1">Senha incorreta.</p>
                   )}
                 </div>
                 
                 <button
                   onClick={handleDesbloquearExclusao}
-                  className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                  className="w-full flex items-center justify-center space-x-1.5 sm:space-x-2 px-3 sm:px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
                 >
                   <ShieldCheck className="w-4 h-4" />
-                  <span>Desbloquear Acesso</span>
+                  <span>Desbloquear</span>
                 </button>
               </div>
             </div>
           ) : (
             <div>
-              <div className="bg-red-50 border border-red-200 p-4 rounded-lg mb-6">
-                <div className="flex items-start space-x-3">
-                  <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
+              <div className="bg-red-50 border border-red-200 p-2 sm:p-3 lg:p-4 rounded-lg mb-4 sm:mb-6">
+                <div className="flex items-start space-x-2 sm:space-x-3">
+                  <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 text-red-600 mt-0.5 flex-shrink-0" />
                   <div>
-                    <h3 className="text-sm font-medium text-red-800">Atenção!</h3>
-                    <p className="text-sm text-red-700 mt-1">
-                      Esta ação irá remover permanentemente todos os dados de visitantes, 
-                      veículos de moradores e histórico de detecções. Esta operação não pode ser desfeita.
+                    <h3 className="text-xs sm:text-sm font-medium text-red-800">Atenção!</h3>
+                    <p className="text-[10px] sm:text-xs lg:text-sm text-red-700 mt-0.5 sm:mt-1">
+                      Esta ação remove permanentemente todos os dados. Não pode ser desfeita.
                     </p>
                   </div>
                 </div>
@@ -832,10 +830,10 @@ export default function Configuracoes() {
                 <button
                   onClick={handleLimparBanco}
                   disabled={loading}
-                  className="flex items-center space-x-2 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center space-x-1.5 sm:space-x-2 px-4 sm:px-6 py-2 sm:py-3 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Trash2 className="w-5 h-5" />
-                  <span>{loading ? 'Limpando...' : 'Limpar Banco de Dados'}</span>
+                  <Trash2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span>{loading ? 'Limpando...' : 'Limpar Banco'}</span>
                 </button>
               </div>
             </div>
