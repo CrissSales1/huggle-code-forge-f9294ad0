@@ -171,6 +171,83 @@ export default function CameraModal({ isOpen, onClose, onPlacaDetected }: Camera
     onClose();
   };
 
+  // Configurações de compressão de imagem
+  const MAX_IMAGE_DIMENSION = 1280; // Dimensão máxima para economizar dados
+  const JPEG_QUALITY = 0.75; // Qualidade JPEG (0.75 = bom equilíbrio)
+
+  // Função para comprimir imagem antes de enviar
+  const compressImage = (sourceCanvas: HTMLCanvasElement): { base64: string; originalSize: number; compressedSize: number } => {
+    const originalDataURL = sourceCanvas.toDataURL('image/jpeg', 0.95);
+    const originalSize = Math.round((originalDataURL.length * 3) / 4 / 1024); // Tamanho em KB
+
+    const sourceWidth = sourceCanvas.width;
+    const sourceHeight = sourceCanvas.height;
+
+    // Verificar se precisa redimensionar
+    if (sourceWidth <= MAX_IMAGE_DIMENSION && sourceHeight <= MAX_IMAGE_DIMENSION) {
+      // Apenas comprimir sem redimensionar
+      const compressedDataURL = sourceCanvas.toDataURL('image/jpeg', JPEG_QUALITY);
+      const compressedSize = Math.round((compressedDataURL.length * 3) / 4 / 1024);
+      
+      console.log(`📊 Compressão: ${originalSize}KB → ${compressedSize}KB (${Math.round((1 - compressedSize / originalSize) * 100)}% economia)`);
+      
+      return {
+        base64: compressedDataURL.split(',')[1],
+        originalSize,
+        compressedSize
+      };
+    }
+
+    // Calcular novas dimensões mantendo proporção
+    let newWidth = sourceWidth;
+    let newHeight = sourceHeight;
+
+    if (sourceWidth > sourceHeight) {
+      if (sourceWidth > MAX_IMAGE_DIMENSION) {
+        newHeight = Math.round((sourceHeight * MAX_IMAGE_DIMENSION) / sourceWidth);
+        newWidth = MAX_IMAGE_DIMENSION;
+      }
+    } else {
+      if (sourceHeight > MAX_IMAGE_DIMENSION) {
+        newWidth = Math.round((sourceWidth * MAX_IMAGE_DIMENSION) / sourceHeight);
+        newHeight = MAX_IMAGE_DIMENSION;
+      }
+    }
+
+    // Criar canvas comprimido
+    const compressedCanvas = document.createElement('canvas');
+    compressedCanvas.width = newWidth;
+    compressedCanvas.height = newHeight;
+    const compressedCtx = compressedCanvas.getContext('2d');
+
+    if (!compressedCtx) {
+      // Fallback: retornar original com qualidade reduzida
+      const fallbackDataURL = sourceCanvas.toDataURL('image/jpeg', JPEG_QUALITY);
+      return {
+        base64: fallbackDataURL.split(',')[1],
+        originalSize,
+        compressedSize: Math.round((fallbackDataURL.length * 3) / 4 / 1024)
+      };
+    }
+
+    // Usar smoothing para melhor qualidade no redimensionamento
+    compressedCtx.imageSmoothingEnabled = true;
+    compressedCtx.imageSmoothingQuality = 'high';
+    compressedCtx.drawImage(sourceCanvas, 0, 0, newWidth, newHeight);
+
+    const compressedDataURL = compressedCanvas.toDataURL('image/jpeg', JPEG_QUALITY);
+    const compressedSize = Math.round((compressedDataURL.length * 3) / 4 / 1024);
+
+    console.log(`📊 Redimensionado: ${sourceWidth}x${sourceHeight} → ${newWidth}x${newHeight}`);
+    console.log(`📊 Compressão: ${originalSize}KB → ${compressedSize}KB (${Math.round((1 - compressedSize / originalSize) * 100)}% economia)`);
+
+    return {
+      base64: compressedDataURL.split(',')[1],
+      originalSize,
+      compressedSize
+    };
+  };
+
   // Função para capturar e reconhecer placa com Workers AI
   const captureAndRecognize = async () => {
     if (!videoRef.current || !canvasRef.current || !cameraReady) {
@@ -218,12 +295,12 @@ export default function CameraModal({ isOpen, onClose, onPlacaDetected }: Camera
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       }
       
-      setProcessStatus('Reconhecendo com Plate Recognizer...');
+      setProcessStatus('Otimizando imagem...');
       
-      // Converter canvas para base64
-      const imageDataURL = canvas.toDataURL('image/jpeg', 0.9);
-      const imageBase64 = imageDataURL.split(',')[1];
+      // Comprimir imagem antes de enviar
+      const { base64: imageBase64, compressedSize } = compressImage(canvas);
       
+      setProcessStatus(`Reconhecendo placa... (${compressedSize}KB)`);
       console.log('📤 Enviando para Plate Recognizer...');
 
       // Chamar Edge Function do Plate Recognizer
