@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { X, Save, Car } from 'lucide-react';
+import { normalizarNumeroCasa } from '@/react-app/utils/formatters';
 
 interface CadastroMoradorModalProps {
   isOpen: boolean;
@@ -32,7 +33,7 @@ export default function CadastroMoradorModal({ isOpen, onClose, onSuccess }: Cad
         },
         body: JSON.stringify({
           placa_veiculo: placa.toUpperCase(),
-          casa: casa.toUpperCase(),
+          casa: normalizarNumeroCasa(casa),
         }),
       });
 

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Search, Download, FileText, Clock, TrendingUp, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useRelatorios } from '@/react-app/hooks/useApi';
+import { normalizarNumeroCasa } from '@/react-app/utils/formatters';
 import PlacaVeiculo from '@/react-app/components/PlacaVeiculo';
 import type { FiltroRelatorioType, RelatorioResultado } from '@/shared/types';
 
@@ -25,7 +26,12 @@ export default function Relatorios() {
   const { gerarRelatorio, loading, error } = useRelatorios();
 
   const handleBuscar = async (novaPagina = 1) => {
-    const filtrosBusca = { ...filtros, pagina: novaPagina };
+    // Normalizar o filtro de casa antes de buscar
+    const filtrosBusca = { 
+      ...filtros, 
+      pagina: novaPagina,
+      casa_visitada: filtros.casa_visitada ? normalizarNumeroCasa(filtros.casa_visitada) : ''
+    };
     const dados = await gerarRelatorio(filtrosBusca);
     setResultado(dados);
     setFiltros(prev => ({ ...prev, pagina: novaPagina }));
