@@ -1,5 +1,6 @@
-import { AlertCircle, CheckCircle2, ExternalLink, Copy, XCircle, Loader2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Copy, XCircle, Loader2, BookOpen } from 'lucide-react';
 import { useState } from 'react';
+import { Link } from 'react-router';
 
 export default function MonitoramentoHelp() {
   const webhookUrl = 'https://kbgftpiyzfmabrncpnas.supabase.co/functions/v1/rekor-webhook';
@@ -187,15 +188,13 @@ export default function MonitoramentoHelp() {
           )}
         </button>
         
-        <a
-          href="https://github.com/yourusername/portacerta/blob/main/SETUP-REKOR-SCOUT-WEBHOOK.md"
-          target="_blank"
-          rel="noopener noreferrer"
+        <Link
+          to="/guia-rekor-scout"
           className="flex-1 flex items-center justify-center space-x-2 px-4 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-semibold"
         >
-          <ExternalLink className="w-4 h-4" />
+          <BookOpen className="w-4 h-4" />
           <span>Guia Completo</span>
-        </a>
+        </Link>
       </div>
 
       <div className="mt-4 pt-4 border-t border-gray-200">
