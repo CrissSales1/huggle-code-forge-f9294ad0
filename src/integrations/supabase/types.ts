@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           created_at: string | null
           id: number
+          tempo_deduplicacao_segundos: number
           total_prismas_magneticos: number
           total_vagas_visitantes: number
           updated_at: string | null
@@ -25,6 +26,7 @@ export type Database = {
         Insert: {
           created_at?: string | null
           id?: number
+          tempo_deduplicacao_segundos?: number
           total_prismas_magneticos?: number
           total_vagas_visitantes?: number
           updated_at?: string | null
@@ -32,6 +34,7 @@ export type Database = {
         Update: {
           created_at?: string | null
           id?: number
+          tempo_deduplicacao_segundos?: number
           total_prismas_magneticos?: number
           total_vagas_visitantes?: number
           updated_at?: string | null
