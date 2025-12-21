@@ -104,8 +104,23 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // DEDUPLICAÇÃO: Verificar se já detectou essa placa nos últimos 30 segundos
-    const tempoDeduplicacao = 30000; // 30 segundos
+    // Buscar tempo de deduplicação configurado
+    let tempoDeduplicacaoSegundos = 30; // valor padrão
+    const { data: config, error: configError } = await supabase
+      .from('configuracoes_sistema')
+      .select('tempo_deduplicacao_segundos')
+      .limit(1)
+      .maybeSingle();
+
+    if (configError) {
+      console.warn('⚠️ Erro ao buscar configuração, usando padrão de 30s:', configError.message);
+    } else if (config?.tempo_deduplicacao_segundos) {
+      tempoDeduplicacaoSegundos = config.tempo_deduplicacao_segundos;
+      console.log(`⚙️ Tempo de deduplicação configurado: ${tempoDeduplicacaoSegundos}s`);
+    }
+
+    // DEDUPLICAÇÃO: Verificar se já detectou essa placa no período configurado
+    const tempoDeduplicacao = tempoDeduplicacaoSegundos * 1000; // converter para ms
     const timestampLimite = new Date(Date.now() - tempoDeduplicacao).toISOString();
     
     console.log(`🔍 Verificando duplicatas para placa ${placa} desde ${timestampLimite}...`);
@@ -125,11 +140,12 @@ serve(async (req) => {
     }
 
     if (deteccaoRecente) {
-      console.log(`⏭️ Placa ${placa} já detectada há ${Math.round((Date.now() - new Date(deteccaoRecente.timestamp).getTime()) / 1000)}s, ignorando duplicata...`);
+      const tempoDecorrido = Math.round((Date.now() - new Date(deteccaoRecente.timestamp).getTime()) / 1000);
+      console.log(`⏭️ Placa ${placa} já detectada há ${tempoDecorrido}s (limite: ${tempoDeduplicacaoSegundos}s), ignorando duplicata...`);
       return new Response(
         JSON.stringify({ 
           success: true, 
-          message: 'Detecção duplicada ignorada (mesma placa nos últimos 30s)',
+          message: `Detecção duplicada ignorada (mesma placa nos últimos ${tempoDeduplicacaoSegundos}s)`,
           placa: placa,
           deteccao_anterior_id: deteccaoRecente.id
         }),
