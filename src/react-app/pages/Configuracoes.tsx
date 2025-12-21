@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Save, Trash2, AlertTriangle, Settings as SettingsIcon, Hash, Car, CheckCircle, Upload, Download, Database, Loader2, FileJson, HardDrive, Lock, ShieldCheck } from 'lucide-react';
 import { useConfiguracoes } from '@/react-app/hooks/useApi';
 import StatsCard from '@/react-app/components/StatsCard';
@@ -25,6 +25,7 @@ export default function Configuracoes() {
   
   const [totalVagas, setTotalVagas] = useState(configuracoes?.total_vagas_visitantes || 10);
   const [totalPrismas, setTotalPrismas] = useState(configuracoes?.total_prismas_magneticos || 20);
+  const [tempoDeduplicacao, setTempoDeduplicacao] = useState(configuracoes?.tempo_deduplicacao_segundos || 30);
   // Estados para proteção da exclusão
   const [exclusaoDesbloqueada, setExclusaoDesbloqueada] = useState(false);
   const [senhaExclusao, setSenhaExclusao] = useState('');
@@ -54,17 +55,19 @@ export default function Configuracoes() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Atualizar valores locais quando configurações carregarem
-  useState(() => {
+  useEffect(() => {
     if (configuracoes) {
       setTotalVagas(configuracoes.total_vagas_visitantes);
       setTotalPrismas(configuracoes.total_prismas_magneticos);
+      setTempoDeduplicacao(configuracoes.tempo_deduplicacao_segundos || 30);
     }
-  });
+  }, [configuracoes]);
 
   const handleSalvarConfiguracoes = async () => {
     const sucesso = await atualizarConfiguracoes({
       total_vagas_visitantes: totalVagas,
       total_prismas_magneticos: totalPrismas,
+      tempo_deduplicacao_segundos: tempoDeduplicacao,
     });
 
     if (sucesso) {
@@ -376,7 +379,8 @@ export default function Configuracoes() {
   const configuracoesAlteradas = 
     configuracoes && (
       totalVagas !== configuracoes.total_vagas_visitantes ||
-      totalPrismas !== configuracoes.total_prismas_magneticos
+      totalPrismas !== configuracoes.total_prismas_magneticos ||
+      tempoDeduplicacao !== (configuracoes.tempo_deduplicacao_segundos || 30)
     );
 
   return (
@@ -468,6 +472,24 @@ export default function Configuracoes() {
               />
               <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1">
                 Total de prismas disponíveis
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="deduplicacao" className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
+                Tempo de Deduplicação (segundos)
+              </label>
+              <input
+                type="number"
+                id="deduplicacao"
+                min="5"
+                max="300"
+                value={tempoDeduplicacao}
+                onChange={(e) => setTempoDeduplicacao(parseInt(e.target.value) || 30)}
+                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1">
+                Ignora placas repetidas neste intervalo (LPR)
               </p>
             </div>
           </div>

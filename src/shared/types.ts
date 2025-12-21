@@ -64,6 +64,7 @@ export const EditarVisitanteSchema = z.object({
 export const ConfiguracoesSistemaSchema = z.object({
   total_vagas_visitantes: z.number().min(1, "Total de vagas deve ser maior que 0"),
   total_prismas_magneticos: z.number().min(1, "Total de prismas deve ser maior que 0"),
+  tempo_deduplicacao_segundos: z.number().min(1, "Tempo de deduplicação deve ser maior que 0").optional(),
 });
 
 export const FiltroRelatorioSchema = z.object({

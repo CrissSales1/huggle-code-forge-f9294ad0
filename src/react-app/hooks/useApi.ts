@@ -444,6 +444,7 @@ export function useConfiguracoes() {
         .update({
           total_vagas_visitantes: data.total_vagas_visitantes,
           total_prismas_magneticos: data.total_prismas_magneticos,
+          tempo_deduplicacao_segundos: data.tempo_deduplicacao_segundos,
         })
         .eq('id', 1);
 
