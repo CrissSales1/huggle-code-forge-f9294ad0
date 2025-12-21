@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Plus, Camera, CheckCircle, XCircle, Home, Edit2, Trash2, Car, Activity, Wifi, HelpCircle, RotateCcw } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Plus, Camera, CheckCircle, XCircle, Home, Edit2, Trash2, Car, Activity, Wifi, HelpCircle, RotateCcw, Search, X } from 'lucide-react';
 import { useLPRDetections } from '@/react-app/hooks/useApi';
 import { supabase } from '@/integrations/supabase/client';
 import CadastroMoradorModal from '@/react-app/components/CadastroMoradorModal';
@@ -18,6 +18,21 @@ export default function Monitoramento() {
   const [showHelp, setShowHelp] = useState(false);
   const [veiculos, setVeiculos] = useState<VeiculoMorador[]>([]);
   const [veiculoSelecionado, setVeiculoSelecionado] = useState<VeiculoMorador | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Filtragem e ordenação numérica dos veículos
+  const veiculosFiltrados = useMemo(() => {
+    const termo = searchTerm.toLowerCase().trim();
+    return veiculos
+      .filter(v => {
+        if (!termo) return true;
+        return (
+          v.placa_veiculo.toLowerCase().includes(termo) ||
+          v.casa.toLowerCase().includes(termo)
+        );
+      })
+      .sort((a, b) => a.casa.localeCompare(b.casa, 'pt-BR', { numeric: true }));
+  }, [veiculos, searchTerm]);
   const {
     latestDetection,
     detectionHistory,
@@ -246,16 +261,47 @@ export default function Monitoramento() {
         </button>
 
         {showVeiculosCadastrados && <div className="bg-white border sm:border-2 border-t-0 border-gray-200 rounded-b-lg p-3 sm:p-4">
-            <div className="mb-3 sm:mb-4">
-              <button onClick={() => setShowCadastroModal(true)} className="flex items-center space-x-1.5 sm:space-x-2 px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+              {/* Campo de Busca */}
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar por placa ou casa..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                />
+                {searchTerm && (
+                  <button 
+                    onClick={() => setSearchTerm('')} 
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 hover:bg-gray-100 rounded"
+                  >
+                    <X className="w-4 h-4 text-gray-400 hover:text-gray-600" />
+                  </button>
+                )}
+              </div>
+              
+              {/* Botão Cadastrar */}
+              <button onClick={() => setShowCadastroModal(true)} className="flex items-center justify-center space-x-1.5 sm:space-x-2 px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm flex-shrink-0">
                 <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
                 <span>Cadastrar Veículo</span>
               </button>
             </div>
 
+            {/* Contador de resultados */}
+            {searchTerm && (
+              <p className="text-xs text-gray-500 mb-2">
+                Mostrando {veiculosFiltrados.length} de {veiculos.length} veículos
+              </p>
+            )}
+
             {veiculos.length === 0 ? <div className="bg-gray-50 border border-dashed sm:border-2 border-gray-300 rounded-lg p-6 sm:p-8 text-center">
                 <Car className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-2 sm:mb-3" />
                 <p className="text-gray-600 text-sm sm:text-base">Nenhum veículo cadastrado</p>
+              </div> : veiculosFiltrados.length === 0 ? <div className="bg-gray-50 border border-dashed sm:border-2 border-gray-300 rounded-lg p-6 sm:p-8 text-center">
+                <Search className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-2 sm:mb-3" />
+                <p className="text-gray-600 text-sm sm:text-base">Nenhum veículo encontrado para "{searchTerm}"</p>
               </div> : <div className="overflow-x-auto -mx-3 sm:mx-0">
                 <table className="w-full min-w-[400px]">
                   <thead className="bg-gray-50">
@@ -266,7 +312,7 @@ export default function Monitoramento() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {veiculos.map(veiculo => <tr key={veiculo.id} className="hover:bg-gray-50">
+                    {veiculosFiltrados.map(veiculo => <tr key={veiculo.id} className="hover:bg-gray-50">
                         <td className="px-2 sm:px-4 py-2 sm:py-3">
                           <div className="scale-90 sm:scale-100 origin-left">
                             <PlacaVeiculo placa={veiculo.placa_veiculo} size="sm" />
