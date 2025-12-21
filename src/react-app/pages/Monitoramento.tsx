@@ -144,97 +144,95 @@ export default function Monitoramento() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 lg:gap-6">
-          {/* Última Detecção */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
+          {/* Última Detecção - Compacto */}
           <div>
-            <h3 className="text-xs sm:text-sm font-semibold text-gray-700 mb-2 sm:mb-3">Última Detecção</h3>
-            {loading && !latestDetection ? <div className="text-center py-8 sm:py-12">
-                <div className="animate-spin rounded-full h-6 w-6 sm:h-8 sm:w-8 border-b-2 border-blue-600 mx-auto mb-2 sm:mb-3"></div>
+            <h3 className="text-xs sm:text-sm font-semibold text-gray-700 mb-2">Última Detecção</h3>
+            {loading && !latestDetection ? (
+              <div className="text-center py-6">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto mb-2"></div>
                 <p className="text-gray-600 text-sm">Carregando...</p>
-              </div> : !latestDetection ? <div className="text-center py-8 sm:py-12 bg-gray-50 rounded-lg">
-                <Camera className="w-12 h-12 sm:w-16 sm:h-16 text-gray-400 mx-auto mb-3 sm:mb-4" />
-                <p className="text-gray-600 text-base sm:text-lg">Aguardando detecção...</p>
-                <p className="text-xs sm:text-sm text-gray-500 mt-2">Os dados serão carregados automaticamente</p>
-              </div> : latestDetection.morador ? <div className="relative bg-gradient-to-br from-green-50 via-green-100 to-emerald-50 border-2 sm:border-4 border-green-500 rounded-xl sm:rounded-2xl p-3 sm:p-4 lg:p-6 text-center shadow-lg sm:shadow-2xl">
-                <div className="absolute top-2 right-2 sm:top-3 sm:right-3">
-                  <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-2 sm:px-3 py-0.5 sm:py-1 rounded-full font-bold text-[10px] sm:text-xs shadow-lg flex items-center space-x-0.5 sm:space-x-1">
-                    <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                    <span>LIBERADO</span>
+              </div>
+            ) : !latestDetection ? (
+              <div className="text-center py-6 bg-gray-50 rounded-lg">
+                <Camera className="w-10 h-10 text-gray-400 mx-auto mb-2" />
+                <p className="text-gray-600 text-sm">Aguardando detecção...</p>
+              </div>
+            ) : latestDetection.morador ? (
+              <div className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-500 rounded-xl p-3 sm:p-4">
+                {/* Badge + Horário */}
+                <div className="flex items-center justify-between mb-3">
+                  <span className="bg-green-600 text-white px-2 py-0.5 rounded-full font-bold text-xs flex items-center gap-1">
+                    <CheckCircle className="w-3 h-3" />
+                    MORADOR
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    {new Date(latestDetection.timestamp).toLocaleTimeString('pt-BR')}
+                  </span>
+                </div>
+                
+                {/* Placa + Casa juntas */}
+                <div className="flex items-center justify-center gap-3">
+                  <PlacaVeiculo placa={latestDetection.placa} size="sm" />
+                  <div className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-lg border border-green-200 shadow-sm">
+                    <Home className="w-4 h-4 text-blue-600" />
+                    <span className="text-xl font-bold text-green-700">{latestDetection.morador.casa}</span>
                   </div>
                 </div>
-
-                <div className="relative inline-block mb-3 sm:mb-4">
-                  <div className="absolute inset-0 bg-green-400 rounded-full blur-lg sm:blur-xl opacity-50"></div>
-                  <div className="relative bg-gradient-to-br from-green-500 to-emerald-600 rounded-full p-2 sm:p-3 shadow-lg sm:shadow-xl">
-                    <CheckCircle className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 text-white" strokeWidth={3} />
-                  </div>
+              </div>
+            ) : (
+              <div className="bg-red-50 border-2 border-red-400 rounded-xl p-3 sm:p-4">
+                {/* Badge + Horário */}
+                <div className="flex items-center justify-between mb-3">
+                  <span className="bg-red-600 text-white px-2 py-0.5 rounded-full font-bold text-xs flex items-center gap-1">
+                    <XCircle className="w-3 h-3" />
+                    DESCONHECIDO
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    {new Date(latestDetection.timestamp).toLocaleTimeString('pt-BR')}
+                  </span>
                 </div>
                 
-                <h3 className="text-lg sm:text-xl lg:text-2xl font-black text-green-800 mb-3 sm:mb-4">
-                  MORADOR IDENTIFICADO
-                </h3>
-                
-                <div className="mb-3 sm:mb-4 flex justify-center scale-90 sm:scale-100">
-                  <PlacaVeiculo placa={latestDetection.placa} size="md" />
+                {/* Placa */}
+                <div className="flex justify-center">
+                  <PlacaVeiculo placa={latestDetection.placa} size="sm" />
                 </div>
-                
-                <div className="bg-white rounded-lg sm:rounded-xl p-2 sm:p-3 lg:p-4 mb-3 sm:mb-4 shadow-md sm:shadow-lg border sm:border-2 border-green-200">
-                  <div className="flex items-center justify-center space-x-2 sm:space-x-3 mb-1 sm:mb-2">
-                    <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-1.5 sm:p-2 shadow-md">
-                      <Home className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-white" strokeWidth={2.5} />
-                    </div>
-                    <div className="text-2xl sm:text-3xl lg:text-4xl font-black bg-gradient-to-r from-green-700 to-emerald-700 bg-clip-text text-transparent">
-                      {latestDetection.morador.casa}
-                    </div>
-                  </div>
-                  <div className="text-[10px] sm:text-xs font-semibold text-gray-500 uppercase">
-                    Casa
-                  </div>
-                </div>
-                
-                <div className="flex items-center justify-center space-x-1.5 sm:space-x-2 text-[10px] sm:text-xs text-gray-600">
-                  <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-green-500 rounded-full animate-pulse"></div>
-                  <span>{new Date(latestDetection.timestamp).toLocaleTimeString('pt-BR')}</span>
-                </div>
-              </div> : <div className="bg-red-50 border sm:border-2 border-red-500 rounded-lg sm:rounded-xl p-3 sm:p-4 lg:p-6 text-center">
-                <XCircle className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 text-red-600 mx-auto mb-2 sm:mb-3" />
-                <h3 className="text-base sm:text-lg lg:text-xl font-bold text-red-800 mb-2 sm:mb-3">VEÍCULO DESCONHECIDO</h3>
-                
-                <div className="mb-2 sm:mb-3 flex justify-center scale-90 sm:scale-100">
-                  <PlacaVeiculo placa={latestDetection.placa} size="md" />
-                </div>
-                
-                <div className="bg-white rounded-lg p-2 sm:p-3 mb-2 sm:mb-3">
-                  <p className="text-red-700 text-xs sm:text-sm font-semibold">Não cadastrado</p>
-                </div>
-                
-                <div className="flex items-center justify-center space-x-2 text-[10px] sm:text-xs text-gray-600">
-                  <span>{new Date(latestDetection.timestamp).toLocaleTimeString('pt-BR')}</span>
-                </div>
-              </div>}
+              </div>
+            )}
           </div>
 
-          {/* Histórico */}
-          <div>
-            <h3 className="text-xs sm:text-sm font-semibold text-gray-700 mb-2 sm:mb-3">Últimas Detecções ({detectionHistory.length})</h3>
-            {detectionHistory.length === 0 ? <div className="text-center py-8 sm:py-12 bg-gray-50 rounded-lg">
+          {/* Histórico - Compacto */}
+          <div className="lg:col-span-2">
+            <h3 className="text-xs sm:text-sm font-semibold text-gray-700 mb-2">Histórico ({detectionHistory.length})</h3>
+            {detectionHistory.length === 0 ? (
+              <div className="text-center py-6 bg-gray-50 rounded-lg">
                 <p className="text-gray-600 text-sm">Nenhum histórico ainda</p>
-              </div> : <div className="space-y-1.5 sm:space-y-2 max-h-[300px] sm:max-h-[400px] lg:max-h-[500px] overflow-y-auto">
-                {detectionHistory.map((det, idx) => <div key={idx} className={`p-2 sm:p-3 rounded-lg border ${det.morador ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="scale-90 sm:scale-100 origin-left">
-                        <PlacaVeiculo placa={det.placa} size="sm" />
-                      </div>
-                      {det.morador && <div className="flex items-center space-x-1 text-xs sm:text-sm font-semibold text-green-700 flex-shrink-0">
-                          <Home className="w-3 h-3 sm:w-4 sm:h-4" />
+              </div>
+            ) : (
+              <div className="space-y-1 max-h-[250px] overflow-y-auto">
+                {detectionHistory.map((det, idx) => (
+                  <div 
+                    key={idx} 
+                    className={`p-1.5 sm:p-2 rounded-lg border flex items-center justify-between gap-2 ${
+                      det.morador ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <PlacaVeiculo placa={det.placa} size="sm" />
+                      {det.morador && (
+                        <div className="flex items-center gap-1 text-xs font-semibold text-green-700 bg-green-100 px-1.5 py-0.5 rounded">
+                          <Home className="w-3 h-3" />
                           <span>{det.morador.casa}</span>
-                        </div>}
+                        </div>
+                      )}
                     </div>
-                    <div className="flex items-center justify-between mt-1.5 sm:mt-2 text-[10px] sm:text-xs text-gray-600">
-                      <span>{new Date(det.timestamp).toLocaleString('pt-BR')}</span>
-                    </div>
-                  </div>)}
-              </div>}
+                    <span className="text-[10px] sm:text-xs text-gray-500 flex-shrink-0">
+                      {new Date(det.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
