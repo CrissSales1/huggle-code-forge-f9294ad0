@@ -104,6 +104,39 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // DEDUPLICAÇÃO: Verificar se já detectou essa placa nos últimos 30 segundos
+    const tempoDeduplicacao = 30000; // 30 segundos
+    const timestampLimite = new Date(Date.now() - tempoDeduplicacao).toISOString();
+    
+    console.log(`🔍 Verificando duplicatas para placa ${placa} desde ${timestampLimite}...`);
+    
+    const { data: deteccaoRecente, error: dedupeError } = await supabase
+      .from('lpr_deteccoes')
+      .select('id, timestamp')
+      .eq('placa_detectada', placa)
+      .gte('timestamp', timestampLimite)
+      .order('timestamp', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (dedupeError) {
+      console.error('⚠️ Erro ao verificar duplicatas:', dedupeError);
+      // Continua mesmo com erro na verificação
+    }
+
+    if (deteccaoRecente) {
+      console.log(`⏭️ Placa ${placa} já detectada há ${Math.round((Date.now() - new Date(deteccaoRecente.timestamp).getTime()) / 1000)}s, ignorando duplicata...`);
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: 'Detecção duplicada ignorada (mesma placa nos últimos 30s)',
+          placa: placa,
+          deteccao_anterior_id: deteccaoRecente.id
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Verificar se é morador
     console.log('🔎 Verificando se placa é de morador...');
     const { data: veiculoMorador, error: veiculoError } = await supabase
