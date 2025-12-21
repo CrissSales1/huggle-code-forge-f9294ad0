@@ -1,6 +1,6 @@
 interface PlacaVeiculoProps {
   placa: string;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
 }
 
 // Função para detectar se é placa Mercosul
@@ -65,6 +65,16 @@ export default function PlacaVeiculo({ placa, size = 'md' }: PlacaVeiculoProps) 
       mainHeight: 'h-9',
       spacing: 'tracking-wide',
       padding: 'px-4 py-2'
+    },
+    xl: {
+      container: 'w-64 h-20',
+      font: 'text-3xl',
+      brasilFont: 'text-sm',
+      flagSize: 'w-6 h-4',
+      headerHeight: 'h-5',
+      mainHeight: 'h-14',
+      spacing: 'tracking-widest',
+      padding: 'px-5 py-3'
     }
   };
   
