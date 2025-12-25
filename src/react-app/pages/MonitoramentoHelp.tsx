@@ -142,28 +142,31 @@ export default function MonitoramentoHelp() {
         </div>
       </div>
 
-      {/* Configurações para detecção instantânea */}
+      {/* Configurações para detecção rápida */}
       <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-4 mb-4">
         <p className="text-xs font-bold text-amber-800 mb-2 flex items-center gap-2">
-          <span className="bg-amber-600 text-white px-2 py-0.5 rounded text-[10px]">⚡ DETECÇÃO INSTANTÂNEA</span>
-          Para placas aparecerem imediatamente:
+          <span className="bg-amber-600 text-white px-2 py-0.5 rounded text-[10px]">⚡ DETECÇÃO RÁPIDA</span>
+          Configure → OpenALPR Settings:
         </p>
         <ul className="text-xs text-amber-900 space-y-2">
           <li className="flex items-start gap-2">
             <span className="font-bold text-amber-700">•</span>
             <span>
-              <strong>plate_groups_min_plates_to_group</strong> → Marque <strong>Override</strong> e coloque <strong>1</strong>
-              <span className="block text-[10px] text-amber-700 mt-0.5">Isso envia a detecção já na primeira leitura</span>
+              <strong>plate_groups_min_plates_to_group</strong> → Override → <strong>1</strong>
+              <span className="block text-[10px] text-amber-700 mt-0.5">Envia na primeira leitura da placa</span>
             </span>
           </li>
           <li className="flex items-start gap-2">
             <span className="font-bold text-amber-700">•</span>
             <span>
-              <strong>OU</strong> para ainda mais velocidade: <strong>plate_groups_enabled</strong> → <strong>0</strong>
-              <span className="block text-[10px] text-amber-700 mt-0.5">Desativa agrupamento e envia alpr_results instantaneamente</span>
+              <strong>plate_groups_time_delta_ms</strong> → Override → <strong>500</strong>
+              <span className="block text-[10px] text-amber-700 mt-0.5">Reduz tempo de agrupamento</span>
             </span>
           </li>
         </ul>
+        <p className="text-[10px] text-amber-700 mt-2 pt-2 border-t border-amber-200">
+          ⚠️ <strong>Não desative</strong> plate_groups_enabled - isso impede o envio de webhooks
+        </p>
       </div>
 
       {/* Resultado do teste */}
