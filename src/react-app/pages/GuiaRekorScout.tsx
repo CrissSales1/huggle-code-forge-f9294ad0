@@ -275,6 +275,39 @@ export default function GuiaRekorScout() {
           </div>
         </div>
 
+        {/* Configurações para Velocidade */}
+        <div className="bg-gradient-to-r from-emerald-50 to-green-50 rounded-2xl border-2 border-emerald-200 p-6 sm:p-8 mb-8">
+          <h2 className="text-xl font-bold text-emerald-900 mb-4 flex items-center gap-3">
+            <Settings className="w-6 h-6" />
+            Configurações para Detecção Rápida
+          </h2>
+          <p className="text-emerald-800 mb-4">
+            Para reduzir o tempo entre a detecção e a exibição no app, configure em <strong>Configure → OpenALPR Settings</strong>:
+          </p>
+          
+          <div className="bg-white rounded-xl p-4 border border-emerald-200 space-y-3">
+            <div className="flex items-center justify-between py-2 border-b border-emerald-100">
+              <code className="text-sm font-mono text-emerald-800">plate_groups_min_plates_to_group</code>
+              <span className="bg-emerald-600 text-white px-3 py-1 rounded-lg font-bold text-sm">1</span>
+            </div>
+            <div className="flex items-center justify-between py-2 border-b border-emerald-100">
+              <code className="text-sm font-mono text-emerald-800">plate_groups_time_delta_ms</code>
+              <span className="bg-emerald-600 text-white px-3 py-1 rounded-lg font-bold text-sm">500</span>
+            </div>
+            <p className="text-xs text-emerald-700 pt-2">
+              Marque <strong>Override</strong> em cada configuração e aplique os valores acima. 
+              Depois <strong>reinicie o serviço</strong> do Rekor Scout.
+            </p>
+          </div>
+          
+          <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
+            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-red-800">
+              <strong>Importante:</strong> NÃO desative <code className="bg-red-100 px-1 rounded">plate_groups_enabled</code> - isso impede o envio de webhooks.
+            </p>
+          </div>
+        </div>
+
         {/* Dicas */}
         <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl border-2 border-amber-200 p-6 sm:p-8 mb-8">
           <h2 className="text-xl font-bold text-amber-900 mb-4 flex items-center gap-3">
