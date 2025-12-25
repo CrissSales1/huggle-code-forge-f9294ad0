@@ -34,16 +34,25 @@ serve(async (req) => {
     let placa = '';
     let confidence = 0;
 
-    // Formato 1: Rekor Scout Cloud com alpr_group e best_plate como objeto
-    if (body.data_type === 'alpr_group' && body.best_plate) {
-      if (typeof body.best_plate === 'object' && body.best_plate !== null) {
-        placa = body.best_plate.plate || '';
-        confidence = body.best_plate.confidence || body.best_confidence || 0;
-      } else if (typeof body.best_plate === 'string') {
-        placa = body.best_plate;
+    // Formato 1: Rekor Scout Cloud com alpr_group
+    if (body.data_type === 'alpr_group') {
+      // Primeiro tenta best_plate_number (campo principal no alpr_group)
+      if (body.best_plate_number && typeof body.best_plate_number === 'string') {
+        placa = body.best_plate_number;
         confidence = body.best_confidence || 0;
+        console.log('📋 Formato detectado: alpr_group (best_plate_number)');
       }
-      console.log('📋 Formato detectado: alpr_group');
+      // Fallback para best_plate.plate se best_plate_number não existir
+      else if (body.best_plate) {
+        if (typeof body.best_plate === 'object' && body.best_plate !== null) {
+          placa = body.best_plate.plate || '';
+          confidence = body.best_plate.confidence || body.best_confidence || 0;
+        } else if (typeof body.best_plate === 'string') {
+          placa = body.best_plate;
+          confidence = body.best_confidence || 0;
+        }
+        console.log('📋 Formato detectado: alpr_group (best_plate)');
+      }
     }
     // Formato 2: OpenALPR/Rekor Scout padrão com results array
     else if (body.results && Array.isArray(body.results) && body.results.length > 0) {
