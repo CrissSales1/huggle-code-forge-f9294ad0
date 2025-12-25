@@ -33,14 +33,23 @@ serve(async (req) => {
     // Extrair dados da placa - suporta múltiplos formatos
     let placa = '';
     let confidence = 0;
+    let formatoDetectado = '';
 
-    // Formato 1: Rekor Scout Cloud com alpr_group
-    if (body.data_type === 'alpr_group') {
+    // Formato 1: alpr_results (mais rápido - detecção individual instantânea)
+    // Enviado quando plate_groups_enabled = 0 ou como evento individual
+    if (body.data_type === 'alpr_results' && body.results && Array.isArray(body.results) && body.results.length > 0) {
+      const result = body.results[0];
+      placa = result?.plate || '';
+      confidence = result?.confidence || 0;
+      formatoDetectado = 'alpr_results (instantâneo)';
+    }
+    // Formato 2: Rekor Scout Cloud com alpr_group
+    else if (body.data_type === 'alpr_group') {
       // Primeiro tenta best_plate_number (campo principal no alpr_group)
       if (body.best_plate_number && typeof body.best_plate_number === 'string') {
         placa = body.best_plate_number;
         confidence = body.best_confidence || 0;
-        console.log('📋 Formato detectado: alpr_group (best_plate_number)');
+        formatoDetectado = 'alpr_group (best_plate_number)';
       }
       // Fallback para best_plate.plate se best_plate_number não existir
       else if (body.best_plate) {
@@ -51,23 +60,23 @@ serve(async (req) => {
           placa = body.best_plate;
           confidence = body.best_confidence || 0;
         }
-        console.log('📋 Formato detectado: alpr_group (best_plate)');
+        formatoDetectado = 'alpr_group (best_plate)';
       }
     }
-    // Formato 2: OpenALPR/Rekor Scout padrão com results array
+    // Formato 3: OpenALPR/Rekor Scout padrão com results array (sem data_type)
     else if (body.results && Array.isArray(body.results) && body.results.length > 0) {
       const result = body.results[0];
       placa = result.plate || result.candidates?.[0]?.plate || '';
       confidence = result.score || result.confidence || result.candidates?.[0]?.confidence || 0;
-      console.log('📋 Formato detectado: results array');
+      formatoDetectado = 'results array';
     }
-    // Formato 3: Formato direto com plate
+    // Formato 4: Formato direto com plate
     else if (body.plate && typeof body.plate === 'string') {
       placa = body.plate;
       confidence = body.score || body.confidence || 0;
-      console.log('📋 Formato detectado: plate direto');
+      formatoDetectado = 'plate direto';
     }
-    // Formato 4: best_plate como objeto (sem alpr_group)
+    // Formato 5: best_plate como objeto (sem alpr_group)
     else if (body.best_plate) {
       if (typeof body.best_plate === 'object' && body.best_plate !== null) {
         placa = body.best_plate.plate || '';
@@ -76,15 +85,11 @@ serve(async (req) => {
         placa = body.best_plate;
         confidence = body.confidence || 0;
       }
-      console.log('📋 Formato detectado: best_plate');
+      formatoDetectado = 'best_plate';
     }
-    // Formato 5: Formato com data_type "alpr_results"
-    else if (body.data_type === 'alpr_results' && body.results) {
-      const result = body.results[0];
-      placa = result?.plate || '';
-      confidence = result?.confidence || 0;
-      console.log('📋 Formato detectado: alpr_results');
-    }
+
+    console.log(`📋 Formato detectado: ${formatoDetectado || 'desconhecido'}`);
+    console.log(`📋 Data type: ${body.data_type || 'não especificado'}`);
 
     // Validar que placa é string antes de processar
     if (typeof placa !== 'string') {

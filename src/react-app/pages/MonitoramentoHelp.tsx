@@ -114,7 +114,7 @@ export default function MonitoramentoHelp() {
           </div>
           <div className="flex-1">
             <p className="text-xs sm:text-sm text-gray-700">
-              <strong>No Rekor Scout</strong> → Selecione "Other HTTP Web Server"
+              <strong>No Rekor Scout</strong> → Selecione "Other HTTP Web Server" e cole a URL acima
             </p>
           </div>
         </div>
@@ -125,7 +125,7 @@ export default function MonitoramentoHelp() {
           </div>
           <div className="flex-1">
             <p className="text-xs sm:text-sm text-gray-700">
-              <strong>Cole a URL acima</strong> no campo de endpoint
+              <strong>Clique em Apply</strong> e depois <strong>Finish</strong>
             </p>
           </div>
         </div>
@@ -136,21 +136,34 @@ export default function MonitoramentoHelp() {
           </div>
           <div className="flex-1">
             <p className="text-xs sm:text-sm text-gray-700">
-              <strong>Clique em Apply</strong> e depois <strong>Finish</strong>
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-start space-x-2">
-          <div className="flex-shrink-0 w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">
-            4
-          </div>
-          <div className="flex-1">
-            <p className="text-xs sm:text-sm text-gray-700">
               <strong>Teste</strong> passando um veículo na câmera ou use o botão abaixo
             </p>
           </div>
         </div>
+      </div>
+
+      {/* Configurações para detecção instantânea */}
+      <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-4 mb-4">
+        <p className="text-xs font-bold text-amber-800 mb-2 flex items-center gap-2">
+          <span className="bg-amber-600 text-white px-2 py-0.5 rounded text-[10px]">⚡ DETECÇÃO INSTANTÂNEA</span>
+          Para placas aparecerem imediatamente:
+        </p>
+        <ul className="text-xs text-amber-900 space-y-2">
+          <li className="flex items-start gap-2">
+            <span className="font-bold text-amber-700">•</span>
+            <span>
+              <strong>plate_groups_min_plates_to_group</strong> → Marque <strong>Override</strong> e coloque <strong>1</strong>
+              <span className="block text-[10px] text-amber-700 mt-0.5">Isso envia a detecção já na primeira leitura</span>
+            </span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="font-bold text-amber-700">•</span>
+            <span>
+              <strong>OU</strong> para ainda mais velocidade: <strong>plate_groups_enabled</strong> → <strong>0</strong>
+              <span className="block text-[10px] text-amber-700 mt-0.5">Desativa agrupamento e envia alpr_results instantaneamente</span>
+            </span>
+          </li>
+        </ul>
       </div>
 
       {/* Resultado do teste */}
