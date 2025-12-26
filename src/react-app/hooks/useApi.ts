@@ -658,7 +658,7 @@ export function useEstatisticas(periodo: '7' | '30' | '90') {
         const visitantes = allVisitantes;
 
         const totalVisitantes = visitantes?.length || 0;
-        const mediaPorDia = dias > 0 ? (totalVisitantes / dias).toFixed(1) : '0';
+        const mediaPorDia = dias > 0 ? Math.round(totalVisitantes / dias) : 0;
 
         // Tempo médio de permanência
         const visitantesComSaida = visitantes?.filter(v => v.hora_saida) || [];
