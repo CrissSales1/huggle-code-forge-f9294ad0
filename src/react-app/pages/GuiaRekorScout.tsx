@@ -160,11 +160,42 @@ export default function GuiaRekorScout() {
               </div>
             </div>
 
-            {/* Passo 4 */}
+            {/* Passo 4 - Company ID */}
+            <div className="bg-white rounded-xl shadow-lg border-2 border-red-200 overflow-hidden">
+              <div className="flex items-start gap-4 p-5 sm:p-6">
+                <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-red-500 to-orange-600 text-white flex items-center justify-center text-xl font-black shadow-lg">
+                  4
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-bold text-gray-900 mb-2">⚠️ Preencha o Company ID (OBRIGATÓRIO)</h3>
+                  <p className="text-gray-600 mb-3">
+                    Localize o campo <strong>"Company ID"</strong> e preencha com seu ID de usuário do Rekor Scout. 
+                    <strong className="text-red-600"> Este campo é obrigatório!</strong>
+                  </p>
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-3">
+                    <p className="text-sm text-red-800 font-medium mb-2">
+                      ⚠️ Sem o Company ID preenchido:
+                    </p>
+                    <ul className="text-sm text-red-700 space-y-1 ml-4 list-disc">
+                      <li>A câmera pode não carregar</li>
+                      <li>As detecções não serão enviadas</li>
+                      <li>O sistema apresentará erros</li>
+                    </ul>
+                  </div>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <p className="text-sm text-blue-800">
+                      <strong>Onde encontrar:</strong> Portal Rekor Scout → Settings → Profile → ID da conta
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Passo 5 */}
             <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
               <div className="flex items-start gap-4 p-5 sm:p-6">
                 <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center text-xl font-black shadow-lg">
-                  4
+                  5
                 </div>
                 <div className="flex-1">
                   <h3 className="text-lg font-bold text-gray-900 mb-2">Cole a URL do Endpoint</h3>
@@ -187,18 +218,18 @@ export default function GuiaRekorScout() {
               </div>
             </div>
 
-            {/* Passo 5 */}
+            {/* Passo 6 */}
             <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
               <div className="flex items-start gap-4 p-5 sm:p-6">
                 <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center text-xl font-black shadow-lg">
-                  5
+                  6
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-lg font-bold text-gray-900 mb-2">Salve as Configurações</h3>
+                  <h3 className="text-lg font-bold text-gray-900 mb-2">Salve e Reinicie o Serviço</h3>
                   <p className="text-gray-600 mb-3">
-                    Clique em <strong>"Apply"</strong> para salvar e depois em <strong>"Finish"</strong> ou <strong>"OK"</strong> para fechar.
+                    Clique em <strong>"Apply"</strong> para salvar. Depois, <strong>reinicie o serviço</strong> do Rekor Scout para aplicar as alterações.
                   </p>
-                  <div className="flex gap-3">
+                  <div className="flex flex-wrap gap-3 mb-3">
                     <span className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold">
                       Apply
                     </span>
@@ -206,21 +237,27 @@ export default function GuiaRekorScout() {
                       Finish
                     </span>
                   </div>
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
+                    <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-amber-800">
+                      <strong>Importante:</strong> Reinicie o serviço "OpenALPR" no Gerenciador de Serviços do Windows, ou feche e abra o aplicativo novamente.
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Passo 6 */}
+            {/* Passo 7 */}
             <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
               <div className="flex items-start gap-4 p-5 sm:p-6">
                 <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 text-white flex items-center justify-center text-xl font-black shadow-lg">
-                  6
+                  7
                 </div>
                 <div className="flex-1">
                   <h3 className="text-lg font-bold text-gray-900 mb-2">Teste a Integração</h3>
                   <p className="text-gray-600 mb-3">
                     Passe um veículo na frente da câmera. Se tudo estiver correto, a detecção aparecerá 
-                    <strong> instantaneamente</strong> na página de Monitoramento.
+                    <strong> em 1-3 segundos</strong> na página de Monitoramento.
                   </p>
                   <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3">
                     <CheckCircle2 className="w-8 h-8 text-green-600 flex-shrink-0" />

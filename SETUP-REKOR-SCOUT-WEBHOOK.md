@@ -8,83 +8,196 @@ O Rekor Scout precisa ser configurado para **ENVIAR** as detecções de placas p
 
 ## 📋 Pré-requisitos
 
-- Rekor Scout instalado e funcionando
-- Acesso ao painel de configuração do Rekor Scout
-- URL do seu app PortaCerta
+- Rekor Scout Desktop instalado e funcionando
+- Câmera configurada e detectando placas
+- Acesso à internet no computador do Rekor Scout
+- **Company ID** da sua conta Rekor (obrigatório)
 
 ---
 
-## 🔧 Configuração Passo a Passo
+## 🔧 URL do Webhook
 
-### Etapa 1: Obter a URL do Webhook
-
-Sua URL do webhook é:
 ```
-https://5e6hs2nknfd26.mocha.app/api/rekorscout/webhook
+https://kbgftpiyzfmabrncpnas.supabase.co/functions/v1/rekor-webhook
 ```
 
-**OU**
+---
 
-Se estiver em desenvolvimento local:
-```
-http://localhost:5173/api/rekorscout/webhook
-```
+## 🏆 Método Recomendado: "Other HTTP Web Server"
 
-### Etapa 2: Configurar no Rekor Scout
+### Por que usar este método?
 
-#### Opção A: Rekor Scout Cloud
+| Característica | Second Tube | Other HTTP Web Server |
+|----------------|-------------|----------------------|
+| Configuração | Via arquivo `alprd.conf` | ✅ Via interface gráfica |
+| Heartbeats | Não envia | Envia (ignorados automaticamente) |
+| Facilidade | Complexo | ✅ Simples |
+| Suporte GUI | Não | ✅ Sim |
+| **Recomendado** | ❌ Não | ✅ **Sim** |
 
-1. Acesse o painel do Rekor Scout Cloud
-2. Vá em **Settings** > **Webhooks** ou **Integrations**
-3. Clique em **Add Webhook**
-4. Configure:
-   - **URL**: `https://5e6hs2nknfd26.mocha.app/api/rekorscout/webhook`
-   - **Method**: POST
-   - **Content-Type**: application/json
-   - **Events**: Plate Detection / License Plate Read
-   - **Authentication** (opcional): Se configurou REKOR_SCOUT_WEBHOOK_TOKEN, adicione como header
+---
 
-#### Opção B: Rekor Scout On-Premises / Desktop
+## 📝 Passo a Passo - Configuração via GUI
 
-1. Abra o arquivo de configuração do Rekor Scout (geralmente `config.yaml` ou via interface)
-2. Localize a seção de webhooks ou notifications
-3. Adicione:
-   ```yaml
-   webhooks:
-     - url: "https://5e6hs2nknfd26.mocha.app/api/rekorscout/webhook"
-       method: POST
-       events:
-         - plate_detection
-       headers:
-         Content-Type: "application/json"
+### Etapa 1: Abrir o Rekor Scout Desktop
+
+1. Inicie o aplicativo **Rekor Scout** no computador
+2. Certifique-se de que a câmera está funcionando e detectando placas
+3. Verifique se há conexão com a internet
+
+### Etapa 2: Acessar Configurações de Web Server
+
+1. Clique em **Configure** (ícone de engrenagem)
+2. Vá em **Webserver** ou **Web Server Settings**
+3. Localize a seção **Destination** ou **Upload Destination**
+
+### Etapa 3: Selecionar "Other HTTP Web Server"
+
+1. Na lista de opções, marque **"Other HTTP Web Server"**
+2. Deixe desmarcadas as outras opções como "OpenALPR Cloud"
+
+### Etapa 4: Configurar a URL
+
+1. No campo **URL** ou **Endpoint**, cole:
    ```
-4. Salve e reinicie o Rekor Scout
+   https://kbgftpiyzfmabrncpnas.supabase.co/functions/v1/rekor-webhook
+   ```
 
-#### Opção C: Via API do Rekor Scout
+### Etapa 5: ⚠️ Preencher o Company ID (OBRIGATÓRIO)
 
-Se o Rekor Scout tem API própria para configuração:
-```bash
-curl -X POST https://api.rekorscout.com/v1/webhooks \
-  -H "Authorization: Bearer SEU_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "url": "https://5e6hs2nknfd26.mocha.app/api/rekorscout/webhook",
-    "events": ["plate.detected"],
-    "active": true
-  }'
-```
+> **ATENÇÃO:** Este campo é **OBRIGATÓRIO**. Sem ele, a câmera pode não carregar corretamente!
 
-### Etapa 3: Testar a Configuração
+1. Localize o campo **Company ID** na mesma seção
+2. Preencha com seu ID de usuário/empresa do Rekor Scout
+3. Se não souber seu Company ID:
+   - Acesse sua conta no portal Rekor Scout
+   - Vá em Settings/Profile
+   - Copie o ID da sua conta
+
+**Se o Company ID estiver vazio:**
+- ❌ A câmera pode não carregar
+- ❌ As detecções podem não ser enviadas
+- ❌ O sistema pode apresentar erros
+
+### Etapa 6: Aplicar e Reiniciar
+
+1. Clique em **Apply** para salvar as configurações
+2. Clique em **Finish** ou **OK** para fechar
+3. **Reinicie o serviço do Rekor Scout**:
+   - Windows: Reinicie o serviço "OpenALPR" no Gerenciador de Serviços
+   - Ou: Feche e abra novamente o aplicativo
+
+### Etapa 7: Testar a Integração
 
 1. No PortaCerta, vá na aba **Monitoramento**
-2. O sistema mostrará "Aguardando Detecções"
-3. Faça o Rekor Scout detectar uma placa (passe um carro na câmera)
-4. Em até 3 segundos, a detecção deve aparecer no monitoramento
+2. Passe um veículo na frente da câmera
+3. A detecção deve aparecer em **1-3 segundos**
 
-**Se NÃO aparecer:**
-- Verifique os logs do Rekor Scout para ver se está enviando
-- Teste o webhook manualmente (veja seção abaixo)
-- Verifique se a URL está correta
+---
+
+## 📊 Formatos de Payload Suportados
+
+O webhook processa automaticamente os seguintes formatos:
+
+### Formato 1: alpr_group (Detecção Agrupada)
+```json
+{
+  "data_type": "alpr_group",
+  "best_plate": {
+    "plate": "ABC1234",
+    "confidence": 95.5
+  },
+  "epoch_start": 1703123456000
+}
+```
+
+### Formato 2: alpr_results (Detecção Individual)
+```json
+{
+  "data_type": "alpr_results",
+  "results": [{
+    "plate": "ABC1234",
+    "confidence": 95.5
+  }],
+  "epoch_time": 1703123456000
+}
+```
+
+### Formato 3: Heartbeat (Ignorado Automaticamente)
+```json
+{
+  "data_type": "heartbeat",
+  "agent_hostname": "DESKTOP-ABC",
+  "system_uptime_seconds": 12345
+}
+```
+
+Os heartbeats são enviados periodicamente pelo Rekor Scout para indicar que o sistema está online. O PortaCerta **ignora automaticamente** esses eventos.
+
+---
+
+## ⚡ Configurações para Velocidade (Opcional)
+
+Para reduzir o tempo entre detecção e exibição no app:
+
+1. No Rekor Scout, vá em **Configure > OpenALPR Settings**
+2. Localize e ative **Override** para cada configuração:
+
+| Configuração | Valor Recomendado |
+|--------------|-------------------|
+| `plate_groups_min_plates_to_group` | **1** |
+| `plate_groups_time_delta_ms` | **500** |
+
+3. **IMPORTANTE:** NÃO desative `plate_groups_enabled` - isso impede o envio de webhooks!
+4. Reinicie o serviço após as alterações
+
+---
+
+## 🛠️ Solução de Problemas
+
+### ❌ Problema: Câmera não carrega quando ativa Web Server
+
+**Causa:** Company ID não preenchido
+
+**Solução:**
+1. Volte às configurações de Webserver
+2. Preencha o campo **Company ID** com seu ID de usuário
+3. Aplique e reinicie o serviço
+
+### ❌ Problema: Apenas heartbeats chegam, mas não detecções
+
+**Causas possíveis:**
+1. Câmera não está detectando placas
+2. Configuração de plate_groups incorreta
+
+**Solução:**
+1. Verifique se a câmera está funcionando no Rekor Scout
+2. Confirme que `plate_groups_enabled` está **ATIVADO**
+3. Teste passando um veículo na frente da câmera
+
+### ❌ Problema: Detecções demoram muito (mais de 5 segundos)
+
+**Causa:** Configurações de agrupamento muito lentas
+
+**Solução:**
+1. Configure `plate_groups_min_plates_to_group = 1`
+2. Configure `plate_groups_time_delta_ms = 500`
+3. Reinicie o serviço
+
+### ❌ Problema: "Aguardando detecções" mas nada aparece
+
+**Verificar:**
+1. ✅ URL do webhook está correta?
+2. ✅ Company ID está preenchido?
+3. ✅ "Other HTTP Web Server" está marcado?
+4. ✅ Computador tem acesso à internet?
+5. ✅ Serviço foi reiniciado após configuração?
+
+### ❌ Problema: Placa detectada mas formato inválido
+
+**Solução:**
+- Verifique se a placa está no formato brasileiro: `ABC1234` ou `ABC1D23` (Mercosul)
+- Placas com menos ou mais de 7 caracteres serão rejeitadas
 
 ---
 
@@ -93,13 +206,15 @@ curl -X POST https://api.rekorscout.com/v1/webhooks \
 Use este comando para testar se o webhook está funcionando:
 
 ```bash
-curl -X POST https://5e6hs2nknfd26.mocha.app/api/rekorscout/webhook \
+curl -X POST https://kbgftpiyzfmabrncpnas.supabase.co/functions/v1/rekor-webhook \
   -H "Content-Type: application/json" \
   -d '{
-    "results": [{
+    "data_type": "alpr_group",
+    "best_plate": {
       "plate": "ABC1234",
-      "score": 0.95
-    }]
+      "confidence": 95.5
+    },
+    "epoch_start": 1703123456000
   }'
 ```
 
@@ -127,102 +242,28 @@ curl -X POST https://5e6hs2nknfd26.mocha.app/api/rekorscout/webhook \
 
 ---
 
-## 📊 Formatos de Payload Suportados
+## ❌ Método Alternativo: Second Tube (NÃO RECOMENDADO)
 
-O webhook aceita vários formatos de payload do Rekor Scout:
+Este método requer edição manual de arquivos de configuração e é mais complexo. Use apenas se o método GUI não funcionar.
 
-### Formato 1: Array de resultados (padrão Plate Recognizer)
-```json
-{
-  "results": [
-    {
-      "plate": "ABC1234",
-      "score": 0.95
-    }
-  ]
-}
+### Configuração via alprd.conf
+
+1. Edite o arquivo `C:\OpenALPR\Agent\etc\openalpr\alprd.conf`
+2. Adicione/modifique:
+
+```ini
+upload_second_tube_post_enabled = 1
+upload_second_tube_post_url = https://kbgftpiyzfmabrncpnas.supabase.co/functions/v1/rekor-webhook
+upload_single_plates = 1
 ```
 
-### Formato 2: Objeto lpr_data
-```json
-{
-  "lpr_data": {
-    "plate": "ABC1234",
-    "confidence": 0.95
-  }
-}
-```
+3. Reinicie o serviço OpenALPR
 
-### Formato 3: Placa direta
-```json
-{
-  "plate": "ABC1234",
-  "score": 0.95
-}
-```
-
-### Formato 4: License plate
-```json
-{
-  "license_plate": "ABC1234",
-  "confidence": 0.95
-}
-```
-
----
-
-## 🔐 Segurança (Opcional)
-
-Para adicionar autenticação ao webhook:
-
-1. No PortaCerta, configure a secret `REKOR_SCOUT_WEBHOOK_TOKEN`
-2. No Rekor Scout, adicione header de autenticação:
-   - Header: `X-Rekor-Token: seu_token_aqui`
-   - OU: `Authorization: Bearer seu_token_aqui`
-
----
-
-## 🛠️ Solução de Problemas
-
-### Problema: "Aguardando detecções" mas nada aparece
-
-**Possíveis causas:**
-1. ✅ **Webhook não configurado no Rekor Scout** - Configure seguindo o guia acima
-2. ✅ **URL incorreta** - Verifique se é `https://5e6hs2nknfd26.mocha.app/api/rekorscout/webhook`
-3. ✅ **Firewall bloqueando** - Certifique-se que o Rekor Scout pode acessar a URL
-4. ✅ **Formato de payload incompatível** - Teste manualmente com os formatos acima
-
-### Problema: Erro 401 Unauthorized
-
-**Solução:**
-- Remova a secret `REKOR_SCOUT_WEBHOOK_TOKEN` se não estiver usando autenticação
-- OU configure o header correto no Rekor Scout
-
-### Problema: Placa detectada mas formato inválido
-
-**Solução:**
-- Verifique se a placa está no formato brasileiro: ABC1234 ou ABC1D23
-- Placas com menos ou mais de 7 caracteres serão rejeitadas
-
-### Problema: Detecções duplicadas
-
-**Solução:**
-- Normal se o Rekor Scout detecta a mesma placa várias vezes
-- O sistema armazena todas as detecções
-- Configure o Rekor Scout para enviar apenas 1 detecção por veículo
-
----
-
-## 📝 Verificar Logs
-
-Para ver se o webhook está recebendo dados, verifique os logs do PortaCerta:
-
-```bash
-# Logs mostrarão:
-📝 Payload recebido do Rekor Scout: { ... }
-✅ PLACA VÁLIDA RECEBIDA: ABC1234 (Confiança: 95.0%)
-💾 Detecção salva no banco: ABC1234 - Morador: false
-```
+**Desvantagens:**
+- Configuração manual complexa
+- Sem interface gráfica
+- Mais difícil de diagnosticar problemas
+- Não envia heartbeats (dificulta saber se está conectado)
 
 ---
 
@@ -230,32 +271,21 @@ Para ver se o webhook está recebendo dados, verifique os logs do PortaCerta:
 
 Antes de considerar a configuração completa:
 
-- [ ] Webhook configurado no Rekor Scout com URL correta
-- [ ] Evento de detecção de placa habilitado
-- [ ] Content-Type: application/json configurado
+- [ ] **Other HTTP Web Server** marcado
+- [ ] URL do webhook correta: `https://kbgftpiyzfmabrncpnas.supabase.co/functions/v1/rekor-webhook`
+- [ ] **Company ID preenchido** (obrigatório!)
+- [ ] Configurações aplicadas
+- [ ] Serviço reiniciado
 - [ ] Teste manual do webhook funcionou
-- [ ] Detecção apareceu no monitoramento após passar um carro
-- [ ] Placa foi identificada corretamente
+- [ ] Detecção apareceu no monitoramento após passar um veículo
 - [ ] Moradores são identificados quando cadastrados
-
----
-
-## 🆘 Suporte
-
-Se após seguir todos os passos as detecções ainda não aparecem:
-
-1. Verifique os logs do Rekor Scout
-2. Teste o webhook manualmente com curl
-3. Confirme que o Rekor Scout está enviando para a URL correta
-4. Verifique se não há firewall bloqueando
-5. Confirme que o formato do payload é compatível
 
 ---
 
 ## 📚 Documentação Útil
 
-- [Rekor Scout - Webhook Configuration](https://docs.rekorscout.com/webhooks)
-- [Rekor Scout - API Reference](https://docs.rekorscout.com/api)
+- [Guia Interativo no PortaCerta](/guia-rekor-scout) - Tutorial passo a passo com imagens
+- [Página de Ajuda e Teste](/monitoramento-help) - Testar conexão e formatos
 
 ---
 
