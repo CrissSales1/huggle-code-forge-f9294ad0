@@ -123,15 +123,33 @@ export function usePrismasDisponiveis() {
       setLoading(true);
       setError(null);
 
+      // 1. Buscar prismas em uso por visitantes ativos (verificação dupla)
+      const { data: visitantesAtivos } = await supabase
+        .from('visitantes')
+        .select('numero_prisma')
+        .eq('is_ativo', true)
+        .not('numero_prisma', 'is', null);
+
+      const prismasEmUsoPorVisitantes = new Set(
+        (visitantesAtivos || []).map(v => v.numero_prisma).filter(Boolean)
+      );
+
+      // 2. Buscar todos os prismas
       const { data, error: queryError } = await supabase
         .from('prismas_magneticos')
         .select('*')
-        .eq('is_em_uso', false)
         .order('numero', { ascending: true });
 
       if (queryError) throw queryError;
 
-      setPrismas(data as PrismaMagneticoType[] || []);
+      // 3. Filtrar apenas prismas realmente disponíveis (verificação dupla)
+      // - is_em_uso deve ser false E
+      // - não pode estar sendo usado por nenhum visitante ativo
+      const prismasDisponiveis = (data || []).filter(p => 
+        !p.is_em_uso && !prismasEmUsoPorVisitantes.has(p.numero)
+      );
+
+      setPrismas(prismasDisponiveis as PrismaMagneticoType[]);
     } catch (err) {
       console.error('Erro ao buscar prismas disponíveis:', err);
       setError(err instanceof Error ? err.message : 'Erro de conexão com o servidor');
@@ -145,6 +163,51 @@ export function usePrismasDisponiveis() {
   }, [refetch]);
 
   return { prismas, loading, error, refetch };
+}
+
+// Função para sincronizar estado dos prismas com visitantes ativos
+export async function sincronizarPrismas(): Promise<boolean> {
+  try {
+    // 1. Buscar todos os prismas em uso por visitantes ativos
+    const { data: visitantesAtivos } = await supabase
+      .from('visitantes')
+      .select('numero_prisma, id')
+      .eq('is_ativo', true)
+      .not('numero_prisma', 'is', null);
+
+    const prismasEmUso = (visitantesAtivos || [])
+      .filter(v => v.numero_prisma !== null)
+      .map(v => ({ numero: v.numero_prisma!, visitante_id: v.id }));
+
+    const numerosPrismasEmUso = prismasEmUso.map(p => p.numero);
+
+    // 2. Marcar prismas em uso corretamente
+    for (const prisma of prismasEmUso) {
+      await supabase
+        .from('prismas_magneticos')
+        .update({ is_em_uso: true, visitante_id: prisma.visitante_id })
+        .eq('numero', prisma.numero);
+    }
+
+    // 3. Marcar prismas não usados como disponíveis
+    if (numerosPrismasEmUso.length > 0) {
+      await supabase
+        .from('prismas_magneticos')
+        .update({ is_em_uso: false, visitante_id: null })
+        .not('numero', 'in', `(${numerosPrismasEmUso.join(',')})`);
+    } else {
+      // Se não há prismas em uso, liberar todos
+      await supabase
+        .from('prismas_magneticos')
+        .update({ is_em_uso: false, visitante_id: null });
+    }
+
+    console.log('Prismas sincronizados com sucesso');
+    return true;
+  } catch (err) {
+    console.error('Erro ao sincronizar prismas:', err);
+    return false;
+  }
 }
 
 // Hook para ações de visitantes
