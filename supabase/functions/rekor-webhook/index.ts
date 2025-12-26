@@ -34,22 +34,48 @@ serve(async (req) => {
     let placa = '';
     let confidence = 0;
     let formatoDetectado = '';
+    let timestampReal: string | null = null; // Timestamp real da detecção (quando disponível)
 
-    // Formato 1: alpr_results (mais rápido - detecção individual instantânea)
-    // Enviado quando plate_groups_enabled = 0 ou como evento individual
+    // ========== FORMATO SECOND TUBE (INSTANTÂNEO) ==========
+    // Dados enviados diretamente do Rekor Scout local via upload_second_tube_post_url
+    // Este formato é o mais rápido - detecção instantânea sem agrupamento
+    
+    // Formato 1: alpr_results do Second Tube (INSTANTÂNEO - prioridade máxima)
     if (body.data_type === 'alpr_results' && body.results && Array.isArray(body.results) && body.results.length > 0) {
       const result = body.results[0];
       placa = result?.plate || '';
       confidence = result?.confidence || 0;
-      formatoDetectado = 'alpr_results (instantâneo)';
+      formatoDetectado = '⚡ SECOND TUBE - alpr_results (instantâneo)';
+      
+      // Usar epoch_time do resultado para timestamp real
+      if (result?.epoch_time) {
+        timestampReal = new Date(result.epoch_time).toISOString();
+        console.log(`⏱️ Timestamp real da detecção: ${timestampReal}`);
+      }
     }
-    // Formato 2: Rekor Scout Cloud com alpr_group
+    // Formato 2: results array sem data_type (Second Tube alternativo)
+    else if (!body.data_type && body.results && Array.isArray(body.results) && body.results.length > 0) {
+      const result = body.results[0];
+      placa = result.plate || result.candidates?.[0]?.plate || '';
+      confidence = result.score || result.confidence || result.candidates?.[0]?.confidence || 0;
+      formatoDetectado = '⚡ SECOND TUBE - results array (instantâneo)';
+      
+      // Usar epoch_time se disponível
+      if (result?.epoch_time) {
+        timestampReal = new Date(result.epoch_time).toISOString();
+      }
+    }
+    
+    // ========== FORMATO REKOR CLOUD (AGRUPADO - COM DELAY) ==========
+    // Dados enviados pelo Rekor Scout Cloud após agrupamento
+    
+    // Formato 3: Rekor Scout Cloud com alpr_group
     else if (body.data_type === 'alpr_group') {
       // Primeiro tenta best_plate_number (campo principal no alpr_group)
       if (body.best_plate_number && typeof body.best_plate_number === 'string') {
         placa = body.best_plate_number;
         confidence = body.best_confidence || 0;
-        formatoDetectado = 'alpr_group (best_plate_number)';
+        formatoDetectado = '☁️ CLOUD - alpr_group (agrupado)';
       }
       // Fallback para best_plate.plate se best_plate_number não existir
       else if (body.best_plate) {
@@ -60,21 +86,27 @@ serve(async (req) => {
           placa = body.best_plate;
           confidence = body.best_confidence || 0;
         }
-        formatoDetectado = 'alpr_group (best_plate)';
+        formatoDetectado = '☁️ CLOUD - alpr_group/best_plate';
+      }
+      
+      // Usar epoch_start para timestamp real da PRIMEIRA detecção do grupo
+      if (body.epoch_start) {
+        timestampReal = new Date(body.epoch_start).toISOString();
+        console.log(`⏱️ Timestamp real (epoch_start): ${timestampReal}`);
       }
     }
-    // Formato 3: OpenALPR/Rekor Scout padrão com results array (sem data_type)
-    else if (body.results && Array.isArray(body.results) && body.results.length > 0) {
-      const result = body.results[0];
-      placa = result.plate || result.candidates?.[0]?.plate || '';
-      confidence = result.score || result.confidence || result.candidates?.[0]?.confidence || 0;
-      formatoDetectado = 'results array';
-    }
+    
+    // ========== FORMATOS ALTERNATIVOS ==========
+    
     // Formato 4: Formato direto com plate
     else if (body.plate && typeof body.plate === 'string') {
       placa = body.plate;
       confidence = body.score || body.confidence || 0;
       formatoDetectado = 'plate direto';
+      
+      if (body.epoch_time) {
+        timestampReal = new Date(body.epoch_time).toISOString();
+      }
     }
     // Formato 5: best_plate como objeto (sem alpr_group)
     else if (body.best_plate) {
@@ -184,11 +216,14 @@ serve(async (req) => {
 
     console.log(`📋 Resultado: É morador? ${isMorador}, Casa: ${casaMorador}`);
 
-    // Salvar detecção no banco
+    // Salvar detecção no banco - usar timestamp real se disponível
+    const timestampFinal = timestampReal || new Date().toISOString();
+    console.log(`⏱️ Timestamp a salvar: ${timestampFinal} (real: ${!!timestampReal})`);
+    
     const deteccao = {
       placa_detectada: placa,
       confidence: confidence,
-      timestamp: new Date().toISOString(),
+      timestamp: timestampFinal,
       is_morador: isMorador,
       casa_morador: casaMorador,
     };
