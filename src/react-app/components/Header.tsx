@@ -2,15 +2,14 @@ import { useState } from 'react';
 import { NavLink } from 'react-router';
 import { useDateTime } from '@/react-app/hooks/useDateTime';
 import { useAuth } from '@/react-app/hooks/useAuth';
-import { Clock, Calendar, LogOut, Home, UserPlus, Search, Settings, BarChart3, Video, Webcam, Menu, X } from 'lucide-react';
+import { Clock, Calendar, LogOut, Home, UserPlus, Search, Settings, BarChart3, Video, Menu, X } from 'lucide-react';
 
 const navigationItems = [
   { path: '/', label: 'Dashboard', icon: Home },
   { path: '/cadastro', label: 'Novo Cadastro', icon: UserPlus },
   { path: '/relatorios', label: 'Busca', icon: Search },
   { path: '/estatisticas', label: 'Estatísticas', icon: BarChart3 },
-  { path: '/monitoramento', label: 'LPR Rekor', icon: Video },
-  { path: '/monitoramento-local', label: 'LPR Local', icon: Webcam },
+  { path: '/monitoramento', label: 'Monitoramento', icon: Video },
   { path: '/configuracoes', label: 'Configurações', icon: Settings },
 ];
 
