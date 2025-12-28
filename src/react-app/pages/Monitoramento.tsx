@@ -161,10 +161,134 @@ export default function Monitoramento() {
       {/* Ajuda de Configuração */}
       {showHelp && <MonitoramentoHelp />}
 
-      {/* Modo Local - Camera Monitor */}
+      {/* Modo Local - Camera Monitor com Painel de Resultado */}
       {monitoringMode === 'local' && (
-        <div className="mb-4 sm:mb-6">
-          <CameraMonitor onDetection={() => refetch()} />
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 sm:gap-6 mb-4 sm:mb-6">
+          {/* Câmera - 3/5 da largura */}
+          <div className="lg:col-span-3">
+            <CameraMonitor 
+              onDetection={() => refetch()} 
+              compact 
+            />
+          </div>
+          
+          {/* Painel de Resultado - 2/5 da largura */}
+          <div className="lg:col-span-2 space-y-4">
+            <h3 className="text-sm font-semibold text-gray-700">Última Detecção</h3>
+            
+            {!latestDetection ? (
+              /* Aguardando detecção */
+              <div className="text-center py-16 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300">
+                <Camera className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600 text-lg">Aguardando detecção...</p>
+                <p className="text-gray-400 text-sm mt-1">O sistema irá exibir os veículos detectados automaticamente</p>
+              </div>
+            ) : latestDetection.morador ? (
+              /* MORADOR AUTORIZADO - Card grande e verde */
+              <div className="bg-gradient-to-br from-green-100 via-green-50 to-emerald-100 border-4 border-green-500 rounded-2xl p-6 sm:p-8 shadow-lg animate-fade-in">
+                {/* Badge de status grande */}
+                <div className="flex items-center justify-center mb-6">
+                  <div className="bg-green-600 text-white px-6 py-2 rounded-full font-bold text-lg sm:text-xl flex items-center gap-2 shadow-md">
+                    <CheckCircle className="w-6 h-6 sm:w-7 sm:h-7" />
+                    <span>MORADOR AUTORIZADO</span>
+                  </div>
+                </div>
+                
+                {/* Placa grande centralizada */}
+                <div className="flex justify-center mb-6">
+                  <PlacaVeiculo placa={latestDetection.placa} size="xl" />
+                </div>
+                
+                {/* Casa do morador - grande e evidente */}
+                <div className="flex justify-center mb-4">
+                  <div className="flex items-center gap-3 bg-white px-6 py-3 rounded-xl border-2 border-green-300 shadow-sm">
+                    <Home className="w-8 h-8 text-blue-600" />
+                    <span className="text-4xl sm:text-5xl font-bold text-green-700">
+                      Casa {latestDetection.morador.casa}
+                    </span>
+                  </div>
+                </div>
+                
+                {/* Horário */}
+                <div className="text-center">
+                  <span className="text-gray-600 text-lg">
+                    {new Date(latestDetection.timestamp).toLocaleTimeString('pt-BR')}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              /* VEÍCULO DESCONHECIDO - Card grande e vermelho */
+              <div className="bg-gradient-to-br from-red-100 via-red-50 to-orange-100 border-4 border-red-500 rounded-2xl p-6 sm:p-8 shadow-lg animate-fade-in">
+                {/* Badge de alerta grande */}
+                <div className="flex items-center justify-center mb-6">
+                  <div className="bg-red-600 text-white px-6 py-2 rounded-full font-bold text-lg sm:text-xl flex items-center gap-2 shadow-md animate-pulse">
+                    <XCircle className="w-6 h-6 sm:w-7 sm:h-7" />
+                    <span>VEÍCULO DESCONHECIDO</span>
+                  </div>
+                </div>
+                
+                {/* Placa grande centralizada */}
+                <div className="flex justify-center mb-6">
+                  <PlacaVeiculo placa={latestDetection.placa} size="xl" />
+                </div>
+                
+                {/* Aviso */}
+                <div className="flex justify-center mb-4">
+                  <div className="bg-red-50 border border-red-200 px-4 py-2 rounded-lg">
+                    <p className="text-red-700 font-medium text-center">
+                      Verifique o veículo antes de liberar a entrada
+                    </p>
+                  </div>
+                </div>
+                
+                {/* Horário */}
+                <div className="text-center">
+                  <span className="text-gray-600 text-lg">
+                    {new Date(latestDetection.timestamp).toLocaleTimeString('pt-BR')}
+                  </span>
+                </div>
+              </div>
+            )}
+            
+            {/* Histórico de detecções locais */}
+            {detectionHistory.length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">
+                  Histórico <span className="text-gray-400 font-normal">({detectionHistory.length})</span>
+                </h3>
+                <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-1">
+                  {detectionHistory.slice(0, 10).map((det, idx) => (
+                    <div 
+                      key={idx} 
+                      className={`p-2 rounded-lg border text-xs ${
+                        det.morador 
+                          ? 'bg-green-50 border-green-200' 
+                          : 'bg-red-50 border-red-200'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <span className={`font-mono font-bold ${det.morador ? 'text-green-800' : 'text-red-800'}`}>
+                          {det.placa}
+                        </span>
+                        <span className="text-gray-400 text-[10px]">
+                          {new Date(det.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      {det.morador && (
+                        <div className="flex items-center gap-1 text-green-700">
+                          <Home className="w-3 h-3" />
+                          <span className="font-semibold">Casa {det.morador.casa}</span>
+                        </div>
+                      )}
+                      {!det.morador && (
+                        <span className="text-red-600 text-[10px]">Não cadastrado</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

@@ -26,11 +26,13 @@ import PlacaVeiculo from './PlacaVeiculo';
 
 interface CameraMonitorProps {
   onDetection?: (placa: string, isMorador: boolean, casa?: string) => void;
+  /** Modo compacto: esconde resultado interno e detecções recentes */
+  compact?: boolean;
 }
 
 type EditMode = 'none' | 'creating' | 'adjusting';
 
-export default function CameraMonitor({ onDetection }: CameraMonitorProps) {
+export default function CameraMonitor({ onDetection, compact = false }: CameraMonitorProps) {
   const {
     status,
     statusMessage,
@@ -431,64 +433,63 @@ export default function CameraMonitor({ onDetection }: CameraMonitorProps) {
         )}
       </div>
       
-      {/* Controls & Last Detection */}
+      {/* Controls */}
       <div className="p-3 border-t border-gray-200 bg-gray-50">
-        <div className="flex items-center justify-between gap-4">
-          {/* Controls */}
-          <div className="flex items-center gap-2">
-            {!isActive ? (
-              <button
-                onClick={() => startMonitoring()}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-              >
-                <Play className="w-4 h-4" />
-                Iniciar
-              </button>
-            ) : (
-              <button
-                onClick={stopMonitoring}
-                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-              >
-                <Square className="w-4 h-4" />
-                Parar
-              </button>
-            )}
-          </div>
-          
-          {/* Last Detection */}
-          {lastDetection && (
-            <div className={`flex items-center gap-3 px-4 py-2 rounded-lg ${
-              lastDetection.isMorador 
-                ? 'bg-green-100 border border-green-300' 
-                : 'bg-red-100 border border-red-300'
-            }`}>
-              {lastDetection.isMorador ? (
-                <CheckCircle className="w-5 h-5 text-green-600" />
-              ) : (
-                <XCircle className="w-5 h-5 text-red-600" />
-              )}
-              <div>
-                <div className="flex items-center gap-2">
-                  <PlacaVeiculo placa={lastDetection.placa} size="sm" />
-                  {lastDetection.isMorador && lastDetection.casa && (
-                    <span className="flex items-center gap-1 text-sm font-semibold text-green-700">
-                      <Home className="w-4 h-4" />
-                      Casa {lastDetection.casa}
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {new Date(lastDetection.timestamp).toLocaleTimeString('pt-BR')}
-                  {lastDetection.usedFallback && ' • API externa'}
-                </p>
-              </div>
-            </div>
+        <div className="flex items-center gap-2">
+          {!isActive ? (
+            <button
+              onClick={() => startMonitoring()}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              <Play className="w-4 h-4" />
+              Iniciar
+            </button>
+          ) : (
+            <button
+              onClick={stopMonitoring}
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+            >
+              <Square className="w-4 h-4" />
+              Parar
+            </button>
           )}
         </div>
       </div>
       
-      {/* Recent Detections */}
-      {recentDetections.length > 0 && (
+      {/* Last Detection - only in non-compact mode */}
+      {!compact && lastDetection && (
+        <div className="p-3 border-t border-gray-200">
+          <div className={`flex items-center gap-3 px-4 py-2 rounded-lg ${
+            lastDetection.isMorador 
+              ? 'bg-green-100 border border-green-300' 
+              : 'bg-red-100 border border-red-300'
+          }`}>
+            {lastDetection.isMorador ? (
+              <CheckCircle className="w-5 h-5 text-green-600" />
+            ) : (
+              <XCircle className="w-5 h-5 text-red-600" />
+            )}
+            <div>
+              <div className="flex items-center gap-2">
+                <PlacaVeiculo placa={lastDetection.placa} size="sm" />
+                {lastDetection.isMorador && lastDetection.casa && (
+                  <span className="flex items-center gap-1 text-sm font-semibold text-green-700">
+                    <Home className="w-4 h-4" />
+                    Casa {lastDetection.casa}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {new Date(lastDetection.timestamp).toLocaleTimeString('pt-BR')}
+                {lastDetection.usedFallback && ' • API externa'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Recent Detections - only in non-compact mode */}
+      {!compact && recentDetections.length > 0 && (
         <div className="p-3 border-t border-gray-200">
           <h4 className="text-sm font-medium text-gray-700 mb-2">
             Detecções Recentes ({recentDetections.length})
