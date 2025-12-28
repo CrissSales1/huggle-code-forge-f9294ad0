@@ -1,6 +1,6 @@
 /**
  * Componente de monitoramento contínuo com webcam local
- * Exibe vídeo, área virtual, status e controles
+ * Exibe vídeo, área virtual poligonal, status e controles
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { 
@@ -12,16 +12,23 @@ import {
   XCircle, 
   AlertCircle,
   Activity,
-  Maximize2,
-  Home
+  Home,
+  RotateCcw,
+  Check
 } from 'lucide-react';
 import { useContinuousMonitoring, MonitoringStatus } from '../hooks/useContinuousMonitoring';
-import { VirtualArea } from '../utils/motionDetection';
+import { 
+  Point, 
+  VirtualAreaPolygon, 
+  getPolygonPoints,
+} from '../utils/motionDetection';
 import PlacaVeiculo from './PlacaVeiculo';
 
 interface CameraMonitorProps {
   onDetection?: (placa: string, isMorador: boolean, casa?: string) => void;
 }
+
+type EditMode = 'none' | 'creating' | 'adjusting';
 
 export default function CameraMonitor({ onDetection }: CameraMonitorProps) {
   const {
@@ -43,9 +50,10 @@ export default function CameraMonitor({ onDetection }: CameraMonitorProps) {
   } = useContinuousMonitoring();
   
   const [showSettings, setShowSettings] = useState(false);
-  const [isEditingArea, setIsEditingArea] = useState(false);
+  const [editMode, setEditMode] = useState<EditMode>('none');
+  const [tempPoints, setTempPoints] = useState<Point[]>([]);
+  const [draggingPoint, setDraggingPoint] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef<{ startX: number; startY: number; startArea: VirtualArea } | null>(null);
   
   // Notificar detecções
   useEffect(() => {
@@ -76,47 +84,113 @@ export default function CameraMonitor({ onDetection }: CameraMonitorProps) {
     }
   };
   
-  // Handlers para edição da área virtual
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (!isEditingArea || !containerRef.current) return;
-    
+  // Obter posição relativa do clique
+  const getRelativePosition = useCallback((e: React.MouseEvent): Point | null => {
+    if (!containerRef.current) return null;
     const rect = containerRef.current.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
-    
-    dragRef.current = {
-      startX: x,
-      startY: y,
-      startArea: { ...virtualArea },
+    return {
+      x: Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)),
+      y: Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height)),
     };
-  }, [isEditingArea, virtualArea]);
+  }, []);
   
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!dragRef.current || !containerRef.current) return;
-    
-    const rect = containerRef.current.getBoundingClientRect();
-    const currentX = (e.clientX - rect.left) / rect.width;
-    const currentY = (e.clientY - rect.top) / rect.height;
-    
-    const newArea: VirtualArea = {
-      x: Math.min(dragRef.current.startX, currentX),
-      y: Math.min(dragRef.current.startY, currentY),
-      width: Math.abs(currentX - dragRef.current.startX),
-      height: Math.abs(currentY - dragRef.current.startY),
-    };
-    
-    // Limitar área mínima
-    if (newArea.width >= 0.1 && newArea.height >= 0.1) {
+  // Verificar se clique está próximo do primeiro ponto
+  const isNearFirstPoint = useCallback((pos: Point): boolean => {
+    if (tempPoints.length < 3) return false;
+    const firstPoint = tempPoints[0];
+    const distance = Math.sqrt(
+      Math.pow(pos.x - firstPoint.x, 2) + Math.pow(pos.y - firstPoint.y, 2)
+    );
+    return distance < 0.03; // 3% de distância
+  }, [tempPoints]);
+  
+  // Iniciar criação de polígono
+  const startCreatingPolygon = useCallback(() => {
+    setEditMode('creating');
+    setTempPoints([]);
+  }, []);
+  
+  // Confirmar polígono
+  const confirmPolygon = useCallback(() => {
+    if (tempPoints.length >= 3) {
+      const newArea: VirtualAreaPolygon = {
+        type: 'polygon',
+        points: tempPoints,
+      };
       updateVirtualArea(newArea);
     }
-  }, [updateVirtualArea]);
+    setEditMode('none');
+    setTempPoints([]);
+  }, [tempPoints, updateVirtualArea]);
   
-  const handleMouseUp = useCallback(() => {
-    if (dragRef.current) {
-      dragRef.current = null;
-      setIsEditingArea(false);
-    }
+  // Cancelar edição
+  const cancelEditing = useCallback(() => {
+    setEditMode('none');
+    setTempPoints([]);
+    setDraggingPoint(null);
   }, []);
+  
+  // Iniciar ajuste de polígono existente
+  const startAdjustingPolygon = useCallback(() => {
+    const points = getPolygonPoints(virtualArea);
+    setTempPoints([...points]);
+    setEditMode('adjusting');
+  }, [virtualArea]);
+  
+  // Handler de clique no container
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    if (editMode !== 'creating') return;
+    
+    const pos = getRelativePosition(e);
+    if (!pos) return;
+    
+    // Se clicou próximo do primeiro ponto e tem 3+ pontos, fechar polígono
+    if (isNearFirstPoint(pos)) {
+      confirmPolygon();
+      return;
+    }
+    
+    setTempPoints(prev => [...prev, pos]);
+  }, [editMode, getRelativePosition, isNearFirstPoint, confirmPolygon]);
+  
+  // Handler de mouse down para arrastar pontos
+  const handleMouseDown = useCallback((e: React.MouseEvent, pointIndex: number) => {
+    e.stopPropagation();
+    if (editMode !== 'adjusting') return;
+    setDraggingPoint(pointIndex);
+  }, [editMode]);
+  
+  // Handler de mouse move
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (draggingPoint === null || editMode !== 'adjusting') return;
+    
+    const pos = getRelativePosition(e);
+    if (!pos) return;
+    
+    setTempPoints(prev => {
+      const newPoints = [...prev];
+      newPoints[draggingPoint] = pos;
+      return newPoints;
+    });
+  }, [draggingPoint, editMode, getRelativePosition]);
+  
+  // Handler de mouse up
+  const handleMouseUp = useCallback(() => {
+    if (draggingPoint !== null) {
+      setDraggingPoint(null);
+      // Salvar ao soltar o ponto
+      if (tempPoints.length >= 3) {
+        const newArea: VirtualAreaPolygon = {
+          type: 'polygon',
+          points: tempPoints,
+        };
+        updateVirtualArea(newArea);
+      }
+    }
+  }, [draggingPoint, tempPoints, updateVirtualArea]);
+  
+  // Pontos a renderizar
+  const displayPoints = editMode !== 'none' ? tempPoints : getPolygonPoints(virtualArea);
   
   return (
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
@@ -164,17 +238,50 @@ export default function CameraMonitor({ onDetection }: CameraMonitorProps) {
             </select>
           </div>
           
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setIsEditingArea(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200"
-              disabled={!isActive}
-            >
-              <Maximize2 className="w-4 h-4" />
-              Redefinir Área de Leitura
-            </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            {editMode === 'none' ? (
+              <>
+                <button
+                  onClick={startCreatingPolygon}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200"
+                  disabled={!isActive}
+                >
+                  Nova Área de Leitura
+                </button>
+                <button
+                  onClick={startAdjustingPolygon}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                  disabled={!isActive}
+                >
+                  Ajustar Pontos
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={confirmPolygon}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-green-100 text-green-700 rounded-lg hover:bg-green-200"
+                  disabled={tempPoints.length < 3}
+                >
+                  <Check className="w-4 h-4" />
+                  Confirmar
+                </button>
+                <button
+                  onClick={cancelEditing}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-red-100 text-red-700 rounded-lg hover:bg-red-200"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  Cancelar
+                </button>
+              </>
+            )}
             <span className="text-xs text-gray-500">
-              Clique e arraste no vídeo para definir a área
+              {editMode === 'creating' 
+                ? `Clique para adicionar pontos. ${tempPoints.length >= 3 ? 'Clique no primeiro ponto para fechar.' : `Mínimo 3 pontos (${tempPoints.length}/3)`}`
+                : editMode === 'adjusting'
+                  ? 'Arraste os pontos para ajustar a área'
+                  : 'Defina uma área poligonal clicando no vídeo'
+              }
             </span>
           </div>
         </div>
@@ -183,8 +290,8 @@ export default function CameraMonitor({ onDetection }: CameraMonitorProps) {
       {/* Video Container */}
       <div 
         ref={containerRef}
-        className="relative aspect-video bg-gray-900"
-        onMouseDown={handleMouseDown}
+        className={`relative aspect-video bg-gray-900 ${editMode === 'creating' ? 'cursor-crosshair' : ''}`}
+        onClick={handleClick}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
@@ -199,26 +306,98 @@ export default function CameraMonitor({ onDetection }: CameraMonitorProps) {
         {/* Canvas oculto para processamento */}
         <canvas ref={canvasRef} className="hidden" />
         
-        {/* Virtual Area Overlay */}
-        {isActive && (
-          <div
-            className={`absolute border-2 ${
-              isEditingArea 
-                ? 'border-yellow-400 bg-yellow-400/20 cursor-crosshair' 
-                : status === 'motion_detected' || status === 'processing'
-                  ? 'border-yellow-500 bg-yellow-500/10'
-                  : 'border-green-500 bg-green-500/10'
-            } transition-colors`}
+        {/* Polygon Overlay SVG */}
+        {isActive && displayPoints.length >= 2 && (
+          <svg 
+            className="absolute inset-0 w-full h-full pointer-events-none"
+            style={{ overflow: 'visible' }}
+          >
+            {/* Polígono preenchido */}
+            {displayPoints.length >= 3 && (
+              <polygon
+                points={displayPoints.map(p => `${p.x * 100}%,${p.y * 100}%`).join(' ')}
+                fill={editMode !== 'none' 
+                  ? 'rgba(251, 191, 36, 0.2)' 
+                  : status === 'motion_detected' || status === 'processing'
+                    ? 'rgba(234, 179, 8, 0.15)'
+                    : 'rgba(34, 197, 94, 0.15)'
+                }
+                stroke={editMode !== 'none' 
+                  ? '#fbbf24' 
+                  : status === 'motion_detected' || status === 'processing'
+                    ? '#eab308'
+                    : '#22c55e'
+                }
+                strokeWidth="2"
+                vectorEffect="non-scaling-stroke"
+              />
+            )}
+            
+            {/* Linhas durante criação (antes de fechar) */}
+            {editMode === 'creating' && displayPoints.length >= 2 && displayPoints.length < 3 && (
+              <polyline
+                points={displayPoints.map(p => `${p.x * 100}%,${p.y * 100}%`).join(' ')}
+                fill="none"
+                stroke="#fbbf24"
+                strokeWidth="2"
+                strokeDasharray="5,5"
+                vectorEffect="non-scaling-stroke"
+              />
+            )}
+            
+            {/* Pontos editáveis */}
+            {(editMode !== 'none' || showSettings) && displayPoints.map((p, i) => (
+              <g key={i}>
+                {/* Área clicável maior */}
+                <circle
+                  cx={`${p.x * 100}%`}
+                  cy={`${p.y * 100}%`}
+                  r="16"
+                  fill="transparent"
+                  className={editMode === 'adjusting' ? 'cursor-move pointer-events-auto' : ''}
+                  onMouseDown={(e) => handleMouseDown(e as unknown as React.MouseEvent, i)}
+                />
+                {/* Ponto visível */}
+                <circle
+                  cx={`${p.x * 100}%`}
+                  cy={`${p.y * 100}%`}
+                  r={i === 0 && editMode === 'creating' ? 10 : 6}
+                  fill={i === 0 && editMode === 'creating' ? '#f59e0b' : '#22c55e'}
+                  stroke="white"
+                  strokeWidth="2"
+                  className={editMode === 'adjusting' ? 'pointer-events-none' : ''}
+                />
+                {/* Número do ponto */}
+                {editMode !== 'none' && (
+                  <text
+                    x={`${p.x * 100}%`}
+                    y={`${p.y * 100}%`}
+                    dy="-12"
+                    textAnchor="middle"
+                    fill="white"
+                    fontSize="12"
+                    fontWeight="bold"
+                    className="pointer-events-none"
+                    style={{ textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}
+                  >
+                    {i + 1}
+                  </text>
+                )}
+              </g>
+            ))}
+          </svg>
+        )}
+        
+        {/* Label da área */}
+        {isActive && displayPoints.length >= 3 && editMode === 'none' && (
+          <div 
+            className="absolute text-xs text-white bg-black/50 px-2 py-0.5 rounded pointer-events-none"
             style={{
-              left: `${virtualArea.x * 100}%`,
-              top: `${virtualArea.y * 100}%`,
-              width: `${virtualArea.width * 100}%`,
-              height: `${virtualArea.height * 100}%`,
+              left: `${Math.min(...displayPoints.map(p => p.x)) * 100}%`,
+              top: `${Math.min(...displayPoints.map(p => p.y)) * 100 - 6}%`,
             }}
           >
-            <span className="absolute -top-6 left-0 text-xs text-white bg-black/50 px-2 py-0.5 rounded">
-              Área de Leitura
-            </span>
+            Área de Leitura ({displayPoints.length} pontos)
           </div>
         )}
         
@@ -235,17 +414,17 @@ export default function CameraMonitor({ onDetection }: CameraMonitorProps) {
           </div>
         )}
         
-        {/* Editing Overlay */}
-        {isEditingArea && (
-          <div className="absolute inset-0 bg-black/30 flex items-center justify-center cursor-crosshair">
+        {/* Creating Mode Overlay */}
+        {editMode === 'creating' && tempPoints.length === 0 && (
+          <div className="absolute inset-0 bg-black/30 flex items-center justify-center pointer-events-none">
             <p className="text-white text-lg bg-black/50 px-4 py-2 rounded-lg">
-              Clique e arraste para definir a área de leitura
+              Clique para adicionar o primeiro ponto da área de leitura
             </p>
           </div>
         )}
         
         {/* Motion Indicator */}
-        {isActive && motionPercent > 0 && (
+        {isActive && motionPercent > 0 && editMode === 'none' && (
           <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
             Movimento: {Math.round(motionPercent * 100)}%
           </div>

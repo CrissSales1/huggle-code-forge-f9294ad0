@@ -1,36 +1,59 @@
 /**
  * Utilitário para detecção de movimento em área virtual do vídeo
+ * Suporta área poligonal definida por pontos
  */
 
-export interface VirtualArea {
-  x: number;      // Posição X relativa (0-1)
-  y: number;      // Posição Y relativa (0-1)
-  width: number;  // Largura relativa (0-1)
-  height: number; // Altura relativa (0-1)
+// Ponto relativo (0-1) no vídeo
+export interface Point {
+  x: number;
+  y: number;
 }
 
+// Área virtual poligonal
+export interface VirtualAreaPolygon {
+  type: 'polygon';
+  points: Point[];
+}
+
+// Manter compatibilidade com área retangular legada
+export interface VirtualAreaRect {
+  type?: 'rect';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+// Tipo unificado
+export type VirtualArea = VirtualAreaPolygon | VirtualAreaRect;
+
 export interface MotionDetectionConfig {
-  threshold: number;           // Percentual de pixels diferentes para considerar movimento (0-1)
-  minPixelDifference: number;  // Diferença mínima de cor para considerar pixel diferente
-  stabilizationMs: number;     // Tempo de estabilização após detectar movimento
+  threshold: number;
+  minPixelDifference: number;
+  stabilizationMs: number;
 }
 
 const DEFAULT_CONFIG: MotionDetectionConfig = {
-  threshold: 0.10,         // 10% dos pixels devem mudar
-  minPixelDifference: 30,  // Diferença mínima de cor RGB
-  stabilizationMs: 500,    // 500ms de estabilização
+  threshold: 0.10,
+  minPixelDifference: 30,
+  stabilizationMs: 500,
 };
 
 const STORAGE_KEY = 'portacerta_virtual_area';
+const CAMERA_STORAGE_KEY = 'portacerta_selected_camera';
 
-/**
- * Carrega a área virtual salva no localStorage
- */
+// === Funções de persistência ===
+
 export function loadVirtualArea(): VirtualArea | null {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
-      return JSON.parse(saved);
+      const parsed = JSON.parse(saved);
+      // Migrar área retangular legada para o novo formato
+      if (!parsed.type && parsed.x !== undefined) {
+        return { ...parsed, type: 'rect' } as VirtualAreaRect;
+      }
+      return parsed;
     }
   } catch (e) {
     console.warn('Erro ao carregar área virtual:', e);
@@ -38,9 +61,6 @@ export function loadVirtualArea(): VirtualArea | null {
   return null;
 }
 
-/**
- * Salva a área virtual no localStorage
- */
 export function saveVirtualArea(area: VirtualArea): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(area));
@@ -49,20 +69,103 @@ export function saveVirtualArea(area: VirtualArea): void {
   }
 }
 
-/**
- * Retorna área virtual padrão (centro do vídeo)
- */
-export function getDefaultVirtualArea(): VirtualArea {
+export function loadSelectedCamera(): string | null {
+  try {
+    return localStorage.getItem(CAMERA_STORAGE_KEY);
+  } catch (e) {
+    console.warn('Erro ao carregar câmera:', e);
+  }
+  return null;
+}
+
+export function saveSelectedCamera(deviceId: string): void {
+  try {
+    localStorage.setItem(CAMERA_STORAGE_KEY, deviceId);
+  } catch (e) {
+    console.warn('Erro ao salvar câmera:', e);
+  }
+}
+
+export function getDefaultVirtualArea(): VirtualAreaPolygon {
+  // Polígono padrão retangular no centro
   return {
-    x: 0.15,
-    y: 0.3,
-    width: 0.7,
-    height: 0.4,
+    type: 'polygon',
+    points: [
+      { x: 0.15, y: 0.3 },
+      { x: 0.85, y: 0.3 },
+      { x: 0.85, y: 0.7 },
+      { x: 0.15, y: 0.7 },
+    ],
+  };
+}
+
+// === Funções de geometria ===
+
+/**
+ * Verifica se um ponto está dentro de um polígono (Ray Casting Algorithm)
+ */
+export function isPointInPolygon(px: number, py: number, polygon: Point[]): boolean {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].x, yi = polygon[i].y;
+    const xj = polygon[j].x, yj = polygon[j].y;
+    
+    if ((yi > py) !== (yj > py) && 
+        px < (xj - xi) * (py - yi) / (yj - yi) + xi) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+/**
+ * Calcula o bounding box de um polígono
+ */
+export function getPolygonBoundingBox(points: Point[]): { minX: number; minY: number; maxX: number; maxY: number } {
+  const xs = points.map(p => p.x);
+  const ys = points.map(p => p.y);
+  return {
+    minX: Math.min(...xs),
+    minY: Math.min(...ys),
+    maxX: Math.max(...xs),
+    maxY: Math.max(...ys),
   };
 }
 
 /**
- * Extrai pixels da área virtual de um canvas
+ * Verifica se a área é um polígono
+ */
+export function isPolygonArea(area: VirtualArea): area is VirtualAreaPolygon {
+  return (area as VirtualAreaPolygon).type === 'polygon';
+}
+
+/**
+ * Converte área retangular para polígono
+ */
+export function rectToPolygon(rect: VirtualAreaRect): VirtualAreaPolygon {
+  return {
+    type: 'polygon',
+    points: [
+      { x: rect.x, y: rect.y },
+      { x: rect.x + rect.width, y: rect.y },
+      { x: rect.x + rect.width, y: rect.y + rect.height },
+      { x: rect.x, y: rect.y + rect.height },
+    ],
+  };
+}
+
+/**
+ * Obtém os pontos do polígono (converte retângulo se necessário)
+ */
+export function getPolygonPoints(area: VirtualArea): Point[] {
+  if (isPolygonArea(area)) {
+    return area.points;
+  }
+  return rectToPolygon(area).points;
+}
+
+/**
+ * Extrai pixels da área virtual de um canvas (suporta polígono)
  */
 function extractAreaPixels(
   ctx: CanvasRenderingContext2D,
@@ -70,10 +173,13 @@ function extractAreaPixels(
   videoHeight: number,
   area: VirtualArea
 ): ImageData {
-  const x = Math.floor(area.x * videoWidth);
-  const y = Math.floor(area.y * videoHeight);
-  const width = Math.floor(area.width * videoWidth);
-  const height = Math.floor(area.height * videoHeight);
+  const points = getPolygonPoints(area);
+  const bbox = getPolygonBoundingBox(points);
+  
+  const x = Math.floor(bbox.minX * videoWidth);
+  const y = Math.floor(bbox.minY * videoHeight);
+  const width = Math.floor((bbox.maxX - bbox.minX) * videoWidth);
+  const height = Math.floor((bbox.maxY - bbox.minY) * videoHeight);
   
   return ctx.getImageData(x, y, Math.max(1, width), Math.max(1, height));
 }
@@ -180,18 +286,21 @@ export class MotionDetector {
   }
   
   /**
-   * Captura a área virtual como canvas separado
+   * Captura a área virtual como canvas separado (suporta polígono)
    */
   captureArea(
     video: HTMLVideoElement,
     area: VirtualArea
   ): HTMLCanvasElement {
-    const canvas = document.createElement('canvas');
-    const x = Math.floor(area.x * video.videoWidth);
-    const y = Math.floor(area.y * video.videoHeight);
-    const width = Math.floor(area.width * video.videoWidth);
-    const height = Math.floor(area.height * video.videoHeight);
+    const points = getPolygonPoints(area);
+    const bbox = getPolygonBoundingBox(points);
     
+    const x = Math.floor(bbox.minX * video.videoWidth);
+    const y = Math.floor(bbox.minY * video.videoHeight);
+    const width = Math.floor((bbox.maxX - bbox.minX) * video.videoWidth);
+    const height = Math.floor((bbox.maxY - bbox.minY) * video.videoHeight);
+    
+    const canvas = document.createElement('canvas');
     canvas.width = Math.max(1, width);
     canvas.height = Math.max(1, height);
     
@@ -199,8 +308,8 @@ export class MotionDetector {
     if (ctx) {
       ctx.drawImage(
         video,
-        x, y, width, height,  // Fonte
-        0, 0, canvas.width, canvas.height  // Destino
+        x, y, width, height,
+        0, 0, canvas.width, canvas.height
       );
     }
     
