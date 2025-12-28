@@ -26,15 +26,15 @@ export default function Header() {
         <div className="flex justify-between items-center">
           {/* Logo e Título */}
           <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
-            <div className="w-8 h-8 sm:w-9 sm:h-9 lg:w-10 lg:h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center backdrop-blur-sm p-1 flex-shrink-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 lg:w-10 lg:h-10 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
               <img 
-                src="https://mocha-cdn.com/01996a05-d3fb-731d-bd7e-dfeef4543b8d/car-parking-(1).svg" 
+                src="/pwa-icons/icon.svg" 
                 alt="Aguas da Fonte" 
-                className="w-full h-full object-contain"
+                className="w-full h-full object-cover"
               />
             </div>
             <div className="min-w-0">
-              <h1 className="text-sm sm:text-base lg:text-xl font-bold truncate">Condomínio Aguas da Fonte</h1>
+              <h1 className="text-sm sm:text-base lg:text-xl font-bold truncate"><span className="hidden sm:inline">Condomínio </span>Aguas da Fonte</h1>
               <p className="text-blue-100 text-[10px] sm:text-xs hidden sm:block truncate">Sistema de Gerenciamento de Acessos</p>
             </div>
           </div>
