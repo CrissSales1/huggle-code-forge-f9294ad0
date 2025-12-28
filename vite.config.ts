@@ -13,11 +13,11 @@ export default defineConfig(({ mode }) => ({
       includeAssets: ['favicon.svg', 'pwa-icons/*.svg', 'pwa-icons/*.png'],
       manifest: {
         name: 'Estacionamento - Aguas da Fonte',
-        short_name: 'Estacionamento',
+        short_name: 'Visitantes - Aguas da Fonte',
         description: 'Sistema de Gerenciamento de Acessos e Estacionamento',
         theme_color: '#1e40af',
         background_color: '#f9fafb',
-        display: 'standalone',
+        display: 'fullscreen',
         orientation: 'portrait',
         start_url: '/',
         scope: '/',
