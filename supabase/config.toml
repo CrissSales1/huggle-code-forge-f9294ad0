@@ -3,5 +3,5 @@ project_id = "kbgftpiyzfmabrncpnas"
 [functions.detect-plate]
 verify_jwt = false
 
-[functions.rekor-webhook]
+[functions.import-data]
 verify_jwt = false
