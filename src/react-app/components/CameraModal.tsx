@@ -37,12 +37,13 @@ export default function CameraModal({ isOpen, onClose, onPlacaDetected }: Camera
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
-  // Hook de reconhecimento OCR local
+  // Hook de reconhecimento OCR local com fallback
   const { 
     isProcessing, 
     lastResult, 
     error: ocrError, 
-    statusMessage, 
+    statusMessage,
+    usedFallback,
     recognizeFromCanvas, 
     reset: resetOCR,
     cleanup: cleanupOCR 
@@ -547,7 +548,8 @@ export default function CameraModal({ isOpen, onClose, onPlacaDetected }: Camera
                     <div className="text-lg font-bold">{lastResult.validation.formatted}</div>
                     <div className="text-xs">
                       Confiança: {Math.round(lastResult.validation.confidence * 100)}% | 
-                      Tempo: {lastResult.processingTimeMs.toFixed(0)}ms
+                      Tempo: {lastResult.processingTimeMs.toFixed(0)}ms |
+                      {usedFallback ? ' 🌐 API externa' : ' 💻 OCR local'}
                     </div>
                   </div>
                 </div>
