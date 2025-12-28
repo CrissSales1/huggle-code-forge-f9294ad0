@@ -17,7 +17,7 @@ export default defineConfig(({ mode }) => ({
         description: 'Sistema de Gerenciamento de Acessos e Estacionamento',
         theme_color: '#1e40af',
         background_color: '#f9fafb',
-        display: 'fullscreen',
+        display: 'standalone',
         orientation: 'portrait',
         start_url: '/',
         scope: '/',
