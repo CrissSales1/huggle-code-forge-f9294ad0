@@ -41,18 +41,3 @@ input, textarea {
   }
 }
 
-/* Modo fullscreen (quando instalado como PWA nativo) */
-@media (display-mode: fullscreen) {
-  .pwa-safe-top {
-    padding-top: env(safe-area-inset-top);
-  }
-  
-  .pwa-safe-bottom {
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-  
-  /* Garantir que o header tenha padding correto */
-  header {
-    padding-top: env(safe-area-inset-top);
-  }
-}
