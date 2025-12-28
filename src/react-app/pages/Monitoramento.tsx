@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Camera, CheckCircle, XCircle, Home, Edit2, Trash2, Car, Activity, Wifi, HelpCircle, RotateCcw, Search, X } from 'lucide-react';
+import { Plus, Camera, CheckCircle, XCircle, Home, Edit2, Trash2, Car, Activity, Wifi, HelpCircle, RotateCcw, Search, X, Video, Radio } from 'lucide-react';
 import { useLPRDetections } from '@/react-app/hooks/useApi';
 import { supabase } from '@/integrations/supabase/client';
 import CadastroMoradorModal from '@/react-app/components/CadastroMoradorModal';
 import EditarVeiculoMoradorModal from '@/react-app/components/EditarVeiculoMoradorModal';
 import MonitoramentoHelp from '@/react-app/pages/MonitoramentoHelp';
 import PlacaVeiculo from '@/react-app/components/PlacaVeiculo';
+import CameraMonitor from '@/react-app/components/CameraMonitor';
 interface VeiculoMorador {
   id: number;
   placa_veiculo: string;
@@ -19,6 +20,7 @@ export default function Monitoramento() {
   const [veiculos, setVeiculos] = useState<VeiculoMorador[]>([]);
   const [veiculoSelecionado, setVeiculoSelecionado] = useState<VeiculoMorador | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [monitoringMode, setMonitoringMode] = useState<'rekor' | 'local'>('local');
 
   // Filtragem e ordenação numérica dos veículos
   const veiculosFiltrados = useMemo(() => {
@@ -104,9 +106,37 @@ export default function Monitoramento() {
       <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
         <div className="min-w-0 flex-1">
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mb-1 truncate">Monitoramento de Moradores</h1>
-          <p className="text-gray-600 text-xs sm:text-sm lg:text-base">Reconhecimento inteligente via Rekor Scout</p>
+          <p className="text-gray-600 text-xs sm:text-sm lg:text-base">
+            {monitoringMode === 'local' ? 'Reconhecimento via câmera local' : 'Reconhecimento via Rekor Scout'}
+          </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Toggle de modo */}
+          <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
+            <button
+              onClick={() => setMonitoringMode('local')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors ${
+                monitoringMode === 'local' 
+                  ? 'bg-white text-blue-700 shadow-sm' 
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <Video className="w-4 h-4" />
+              <span className="hidden sm:inline">Local</span>
+            </button>
+            <button
+              onClick={() => setMonitoringMode('rekor')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors ${
+                monitoringMode === 'rekor' 
+                  ? 'bg-white text-blue-700 shadow-sm' 
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <Radio className="w-4 h-4" />
+              <span className="hidden sm:inline">Rekor</span>
+            </button>
+          </div>
+          
           <button
             onClick={handleLimparMonitoramento}
             className="flex items-center justify-center space-x-1.5 px-2.5 sm:px-3 lg:px-4 py-2 bg-red-100 text-red-700 hover:bg-red-200 rounded-lg transition-colors text-sm"
@@ -131,12 +161,20 @@ export default function Monitoramento() {
       {/* Ajuda de Configuração */}
       {showHelp && <MonitoramentoHelp />}
 
-      {/* Status da Conexão */}
+      {/* Modo Local - Camera Monitor */}
+      {monitoringMode === 'local' && (
+        <div className="mb-4 sm:mb-6">
+          <CameraMonitor onDetection={() => refetch()} />
+        </div>
+      )}
+
+      {/* Modo Rekor Scout - Status da Conexão */}
+      {monitoringMode === 'rekor' && (
       <div className="bg-white border border-gray-200 rounded-lg sm:rounded-xl p-3 sm:p-4 lg:p-6 mb-4 sm:mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 mb-3 sm:mb-4">
           <h2 className="text-base sm:text-lg font-semibold text-gray-900 flex items-center space-x-2">
             <Wifi className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
-            <span>Status do Monitoramento</span>
+            <span>Status do Monitoramento (Rekor Scout)</span>
           </h2>
           <div className="flex items-center space-x-1.5 bg-green-100 text-green-800 px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm self-start sm:self-auto">
             <Activity className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
@@ -271,6 +309,7 @@ export default function Monitoramento() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Lista de Veículos */}
       <div className="mt-4 sm:mt-6">
