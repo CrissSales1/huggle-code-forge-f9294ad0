@@ -54,11 +54,11 @@ export default function Instalar() {
       <div className="max-w-md mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="w-24 h-24 mx-auto mb-4 bg-gradient-to-br from-blue-600 to-blue-800 rounded-2xl flex items-center justify-center shadow-xl">
+          <div className="w-24 h-24 mx-auto mb-4 rounded-2xl overflow-hidden shadow-xl">
             <img 
               src="/pwa-icons/icon.svg" 
               alt="Estacionamento" 
-              className="w-16 h-16"
+              className="w-full h-full object-cover"
             />
           </div>
           <h1 className="text-2xl font-bold text-gray-800 mb-2">
