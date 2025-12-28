@@ -780,7 +780,7 @@ export function useEstatisticas(periodo: '7' | '30' | '90') {
   return { estatisticas, loading, error };
 }
 
-// Hook para monitoramento LPR (Rekor Scout) com Realtime
+// Hook para monitoramento LPR local com Realtime
 export function useLPRDetections() {
   const [latestDetection, setLatestDetection] = useState<any>(null);
   const [detectionHistory, setDetectionHistory] = useState<any[]>([]);
