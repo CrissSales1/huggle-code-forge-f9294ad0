@@ -21,7 +21,7 @@ export default function Header() {
   const fecharMenu = () => setMenuAberto(false);
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-blue-600 to-blue-800 text-white shadow-lg">
+    <header className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-blue-600 to-blue-800 text-white shadow-lg pwa-safe-top">
       <div className="px-3 sm:px-4 lg:px-6 py-2.5 sm:py-3 lg:py-4">
         <div className="flex justify-between items-center">
           {/* Logo e Título */}

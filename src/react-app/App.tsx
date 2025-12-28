@@ -8,6 +8,7 @@ import Relatorios from '@/react-app/pages/Relatorios';
 import Estatisticas from '@/react-app/pages/Estatisticas';
 import Monitoramento from '@/react-app/pages/Monitoramento';
 import Configuracoes from '@/react-app/pages/Configuracoes';
+import Instalar from '@/react-app/pages/Instalar';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, loading } = useAuth();
@@ -31,6 +32,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/instalar" element={<Instalar />} />
         <Route
           path="/*"
           element={
