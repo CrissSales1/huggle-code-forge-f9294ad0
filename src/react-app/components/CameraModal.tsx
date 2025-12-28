@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Camera, X, Eye, Zap, Edit3, Video, Settings, Target } from 'lucide-react';
+import { usePlateRecognition } from '../hooks/usePlateRecognition';
 
 interface CameraModalProps {
   isOpen: boolean;
@@ -21,10 +22,7 @@ interface ReadingArea {
 
 export default function CameraModal({ isOpen, onClose, onPlacaDetected }: CameraModalProps) {
   const [stream, setStream] = useState<MediaStream | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [permissionDenied, setPermissionDenied] = useState(false);
-  const [processStatus, setProcessStatus] = useState<string>('');
   const [cameraReady, setCameraReady] = useState(false);
   const [availableCameras, setAvailableCameras] = useState<CameraDevice[]>([]);
   const [selectedCameraId, setSelectedCameraId] = useState<string>('');
@@ -35,8 +33,20 @@ export default function CameraModal({ isOpen, onClose, onPlacaDetected }: Camera
   const [isSelecting, setIsSelecting] = useState(false);
   const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
   const [currentSelection, setCurrentSelection] = useState<ReadingArea | null>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  
+  // Hook de reconhecimento OCR local
+  const { 
+    isProcessing, 
+    lastResult, 
+    error: ocrError, 
+    statusMessage, 
+    recognizeFromCanvas, 
+    reset: resetOCR,
+    cleanup: cleanupOCR 
+  } = usePlateRecognition();
 
   // Função para obter lista de câmeras disponíveis
   const getAvailableCameras = async (): Promise<CameraDevice[]> => {
@@ -107,7 +117,7 @@ export default function CameraModal({ isOpen, onClose, onPlacaDetected }: Camera
 
   const initCamera = async (cameraId?: string) => {
     try {
-      setError(null);
+      setCameraError(null);
       setPermissionDenied(false);
       setCameraReady(false);
       
@@ -143,17 +153,17 @@ export default function CameraModal({ isOpen, onClose, onPlacaDetected }: Camera
       console.error('Erro ao acessar câmera:', err);
       if (err instanceof Error && err.name === 'NotAllowedError') {
         setPermissionDenied(true);
-        setError('Acesso à câmera negado. Por favor, permita o acesso à câmera e tente novamente.');
+        setCameraError('Acesso à câmera negado. Por favor, permita o acesso à câmera e tente novamente.');
       } else if (err instanceof Error && err.name === 'OverconstrainedError') {
         // Se falhar com câmera específica, tentar sem restrições
         if (cameraId) {
           console.warn('Falha ao usar câmera específica, tentando padrão...');
           await initCamera(); // Tentar sem especificar câmera
         } else {
-          setError('Câmera selecionada não está disponível. Tente selecionar outra câmera.');
+          setCameraError('Câmera selecionada não está disponível. Tente selecionar outra câmera.');
         }
       } else {
-        setError('Erro ao acessar câmera. Verifique se há uma câmera conectada.');
+        setCameraError('Erro ao acessar câmera. Verifique se há uma câmera conectada.');
       }
     }
   };
@@ -171,93 +181,15 @@ export default function CameraModal({ isOpen, onClose, onPlacaDetected }: Camera
     onClose();
   };
 
-  // Configurações de compressão de imagem
-  const MAX_IMAGE_DIMENSION = 1280; // Dimensão máxima para economizar dados
-  const JPEG_QUALITY = 0.75; // Qualidade JPEG (0.75 = bom equilíbrio)
 
-  // Função para comprimir imagem antes de enviar
-  const compressImage = (sourceCanvas: HTMLCanvasElement): { base64: string; originalSize: number; compressedSize: number } => {
-    const originalDataURL = sourceCanvas.toDataURL('image/jpeg', 0.95);
-    const originalSize = Math.round((originalDataURL.length * 3) / 4 / 1024); // Tamanho em KB
-
-    const sourceWidth = sourceCanvas.width;
-    const sourceHeight = sourceCanvas.height;
-
-    // Verificar se precisa redimensionar
-    if (sourceWidth <= MAX_IMAGE_DIMENSION && sourceHeight <= MAX_IMAGE_DIMENSION) {
-      // Apenas comprimir sem redimensionar
-      const compressedDataURL = sourceCanvas.toDataURL('image/jpeg', JPEG_QUALITY);
-      const compressedSize = Math.round((compressedDataURL.length * 3) / 4 / 1024);
-      
-      console.log(`📊 Compressão: ${originalSize}KB → ${compressedSize}KB (${Math.round((1 - compressedSize / originalSize) * 100)}% economia)`);
-      
-      return {
-        base64: compressedDataURL.split(',')[1],
-        originalSize,
-        compressedSize
-      };
-    }
-
-    // Calcular novas dimensões mantendo proporção
-    let newWidth = sourceWidth;
-    let newHeight = sourceHeight;
-
-    if (sourceWidth > sourceHeight) {
-      if (sourceWidth > MAX_IMAGE_DIMENSION) {
-        newHeight = Math.round((sourceHeight * MAX_IMAGE_DIMENSION) / sourceWidth);
-        newWidth = MAX_IMAGE_DIMENSION;
-      }
-    } else {
-      if (sourceHeight > MAX_IMAGE_DIMENSION) {
-        newWidth = Math.round((sourceWidth * MAX_IMAGE_DIMENSION) / sourceHeight);
-        newHeight = MAX_IMAGE_DIMENSION;
-      }
-    }
-
-    // Criar canvas comprimido
-    const compressedCanvas = document.createElement('canvas');
-    compressedCanvas.width = newWidth;
-    compressedCanvas.height = newHeight;
-    const compressedCtx = compressedCanvas.getContext('2d');
-
-    if (!compressedCtx) {
-      // Fallback: retornar original com qualidade reduzida
-      const fallbackDataURL = sourceCanvas.toDataURL('image/jpeg', JPEG_QUALITY);
-      return {
-        base64: fallbackDataURL.split(',')[1],
-        originalSize,
-        compressedSize: Math.round((fallbackDataURL.length * 3) / 4 / 1024)
-      };
-    }
-
-    // Usar smoothing para melhor qualidade no redimensionamento
-    compressedCtx.imageSmoothingEnabled = true;
-    compressedCtx.imageSmoothingQuality = 'high';
-    compressedCtx.drawImage(sourceCanvas, 0, 0, newWidth, newHeight);
-
-    const compressedDataURL = compressedCanvas.toDataURL('image/jpeg', JPEG_QUALITY);
-    const compressedSize = Math.round((compressedDataURL.length * 3) / 4 / 1024);
-
-    console.log(`📊 Redimensionado: ${sourceWidth}x${sourceHeight} → ${newWidth}x${newHeight}`);
-    console.log(`📊 Compressão: ${originalSize}KB → ${compressedSize}KB (${Math.round((1 - compressedSize / originalSize) * 100)}% economia)`);
-
-    return {
-      base64: compressedDataURL.split(',')[1],
-      originalSize,
-      compressedSize
-    };
-  };
-
-  // Função para capturar e reconhecer placa com Workers AI
+  // Função para capturar e reconhecer placa com OCR local (Tesseract.js)
   const captureAndRecognize = async () => {
     if (!videoRef.current || !canvasRef.current || !cameraReady) {
-      setError('Câmera não está pronta. Aguarde um momento.');
+      setCameraError('Câmera não está pronta. Aguarde um momento.');
       return;
     }
 
-    setIsProcessing(true);
-    setError(null);
-    setProcessStatus('Capturando imagem...');
+    resetOCR();
 
     try {
       const video = videoRef.current;
@@ -295,48 +227,23 @@ export default function CameraModal({ isOpen, onClose, onPlacaDetected }: Camera
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       }
       
-      setProcessStatus('Otimizando imagem...');
+      // Usar OCR local gratuito (Tesseract.js)
+      console.log('🔍 Iniciando OCR local (Tesseract.js)...');
+      const result = await recognizeFromCanvas(canvas);
       
-      // Comprimir imagem antes de enviar
-      const { base64: imageBase64, compressedSize } = compressImage(canvas);
-      
-      setProcessStatus(`Reconhecendo placa... (${compressedSize}KB)`);
-      console.log('📤 Enviando para Plate Recognizer...');
-
-      // Chamar Edge Function do Plate Recognizer
-      const visionResponse = await fetch('https://kbgftpiyzfmabrncpnas.supabase.co/functions/v1/detect-plate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ imageBase64 })
-      });
-
-      if (!visionResponse.ok) {
-        const errorData = await visionResponse.json();
-        throw new Error(errorData.error || 'Erro ao processar imagem');
-      }
-
-      const visionData = await visionResponse.json();
-      console.log('📝 Resposta do Plate Recognizer:', visionData);
-      
-      if (visionData.placa) {
-        console.log(`✅ PLACA RECONHECIDA: ${visionData.placa}`);
-        setProcessStatus('✅ Placa reconhecida com sucesso!');
+      if (result.success && result.validation.isValid) {
+        const placa = result.validation.formatted;
+        console.log(`✅ PLACA RECONHECIDA: ${placa} (${Math.round(result.validation.confidence * 100)}% confiança)`);
+        
         setTimeout(() => {
-          onPlacaDetected(visionData.placa);
+          onPlacaDetected(result.validation.corrected);
           onClose();
         }, 1500);
-      } else {
-        setError('Nenhuma placa foi detectada na imagem. Tente novamente com melhor iluminação e ângulo.');
       }
       
     } catch (err) {
       console.error('Erro no reconhecimento:', err);
-      setError(`Erro ao processar a imagem: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
-    } finally {
-      setIsProcessing(false);
-      setProcessStatus('');
+      setCameraError(`Erro ao processar a imagem: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
     }
   };
 
@@ -429,9 +336,8 @@ export default function CameraModal({ isOpen, onClose, onPlacaDetected }: Camera
       });
     } else {
       stopCamera();
-      setError(null);
-      setProcessStatus('');
-      setIsProcessing(false);
+      setCameraError(null);
+      resetOCR();
       setShowCameraSelector(false);
       setShowAreaConfig(false);
       setReadingArea(null);
@@ -442,8 +348,9 @@ export default function CameraModal({ isOpen, onClose, onPlacaDetected }: Camera
 
     return () => {
       stopCamera();
+      cleanupOCR();
     };
-  }, [isOpen]);
+  }, [isOpen, resetOCR, cleanupOCR]);
 
   useEffect(() => {
     if (isOpen && selectedCameraId && !stream) {
@@ -602,10 +509,10 @@ export default function CameraModal({ isOpen, onClose, onPlacaDetected }: Camera
               </div>
             )}
 
-            {error && (
+            {(ocrError || cameraError) && (
               <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-3 py-3 sm:px-4 rounded-lg">
                 <div className="font-medium text-sm">Erro no reconhecimento</div>
-                <div className="text-xs sm:text-sm mt-1 break-words">{error}</div>
+                <div className="text-xs sm:text-sm mt-1 break-words">{ocrError || cameraError}</div>
                 {permissionDenied && (
                   <div className="mt-2">
                     <button
@@ -619,13 +526,29 @@ export default function CameraModal({ isOpen, onClose, onPlacaDetected }: Camera
               </div>
             )}
 
-            {isProcessing && processStatus && (
+            {isProcessing && statusMessage && (
               <div className="mb-4 bg-blue-50 border border-blue-200 text-blue-700 px-3 py-3 sm:px-4 rounded-lg">
                 <div className="flex items-center space-x-3">
                   <div className="animate-spin rounded-full h-4 w-4 sm:h-5 sm:w-5 border-b-2 border-blue-600 flex-shrink-0"></div>
                   <div className="min-w-0">
-                    <div className="font-medium text-sm">Reconhecendo com Plate Recognizer...</div>
-                    <div className="text-xs sm:text-sm break-words">{processStatus}</div>
+                    <div className="font-medium text-sm">Reconhecendo placa (OCR local)...</div>
+                    <div className="text-xs sm:text-sm break-words">{statusMessage}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {lastResult?.success && (
+              <div className="mb-4 bg-green-50 border border-green-200 text-green-700 px-3 py-3 sm:px-4 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <div className="text-green-600 text-xl">✅</div>
+                  <div className="min-w-0">
+                    <div className="font-medium text-sm">Placa reconhecida!</div>
+                    <div className="text-lg font-bold">{lastResult.validation.formatted}</div>
+                    <div className="text-xs">
+                      Confiança: {Math.round(lastResult.validation.confidence * 100)}% | 
+                      Tempo: {lastResult.processingTimeMs.toFixed(0)}ms
+                    </div>
                   </div>
                 </div>
               </div>
@@ -677,7 +600,7 @@ export default function CameraModal({ isOpen, onClose, onPlacaDetected }: Camera
                 </div>
               )}
               
-              {!stream && !error && (
+              {!stream && !cameraError && (
                 <div className="absolute inset-0 flex items-center justify-center bg-gray-900 rounded-lg">
                   <div className="text-white text-center">
                     <Eye className="w-6 h-6 sm:w-8 sm:h-8 mx-auto mb-2 animate-pulse" />
