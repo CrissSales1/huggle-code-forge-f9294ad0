@@ -235,7 +235,7 @@ export class MotionDetector {
     canvas: HTMLCanvasElement,
     area: VirtualArea
   ): { hasMotion: boolean; isStable: boolean; motionPercent: number } {
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx || video.videoWidth === 0 || video.videoHeight === 0) {
       return { hasMotion: false, isStable: false, motionPercent: 0 };
     }
@@ -304,7 +304,7 @@ export class MotionDetector {
     canvas.width = Math.max(1, width);
     canvas.height = Math.max(1, height);
     
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (ctx) {
       ctx.drawImage(
         video,

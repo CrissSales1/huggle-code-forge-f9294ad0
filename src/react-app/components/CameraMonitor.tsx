@@ -310,12 +310,13 @@ export default function CameraMonitor({ onDetection }: CameraMonitorProps) {
         {isActive && displayPoints.length >= 2 && (
           <svg 
             className="absolute inset-0 w-full h-full pointer-events-none"
-            style={{ overflow: 'visible' }}
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
           >
             {/* Polígono preenchido */}
             {displayPoints.length >= 3 && (
               <polygon
-                points={displayPoints.map(p => `${p.x * 100}%,${p.y * 100}%`).join(' ')}
+                points={displayPoints.map(p => `${p.x * 100},${p.y * 100}`).join(' ')}
                 fill={editMode !== 'none' 
                   ? 'rgba(251, 191, 36, 0.2)' 
                   : status === 'motion_detected' || status === 'processing'
@@ -328,7 +329,7 @@ export default function CameraMonitor({ onDetection }: CameraMonitorProps) {
                     ? '#eab308'
                     : '#22c55e'
                 }
-                strokeWidth="2"
+                strokeWidth="0.5"
                 vectorEffect="non-scaling-stroke"
               />
             )}
@@ -336,11 +337,11 @@ export default function CameraMonitor({ onDetection }: CameraMonitorProps) {
             {/* Linhas durante criação (antes de fechar) */}
             {editMode === 'creating' && displayPoints.length >= 2 && displayPoints.length < 3 && (
               <polyline
-                points={displayPoints.map(p => `${p.x * 100}%,${p.y * 100}%`).join(' ')}
+                points={displayPoints.map(p => `${p.x * 100},${p.y * 100}`).join(' ')}
                 fill="none"
                 stroke="#fbbf24"
-                strokeWidth="2"
-                strokeDasharray="5,5"
+                strokeWidth="0.5"
+                strokeDasharray="2,2"
                 vectorEffect="non-scaling-stroke"
               />
             )}
@@ -350,35 +351,34 @@ export default function CameraMonitor({ onDetection }: CameraMonitorProps) {
               <g key={i}>
                 {/* Área clicável maior */}
                 <circle
-                  cx={`${p.x * 100}%`}
-                  cy={`${p.y * 100}%`}
-                  r="16"
+                  cx={p.x * 100}
+                  cy={p.y * 100}
+                  r={4}
                   fill="transparent"
                   className={editMode === 'adjusting' ? 'cursor-move pointer-events-auto' : ''}
                   onMouseDown={(e) => handleMouseDown(e as unknown as React.MouseEvent, i)}
                 />
                 {/* Ponto visível */}
                 <circle
-                  cx={`${p.x * 100}%`}
-                  cy={`${p.y * 100}%`}
-                  r={i === 0 && editMode === 'creating' ? 10 : 6}
+                  cx={p.x * 100}
+                  cy={p.y * 100}
+                  r={i === 0 && editMode === 'creating' ? 2.5 : 1.5}
                   fill={i === 0 && editMode === 'creating' ? '#f59e0b' : '#22c55e'}
                   stroke="white"
-                  strokeWidth="2"
+                  strokeWidth="0.5"
                   className={editMode === 'adjusting' ? 'pointer-events-none' : ''}
                 />
                 {/* Número do ponto */}
                 {editMode !== 'none' && (
                   <text
-                    x={`${p.x * 100}%`}
-                    y={`${p.y * 100}%`}
-                    dy="-12"
+                    x={p.x * 100}
+                    y={p.y * 100 - 3}
                     textAnchor="middle"
                     fill="white"
-                    fontSize="12"
+                    fontSize="3"
                     fontWeight="bold"
                     className="pointer-events-none"
-                    style={{ textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}
+                    style={{ textShadow: '0 0.5px 1px rgba(0,0,0,0.8)' }}
                   >
                     {i + 1}
                   </text>
