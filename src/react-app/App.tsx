@@ -7,6 +7,7 @@ import Cadastro from '@/react-app/pages/Cadastro';
 import Relatorios from '@/react-app/pages/Relatorios';
 import Estatisticas from '@/react-app/pages/Estatisticas';
 import Monitoramento from '@/react-app/pages/Monitoramento';
+import MonitoramentoLocal from '@/react-app/pages/MonitoramentoLocal';
 import Configuracoes from '@/react-app/pages/Configuracoes';
 import GuiaRekorScout from '@/react-app/pages/GuiaRekorScout';
 
@@ -45,6 +46,7 @@ function App() {
                     <Route path="/relatorios" element={<Relatorios />} />
                     <Route path="/estatisticas" element={<Estatisticas />} />
                     <Route path="/monitoramento" element={<Monitoramento />} />
+                    <Route path="/monitoramento-local" element={<MonitoramentoLocal />} />
                     <Route path="/configuracoes" element={<Configuracoes />} />
                     <Route path="/guia-rekor-scout" element={<GuiaRekorScout />} />
                   </Routes>
