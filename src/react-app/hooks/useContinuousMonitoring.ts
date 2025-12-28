@@ -10,7 +10,9 @@ import {
   VirtualArea, 
   loadVirtualArea, 
   saveVirtualArea,
-  getDefaultVirtualArea 
+  getDefaultVirtualArea,
+  loadSelectedCamera,
+  saveSelectedCamera,
 } from '../utils/motionDetection';
 
 export type MonitoringStatus = 'idle' | 'starting' | 'monitoring' | 'motion_detected' | 'processing' | 'error';
@@ -55,7 +57,7 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
   const [lastDetection, setLastDetection] = useState<Detection | null>(null);
   const [recentDetections, setRecentDetections] = useState<Detection[]>([]);
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
-  const [selectedCamera, setSelectedCamera] = useState<string>('');
+  const [selectedCamera, setSelectedCameraState] = useState<string>('');
   const [motionPercent, setMotionPercent] = useState(0);
   
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -67,21 +69,32 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
   
   const { recognizeFromCanvas, reset: resetOCR, usedFallback } = usePlateRecognition();
   
-  // Carregar lista de câmeras
+  // Carregar lista de câmeras e câmera salva
   useEffect(() => {
     async function loadCameras() {
       try {
         const devices = await navigator.mediaDevices.enumerateDevices();
         const cameras = devices.filter(d => d.kind === 'videoinput');
         setAvailableCameras(cameras);
-        if (cameras.length > 0 && !selectedCamera) {
-          setSelectedCamera(cameras[0].deviceId);
+        
+        // Tentar usar câmera salva
+        const savedCamera = loadSelectedCamera();
+        if (savedCamera && cameras.find(c => c.deviceId === savedCamera)) {
+          setSelectedCameraState(savedCamera);
+        } else if (cameras.length > 0) {
+          setSelectedCameraState(cameras[0].deviceId);
         }
       } catch (e) {
         console.warn('Erro ao listar câmeras:', e);
       }
     }
     loadCameras();
+  }, []);
+  
+  // Função para salvar câmera selecionada
+  const setSelectedCamera = useCallback((deviceId: string) => {
+    setSelectedCameraState(deviceId);
+    saveSelectedCamera(deviceId);
   }, []);
   
   // Verificar se placa foi detectada recentemente (deduplicação)
