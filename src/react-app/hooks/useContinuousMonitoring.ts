@@ -60,6 +60,9 @@ interface UseContinuousMonitoringReturn {
   processingInfo: ProcessingInfo;
   selectedResolution: CameraResolution;
   setSelectedResolution: (resolution: CameraResolution) => void;
+  // Propriedades de referência
+  hasReference: boolean;
+  recaptureReference: () => void;
 }
 
 const COOLDOWN_MS = 30000; // 30 segundos entre detecções da mesma placa
@@ -78,6 +81,7 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
   const [selectedCamera, setSelectedCameraState] = useState<string>('');
   const [motionPercent, setMotionPercent] = useState(0);
   const [selectedResolution, setSelectedResolutionState] = useState<CameraResolution>(loadCameraResolution());
+  const [hasReference, setHasReference] = useState(false);
   
   // Estado de métricas de processamento
   const [processingInfo, setProcessingInfo] = useState<ProcessingInfo>({
@@ -349,6 +353,43 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
     finishProcessingTimer,
   ]);
   
+  // Função para capturar/recapturar referência
+  const captureReferenceFrame = useCallback(() => {
+    if (!videoRef.current || !canvasRef.current) return false;
+    
+    const success = motionDetectorRef.current.captureReference(
+      videoRef.current,
+      canvasRef.current,
+      virtualArea
+    );
+    
+    setHasReference(success);
+    
+    if (success) {
+      setProcessingInfo(prev => ({
+        ...prev,
+        stageLabel: 'Referência capturada!',
+      }));
+      
+      // Mostrar mensagem por 2 segundos e depois voltar ao normal
+      setTimeout(() => {
+        setProcessingInfo(prev => ({
+          ...prev,
+          stageLabel: 'Monitorando área...',
+        }));
+      }, 2000);
+    }
+    
+    return success;
+  }, [virtualArea]);
+  
+  // Recapturar referência manualmente
+  const recaptureReference = useCallback(() => {
+    if (isActive && videoRef.current && canvasRef.current) {
+      captureReferenceFrame();
+    }
+  }, [isActive, captureReferenceFrame]);
+  
   // Loop de processamento de frames
   const processFrame = useCallback(() => {
     if (!videoRef.current || !canvasRef.current) {
@@ -360,6 +401,11 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
       return;
     }
     
+    // Verificar se tem referência
+    if (!motionDetectorRef.current.hasReference()) {
+      return;
+    }
+    
     const result = motionDetectorRef.current.processFrame(
       videoRef.current,
       canvasRef.current,
@@ -368,17 +414,23 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
     
     setMotionPercent(result.motionPercent);
     
+    // Auto-atualizar referência se necessário
+    if (result.shouldUpdateReference) {
+      console.log('🔄 Auto-atualizando referência...');
+      captureReferenceFrame();
+    }
+    
     // Atualizar stageLabel baseado no estado atual
     if (result.hasMotion) {
       setStatus('motion_detected');
-      setStatusMessage('🟡 Movimento detectado...');
+      setStatusMessage('🟡 Veículo detectado...');
       setProcessingInfo(prev => ({
         ...prev,
         stage: 'idle',
-        stageLabel: 'Detectando veículo...',
+        stageLabel: 'Veículo detectado!',
       }));
     } else if (!result.hasMotion && status === 'motion_detected') {
-      // Resetar para monitoramento quando não há mais movimento
+      // Resetar para monitoramento quando não há mais veículo
       setStatus('monitoring');
       setStatusMessage('🟢 Monitorando...');
       setProcessingInfo(prev => ({
@@ -398,7 +450,7 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
     if (result.isStable) {
       processFrameForOCR();
     }
-  }, [status, virtualArea, processFrameForOCR]);
+  }, [status, virtualArea, processFrameForOCR, captureReferenceFrame, processingInfo.stage, processingInfo.stageLabel]);
   
   // Iniciar loop de frames
   useEffect(() => {
@@ -439,15 +491,16 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
         await videoRef.current.play();
       }
       
-      motionDetectorRef.current.reset();
+      motionDetectorRef.current.fullReset();
       recentPlatesRef.current.clear();
       resetOCR();
+      setHasReference(false);
       
       // Resetar métricas
       processingTimesRef.current = [];
       setProcessingInfo({
         stage: 'idle',
-        stageLabel: 'Aguardando',
+        stageLabel: 'Capturando referência...',
         currentTimeMs: 0,
         lastOcrTimeMs: 0,
         avgTimeMs: 0,
@@ -455,7 +508,30 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
       
       setIsActive(true);
       setStatus('monitoring');
-      setStatusMessage('🟢 Monitorando...');
+      setStatusMessage('📸 Capturando referência...');
+      
+      // Aguardar vídeo estabilizar e capturar referência
+      setTimeout(() => {
+        if (videoRef.current && canvasRef.current) {
+          const success = motionDetectorRef.current.captureReference(
+            videoRef.current,
+            canvasRef.current,
+            loadVirtualArea() || getDefaultVirtualArea()
+          );
+          
+          setHasReference(success);
+          
+          if (success) {
+            setStatusMessage('🟢 Monitorando...');
+            setProcessingInfo(prev => ({
+              ...prev,
+              stageLabel: 'Monitorando área...',
+            }));
+          } else {
+            setStatusMessage('⚠️ Erro ao capturar referência');
+          }
+        }
+      }, 1000); // Aguardar 1 segundo para estabilizar
       
     } catch (e) {
       console.error('Erro ao iniciar câmera:', e);
@@ -480,7 +556,8 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
       frameIntervalRef.current = null;
     }
     
-    motionDetectorRef.current.reset();
+    motionDetectorRef.current.fullReset();
+    setHasReference(false);
     setIsActive(false);
     setStatus('idle');
     setStatusMessage('Parado');
@@ -520,5 +597,8 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
     processingInfo,
     selectedResolution,
     setSelectedResolution,
+    // Propriedades de referência
+    hasReference,
+    recaptureReference,
   };
 }
