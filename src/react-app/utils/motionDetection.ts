@@ -279,6 +279,11 @@ export class MotionDetector {
   private isStabilizing: boolean = false;
   private consecutiveMotionFrames: number = 0;
   
+  // Noise baseline: média móvel do ruído quando não há movimento real
+  private noiseBaseline: number = 0;
+  private baselineFrames: number[] = [];
+  private readonly BASELINE_WINDOW = 30; // últimos 30 frames para média
+  
   constructor(config: Partial<MotionDetectionConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
   }
@@ -315,8 +320,8 @@ export class MotionDetector {
     }
     
     // Comparar com frame anterior
-    const motionPercent = compareFrames(this.previousFrame, currentFrame, this.config);
-    const rawMotion = motionPercent >= this.config.threshold;
+    const rawMotionPercent = compareFrames(this.previousFrame, currentFrame, this.config);
+    const rawMotion = rawMotionPercent >= this.config.threshold;
     
     // Salvar frame atual para próxima comparação
     this.previousFrame = currentFrame;
@@ -326,10 +331,20 @@ export class MotionDetector {
       this.consecutiveMotionFrames++;
     } else {
       this.consecutiveMotionFrames = 0;
+      
+      // Atualizar baseline de ruído quando NÃO há movimento
+      this.baselineFrames.push(rawMotionPercent);
+      if (this.baselineFrames.length > this.BASELINE_WINDOW) {
+        this.baselineFrames.shift();
+      }
+      this.noiseBaseline = this.baselineFrames.reduce((a, b) => a + b, 0) / this.baselineFrames.length;
     }
     
     // Movimento real só se detectado em N frames consecutivos
     const hasMotion = this.consecutiveMotionFrames >= MIN_CONSECUTIVE_MOTION_FRAMES;
+    
+    // Subtrair ruído base do percentual de movimento para exibição
+    const adjustedMotionPercent = Math.max(0, rawMotionPercent - this.noiseBaseline);
     
     const now = Date.now();
     
@@ -348,7 +363,7 @@ export class MotionDetector {
       this.isStabilizing = false;
     }
     
-    return { hasMotion, isStable, motionPercent };
+    return { hasMotion, isStable, motionPercent: adjustedMotionPercent };
   }
   
   /**
@@ -390,6 +405,8 @@ export class MotionDetector {
     this.lastMotionTime = 0;
     this.isStabilizing = false;
     this.consecutiveMotionFrames = 0;
+    this.noiseBaseline = 0;
+    this.baselineFrames = [];
   }
   
   /**

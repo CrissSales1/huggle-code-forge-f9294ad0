@@ -454,9 +454,18 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
         )}
         
         {/* Motion Indicator */}
-        {isActive && motionPercent > 0 && editMode === 'none' && (
-          <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-            Movimento: {Math.round(motionPercent * 100)}%
+        {isActive && editMode === 'none' && (
+          <div className={`absolute bottom-2 left-2 text-xs px-2 py-1 rounded ${
+            motionPercent >= 0.20 
+              ? 'bg-yellow-500 text-black font-medium' 
+              : 'bg-black/70 text-gray-400'
+          }`}>
+            {motionPercent >= 0.20 
+              ? `⚡ Movimento: ${Math.round(motionPercent * 100)}%`
+              : motionPercent > 0.01 
+                ? `Ruído: ${Math.round(motionPercent * 100)}%`
+                : '✓ Área limpa'
+            }
           </div>
         )}
       </div>

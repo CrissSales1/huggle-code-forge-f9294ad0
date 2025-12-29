@@ -368,13 +368,30 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
     
     setMotionPercent(result.motionPercent);
     
+    // Atualizar stageLabel baseado no estado atual
     if (result.hasMotion) {
       setStatus('motion_detected');
       setStatusMessage('🟡 Movimento detectado...');
+      setProcessingInfo(prev => ({
+        ...prev,
+        stage: 'idle',
+        stageLabel: 'Detectando veículo...',
+      }));
     } else if (!result.hasMotion && status === 'motion_detected') {
       // Resetar para monitoramento quando não há mais movimento
       setStatus('monitoring');
       setStatusMessage('🟢 Monitorando...');
+      setProcessingInfo(prev => ({
+        ...prev,
+        stage: 'idle',
+        stageLabel: 'Monitorando área...',
+      }));
+    } else if (status === 'monitoring' && processingInfo.stage === 'idle' && processingInfo.stageLabel === 'Aguardando') {
+      // Atualizar label inicial quando começar a monitorar
+      setProcessingInfo(prev => ({
+        ...prev,
+        stageLabel: 'Monitorando área...',
+      }));
     }
     
     // Se estabilizou após movimento, processar OCR
