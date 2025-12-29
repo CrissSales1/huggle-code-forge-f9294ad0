@@ -273,6 +273,7 @@ export function compareFrames(
 const DETECTION_THRESHOLD = 0.15; // 15% de diferença = veículo presente
 const CLEAN_THRESHOLD = 0.05;     // 5% de diferença = área considerada limpa
 const AUTO_UPDATE_DELAY_MS = 10000; // 10 segundos limpa = atualiza referência
+const OCR_RETRY_DELAY_MS = 5000;  // 5 segundos entre re-tentativas de OCR
 
 /**
  * Classe para gerenciar detecção de movimento contínua
@@ -289,6 +290,11 @@ export class MotionDetector {
   // Controle de referência
   private lastCleanTime: number = 0;
   private referenceUpdatePending: boolean = false;
+  
+  // Controle de re-tentativa de OCR
+  private ocrAttempted: boolean = false;
+  private lastOcrAttemptTime: number = 0;
+  private ocrSucceeded: boolean = false;
   
   constructor(config: Partial<MotionDetectionConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -347,15 +353,15 @@ export class MotionDetector {
     video: HTMLVideoElement,
     canvas: HTMLCanvasElement,
     area: VirtualArea
-  ): { hasMotion: boolean; isStable: boolean; motionPercent: number; shouldUpdateReference: boolean } {
+  ): { hasMotion: boolean; isStable: boolean; shouldAttemptOCR: boolean; motionPercent: number; shouldUpdateReference: boolean } {
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx || video.videoWidth === 0 || video.videoHeight === 0) {
-      return { hasMotion: false, isStable: false, motionPercent: 0, shouldUpdateReference: false };
+      return { hasMotion: false, isStable: false, shouldAttemptOCR: false, motionPercent: 0, shouldUpdateReference: false };
     }
     
     // Se não tem referência, retornar sem detecção
     if (!this.referenceFrame) {
-      return { hasMotion: false, isStable: false, motionPercent: 0, shouldUpdateReference: false };
+      return { hasMotion: false, isStable: false, shouldAttemptOCR: false, motionPercent: 0, shouldUpdateReference: false };
     }
     
     // Ajustar canvas para o tamanho do vídeo
@@ -397,6 +403,11 @@ export class MotionDetector {
       // Área limpa - verificar se deve atualizar referência
       this.consecutiveMotionFrames = 0;
       
+      // Veículo saiu - resetar flags de OCR para próximo veículo
+      this.ocrAttempted = false;
+      this.ocrSucceeded = false;
+      this.lastOcrAttemptTime = 0;
+      
       if (this.lastCleanTime === 0) {
         this.lastCleanTime = now;
       } else if (now - this.lastCleanTime >= AUTO_UPDATE_DELAY_MS && !this.referenceUpdatePending) {
@@ -436,13 +447,47 @@ export class MotionDetector {
                      this.lastMotionTime > 0 &&
                      (now - this.lastMotionTime >= this.config.stabilizationMs);
     
-    // Se está estável, resetar flag para não disparar OCR múltiplas vezes
-    if (isStable) {
-      this.isStabilizing = false;
-      this.lastMotionTime = 0;
+    // Determinar se deve tentar OCR
+    let shouldAttemptOCR = false;
+    
+    if (isStable && hasMotion) {
+      // Primeira tentativa ou re-tentativa após falha
+      if (!this.ocrAttempted) {
+        // Primeira tentativa
+        shouldAttemptOCR = true;
+      } else if (!this.ocrSucceeded && (now - this.lastOcrAttemptTime >= OCR_RETRY_DELAY_MS)) {
+        // Re-tentativa após 5 segundos se falhou
+        shouldAttemptOCR = true;
+        console.log('🔄 Re-tentando OCR após falha...');
+      }
+      // Se já teve sucesso, não tenta novamente
     }
     
-    return { hasMotion, isStable, motionPercent: diffPercent, shouldUpdateReference };
+    return { hasMotion, isStable, shouldAttemptOCR, motionPercent: diffPercent, shouldUpdateReference };
+  }
+  
+  /**
+   * Marca que uma tentativa de OCR foi feita
+   */
+  markOcrAttempted(): void {
+    this.ocrAttempted = true;
+    this.lastOcrAttemptTime = Date.now();
+  }
+  
+  /**
+   * Marca que o OCR foi bem-sucedido (para de tentar)
+   */
+  markOcrSuccess(): void {
+    this.ocrSucceeded = true;
+  }
+  
+  /**
+   * Reseta flags de OCR para permitir nova tentativa
+   */
+  resetOcrAttempt(): void {
+    this.ocrAttempted = false;
+    this.ocrSucceeded = false;
+    this.lastOcrAttemptTime = 0;
   }
   
   /**
@@ -486,6 +531,9 @@ export class MotionDetector {
     this.consecutiveMotionFrames = 0;
     this.lastCleanTime = 0;
     this.referenceUpdatePending = false;
+    this.ocrAttempted = false;
+    this.ocrSucceeded = false;
+    this.lastOcrAttemptTime = 0;
   }
   
   /**

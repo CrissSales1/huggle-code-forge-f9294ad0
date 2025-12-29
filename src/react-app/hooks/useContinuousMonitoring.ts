@@ -255,11 +255,14 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
   }, []);
   
   // Processar frame para OCR
-  const processFrameForOCR = useCallback(async () => {
-    if (!videoRef.current || status !== 'monitoring') return;
+  const processFrameForOCR = useCallback(async (): Promise<boolean> => {
+    if (!videoRef.current || status !== 'monitoring') return false;
     
     setStatus('processing');
     setStatusMessage('🔍 Reconhecendo placa...');
+    
+    // Marcar que tentativa de OCR foi feita
+    motionDetectorRef.current.markOcrAttempted();
     
     // Iniciar timer de processamento
     startProcessingTimer();
@@ -291,7 +294,9 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
           finishProcessingTimer();
           setStatus('monitoring');
           setStatusMessage('🟢 Monitorando...');
-          return;
+          // Marcar como sucesso para não tentar novamente
+          motionDetectorRef.current.markOcrSuccess();
+          return true;
         }
         
         markPlateDetected(placa);
@@ -316,28 +321,31 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
         
         finishProcessingTimer();
         
+        // Marcar OCR como sucesso - não tentar novamente
+        motionDetectorRef.current.markOcrSuccess();
+        
         if (isMorador) {
           setStatusMessage(`✅ Morador: ${placa} - Casa ${casa}`);
         } else {
           setStatusMessage(`⚠️ Não cadastrado: ${placa}`);
         }
+        
+        return true;
       } else {
         finishProcessingTimer();
-        setStatusMessage('❌ Placa não reconhecida');
+        setStatusMessage('❌ Placa não reconhecida - tentando novamente...');
+        console.log('❌ OCR falhou, permitindo re-tentativa em 5s...');
+        return false;
       }
     } catch (e) {
       console.error('Erro ao processar OCR:', e);
       finishProcessingTimer();
-      setStatusMessage('❌ Erro no processamento');
+      setStatusMessage('❌ Erro no processamento - tentando novamente...');
+      return false;
     }
     
     // Voltar ao monitoramento após 2 segundos
-    setTimeout(() => {
-      if (isActive) {
-        setStatus('monitoring');
-        setStatusMessage('🟢 Monitorando...');
-      }
-    }, 2000);
+    // (movido para processFrame para manter o fluxo)
   }, [
     status, 
     virtualArea, 
@@ -347,7 +355,6 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
     checkIfMorador, 
     saveDetection, 
     usedFallback,
-    isActive,
     startProcessingTimer,
     updateProcessingStage,
     finishProcessingTimer,
@@ -391,7 +398,7 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
   }, [isActive, captureReferenceFrame]);
   
   // Loop de processamento de frames
-  const processFrame = useCallback(() => {
+  const processFrame = useCallback(async () => {
     if (!videoRef.current || !canvasRef.current) {
       return;
     }
@@ -446,11 +453,19 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
       }));
     }
     
-    // Se estabilizou após movimento, processar OCR
-    if (result.isStable) {
-      processFrameForOCR();
+    // Se deve tentar OCR (primeira vez ou re-tentativa)
+    if (result.shouldAttemptOCR) {
+      const success = await processFrameForOCR();
+      
+      // Voltar ao monitoramento após 2 segundos
+      setTimeout(() => {
+        if (isActive) {
+          setStatus('monitoring');
+          setStatusMessage(success ? '🟢 Monitorando...' : '🟡 Aguardando re-tentativa...');
+        }
+      }, 2000);
     }
-  }, [status, virtualArea, processFrameForOCR, captureReferenceFrame, processingInfo.stage, processingInfo.stageLabel]);
+  }, [status, virtualArea, processFrameForOCR, captureReferenceFrame, processingInfo.stage, processingInfo.stageLabel, isActive]);
   
   // Iniciar loop de frames
   useEffect(() => {
