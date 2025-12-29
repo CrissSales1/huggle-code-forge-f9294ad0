@@ -1,5 +1,6 @@
 /**
  * Serviço de OCR otimizado para placas usando Tesseract.js
+ * OTIMIZADO: Usa OEM=0 (Legacy, mais rápido) e canvas reutilizável
  */
 import Tesseract from 'tesseract.js';
 import { preprocessForOCR, preprocessLight } from './imagePreprocessing';
@@ -8,8 +9,27 @@ import { validateAndCorrectPlate, type PlateValidationResult } from './plateVali
 let worker: Tesseract.Worker | null = null;
 let isInitializing = false;
 
+// Canvas singleton para reutilização (evita criar novo a cada OCR)
+let processingCanvas: HTMLCanvasElement | null = null;
+let processingCtx: CanvasRenderingContext2D | null = null;
+
+function getProcessingCanvas(width: number, height: number): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
+  if (!processingCanvas) {
+    processingCanvas = document.createElement('canvas');
+    processingCtx = processingCanvas.getContext('2d');
+  }
+  
+  if (processingCanvas.width !== width || processingCanvas.height !== height) {
+    processingCanvas.width = width;
+    processingCanvas.height = height;
+  }
+  
+  return { canvas: processingCanvas, ctx: processingCtx! };
+}
+
 /**
  * Inicializa o worker do Tesseract (singleton)
+ * Usa OEM=0 (Legacy) que é significativamente mais rápido que OEM=1 (LSTM)
  */
 async function initWorker(): Promise<Tesseract.Worker> {
   if (worker) return worker;
@@ -17,7 +37,7 @@ async function initWorker(): Promise<Tesseract.Worker> {
   if (isInitializing) {
     // Aguardar inicialização em andamento
     while (isInitializing) {
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, 50));
     }
     if (worker) return worker;
   }
@@ -25,12 +45,13 @@ async function initWorker(): Promise<Tesseract.Worker> {
   isInitializing = true;
   
   try {
-    console.log('🔧 Inicializando Tesseract.js...');
+    console.log('🔧 Inicializando Tesseract.js (modo rápido)...');
     
-    worker = await Tesseract.createWorker('eng', 1, {
+    // OEM=0 (Legacy) é 2-3x mais rápido que OEM=1 (LSTM)
+    worker = await Tesseract.createWorker('eng', 0, {
       logger: (m) => {
-        if (m.status === 'recognizing text') {
-          console.log(`📊 OCR: ${Math.round(m.progress * 100)}%`);
+        if (m.status === 'recognizing text' && m.progress === 1) {
+          console.log(`📊 OCR: 100%`);
         }
       }
     });
@@ -41,10 +62,22 @@ async function initWorker(): Promise<Tesseract.Worker> {
       tessedit_pageseg_mode: Tesseract.PSM.SINGLE_LINE, // PSM 7: single line
     });
     
-    console.log('✅ Tesseract.js inicializado');
+    console.log('✅ Tesseract.js inicializado (Legacy mode)');
     return worker;
   } finally {
     isInitializing = false;
+  }
+}
+
+/**
+ * Pre-carrega o worker do Tesseract (chame no startup do app)
+ */
+export async function preloadOCR(): Promise<void> {
+  try {
+    await initWorker();
+    console.log('✅ OCR pré-carregado e pronto');
+  } catch (e) {
+    console.warn('⚠️ Falha ao pré-carregar OCR:', e);
   }
 }
 
@@ -68,17 +101,11 @@ export async function recognizePlate(canvas: HTMLCanvasElement): Promise<OCRResu
   try {
     const tesseractWorker = await initWorker();
     
-    // Criar cópia do canvas para pré-processamento
-    const processedCanvas = document.createElement('canvas');
-    processedCanvas.width = canvas.width;
-    processedCanvas.height = canvas.height;
-    const ctx = processedCanvas.getContext('2d');
-    
-    if (!ctx) throw new Error('Erro ao criar canvas de processamento');
-    
+    // Usar canvas reutilizável
+    const { canvas: processedCanvas, ctx } = getProcessingCanvas(canvas.width, canvas.height);
     ctx.drawImage(canvas, 0, 0);
     
-    // Aplicar pré-processamento
+    // Aplicar pré-processamento otimizado
     const processedImage = preprocessForOCR(processedCanvas);
     
     // Executar OCR
@@ -132,17 +159,11 @@ export async function recognizePlateFast(canvas: HTMLCanvasElement): Promise<OCR
   try {
     const tesseractWorker = await initWorker();
     
-    // Criar cópia do canvas para pré-processamento leve
-    const processedCanvas = document.createElement('canvas');
-    processedCanvas.width = canvas.width;
-    processedCanvas.height = canvas.height;
-    const ctx = processedCanvas.getContext('2d');
-    
-    if (!ctx) throw new Error('Erro ao criar canvas de processamento');
-    
+    // Usar canvas reutilizável
+    const { canvas: processedCanvas, ctx } = getProcessingCanvas(canvas.width, canvas.height);
     ctx.drawImage(canvas, 0, 0);
     
-    // Pré-processamento leve
+    // Pré-processamento leve (mais rápido)
     const processedImage = preprocessLight(processedCanvas);
     
     // OCR

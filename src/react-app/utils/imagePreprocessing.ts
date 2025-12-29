@@ -159,6 +159,7 @@ export function sharpen(imageData: ImageData): ImageData {
 
 /**
  * Pipeline completo de pré-processamento para OCR
+ * OTIMIZADO: Removidos sharpen e removeNoise (pesados, pouco ganho para placas)
  */
 export function preprocessForOCR(canvas: HTMLCanvasElement): string {
   const ctx = canvas.getContext('2d');
@@ -166,12 +167,11 @@ export function preprocessForOCR(canvas: HTMLCanvasElement): string {
   
   let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   
-  // Pipeline de processamento
+  // Pipeline otimizado (3 passos ao invés de 5)
   imageData = toGrayscale(imageData);
-  imageData = increaseContrast(imageData, 1.4);
-  imageData = sharpen(imageData);
+  imageData = increaseContrast(imageData, 1.5);
   imageData = applyThreshold(imageData);
-  imageData = removeNoise(imageData);
+  // sharpen e removeNoise removidos - pouco ganho, muito tempo
   
   ctx.putImageData(imageData, 0, 0);
   
