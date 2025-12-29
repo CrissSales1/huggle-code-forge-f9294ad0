@@ -46,6 +46,7 @@ export type Database = {
           casa_morador: string | null
           confidence: number | null
           created_at: string | null
+          direcao: string | null
           id: number
           is_morador: boolean | null
           placa_detectada: string
@@ -56,6 +57,7 @@ export type Database = {
           casa_morador?: string | null
           confidence?: number | null
           created_at?: string | null
+          direcao?: string | null
           id?: number
           is_morador?: boolean | null
           placa_detectada: string
@@ -66,6 +68,7 @@ export type Database = {
           casa_morador?: string | null
           confidence?: number | null
           created_at?: string | null
+          direcao?: string | null
           id?: number
           is_morador?: boolean | null
           placa_detectada?: string
@@ -115,6 +118,8 @@ export type Database = {
           created_at: string | null
           id: number
           placa_veiculo: string
+          status_presenca: string | null
+          ultima_movimentacao: string | null
           updated_at: string | null
         }
         Insert: {
@@ -122,6 +127,8 @@ export type Database = {
           created_at?: string | null
           id?: number
           placa_veiculo: string
+          status_presenca?: string | null
+          ultima_movimentacao?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -129,6 +136,8 @@ export type Database = {
           created_at?: string | null
           id?: number
           placa_veiculo?: string
+          status_presenca?: string | null
+          ultima_movimentacao?: string | null
           updated_at?: string | null
         }
         Relationships: []
