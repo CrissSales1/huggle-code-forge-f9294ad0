@@ -56,6 +56,8 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
     processingInfo,
     selectedResolution,
     setSelectedResolution,
+    hasReference,
+    recaptureReference,
   } = useContinuousMonitoring();
   
   const [showSettings, setShowSettings] = useState(false);
@@ -285,6 +287,15 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
                 >
                   Ajustar Pontos
                 </button>
+                <button
+                  onClick={recaptureReference}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200"
+                  disabled={!isActive}
+                  title="Recaptura a imagem de referência da área vazia"
+                >
+                  <Camera className="w-4 h-4" />
+                  Recapturar Referência
+                </button>
               </>
             ) : (
               <>
@@ -310,7 +321,9 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
                 ? `Clique para adicionar pontos. ${tempPoints.length >= 3 ? 'Clique no primeiro ponto para fechar.' : `Mínimo 3 pontos (${tempPoints.length}/3)`}`
                 : editMode === 'adjusting'
                   ? 'Arraste os pontos para ajustar a área'
-                  : 'Defina uma área poligonal clicando no vídeo'
+                  : hasReference 
+                    ? 'Referência capturada. Pronto para detectar veículos.'
+                    : 'Aguardando captura da referência...'
               }
             </span>
           </div>
@@ -453,19 +466,35 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
           </div>
         )}
         
-        {/* Motion Indicator */}
+        {/* Motion/Reference Indicator */}
         {isActive && editMode === 'none' && (
-          <div className={`absolute bottom-2 left-2 text-xs px-2 py-1 rounded ${
-            motionPercent >= 0.20 
-              ? 'bg-yellow-500 text-black font-medium' 
-              : 'bg-black/70 text-gray-400'
-          }`}>
-            {motionPercent >= 0.20 
-              ? `⚡ Movimento: ${Math.round(motionPercent * 100)}%`
-              : motionPercent > 0.01 
-                ? `Ruído: ${Math.round(motionPercent * 100)}%`
-                : '✓ Área limpa'
-            }
+          <div className="absolute bottom-2 left-2 flex items-center gap-2">
+            {/* Status da referência */}
+            <div className={`text-xs px-2 py-1 rounded ${
+              hasReference 
+                ? 'bg-green-600/80 text-white' 
+                : 'bg-orange-500/80 text-white'
+            }`}>
+              {hasReference ? '📸 Ref. OK' : '⏳ Capturando...'}
+            </div>
+            
+            {/* Indicador de detecção */}
+            {hasReference && (
+              <div className={`text-xs px-2 py-1 rounded ${
+                motionPercent >= 0.15 
+                  ? 'bg-yellow-500 text-black font-medium' 
+                  : motionPercent >= 0.05 
+                    ? 'bg-blue-500/80 text-white'
+                    : 'bg-black/70 text-gray-300'
+              }`}>
+                {motionPercent >= 0.15 
+                  ? `🚗 Veículo: ${Math.round(motionPercent * 100)}%`
+                  : motionPercent >= 0.05 
+                    ? `⚠️ Mudança: ${Math.round(motionPercent * 100)}%`
+                    : '✓ Área limpa'
+                }
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -269,36 +269,93 @@ export function compareFrames(
   return changedPixels / totalPixels;
 }
 
+// Thresholds para detecção por referência
+const DETECTION_THRESHOLD = 0.15; // 15% de diferença = veículo presente
+const CLEAN_THRESHOLD = 0.05;     // 5% de diferença = área considerada limpa
+const AUTO_UPDATE_DELAY_MS = 10000; // 10 segundos limpa = atualiza referência
+
 /**
  * Classe para gerenciar detecção de movimento contínua
+ * Usa imagem de referência para detectar veículos (mais robusto)
  */
 export class MotionDetector {
+  private referenceFrame: ImageData | null = null;
   private previousFrame: ImageData | null = null;
   private config: MotionDetectionConfig;
   private lastMotionTime: number = 0;
   private isStabilizing: boolean = false;
   private consecutiveMotionFrames: number = 0;
   
-  // Noise baseline: média móvel do ruído quando não há movimento real
-  private noiseBaseline: number = 0;
-  private baselineFrames: number[] = [];
-  private readonly BASELINE_WINDOW = 30; // últimos 30 frames para média
+  // Controle de referência
+  private lastCleanTime: number = 0;
+  private referenceUpdatePending: boolean = false;
   
   constructor(config: Partial<MotionDetectionConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
   }
   
   /**
-   * Processa um frame e detecta movimento na área virtual
+   * Verifica se há uma imagem de referência capturada
+   */
+  hasReference(): boolean {
+    return this.referenceFrame !== null;
+  }
+  
+  /**
+   * Captura a imagem de referência da área virtual
+   */
+  captureReference(
+    video: HTMLVideoElement,
+    canvas: HTMLCanvasElement,
+    area: VirtualArea
+  ): boolean {
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx || video.videoWidth === 0 || video.videoHeight === 0) {
+      return false;
+    }
+    
+    // Ajustar canvas para o tamanho do vídeo
+    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+    }
+    
+    // Desenhar frame atual no canvas
+    ctx.drawImage(video, 0, 0);
+    
+    // Extrair pixels da área virtual como referência
+    const points = getPolygonPoints(area);
+    const bbox = getPolygonBoundingBox(points);
+    
+    const x = Math.floor(bbox.minX * video.videoWidth);
+    const y = Math.floor(bbox.minY * video.videoHeight);
+    const width = Math.floor((bbox.maxX - bbox.minX) * video.videoWidth);
+    const height = Math.floor((bbox.maxY - bbox.minY) * video.videoHeight);
+    
+    this.referenceFrame = ctx.getImageData(x, y, Math.max(1, width), Math.max(1, height));
+    this.lastCleanTime = Date.now();
+    this.referenceUpdatePending = false;
+    
+    console.log('📸 Referência capturada:', { width, height });
+    return true;
+  }
+  
+  /**
+   * Processa um frame e detecta presença de veículo comparando com referência
    */
   processFrame(
     video: HTMLVideoElement,
     canvas: HTMLCanvasElement,
     area: VirtualArea
-  ): { hasMotion: boolean; isStable: boolean; motionPercent: number } {
+  ): { hasMotion: boolean; isStable: boolean; motionPercent: number; shouldUpdateReference: boolean } {
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx || video.videoWidth === 0 || video.videoHeight === 0) {
-      return { hasMotion: false, isStable: false, motionPercent: 0 };
+      return { hasMotion: false, isStable: false, motionPercent: 0, shouldUpdateReference: false };
+    }
+    
+    // Se não tem referência, retornar sem detecção
+    if (!this.referenceFrame) {
+      return { hasMotion: false, isStable: false, motionPercent: 0, shouldUpdateReference: false };
     }
     
     // Ajustar canvas para o tamanho do vídeo
@@ -313,57 +370,79 @@ export class MotionDetector {
     // Extrair pixels da área virtual
     const currentFrame = extractAreaPixels(ctx, video.videoWidth, video.videoHeight, area);
     
-    // Se não tem frame anterior, salvar e retornar
-    if (!this.previousFrame) {
-      this.previousFrame = currentFrame;
-      return { hasMotion: false, isStable: false, motionPercent: 0 };
-    }
+    // Comparar com REFERÊNCIA (não com frame anterior)
+    const diffPercent = compareFrames(this.referenceFrame, currentFrame, this.config);
     
-    // Comparar com frame anterior
-    const rawMotionPercent = compareFrames(this.previousFrame, currentFrame, this.config);
-    const rawMotion = rawMotionPercent >= this.config.threshold;
-    
-    // Salvar frame atual para próxima comparação
+    // Guardar frame anterior para detecção de estabilização
+    const previousFrameDiff = this.previousFrame 
+      ? compareFrames(this.previousFrame, currentFrame, this.config)
+      : 0;
     this.previousFrame = currentFrame;
     
-    // Filtro temporal: só considera movimento se detectado em frames consecutivos
-    if (rawMotion) {
+    const now = Date.now();
+    let shouldUpdateReference = false;
+    
+    // Veículo detectado se diferença > threshold de detecção
+    const vehiclePresent = diffPercent >= DETECTION_THRESHOLD;
+    
+    // Área limpa se diferença < threshold limpo
+    const areaClean = diffPercent < CLEAN_THRESHOLD;
+    
+    if (vehiclePresent) {
+      // Veículo presente
       this.consecutiveMotionFrames++;
-    } else {
+      this.lastCleanTime = 0; // Resetar contador de área limpa
+      this.referenceUpdatePending = false;
+    } else if (areaClean) {
+      // Área limpa - verificar se deve atualizar referência
       this.consecutiveMotionFrames = 0;
       
-      // Atualizar baseline de ruído quando NÃO há movimento
-      this.baselineFrames.push(rawMotionPercent);
-      if (this.baselineFrames.length > this.BASELINE_WINDOW) {
-        this.baselineFrames.shift();
+      if (this.lastCleanTime === 0) {
+        this.lastCleanTime = now;
+      } else if (now - this.lastCleanTime >= AUTO_UPDATE_DELAY_MS && !this.referenceUpdatePending) {
+        // Área limpa por tempo suficiente - sinalizar atualização de referência
+        shouldUpdateReference = true;
+        this.referenceUpdatePending = true;
       }
-      this.noiseBaseline = this.baselineFrames.reduce((a, b) => a + b, 0) / this.baselineFrames.length;
+    } else {
+      // Zona intermediária - pode ser ruído ou veículo saindo
+      this.consecutiveMotionFrames = 0;
+      this.lastCleanTime = 0;
     }
     
-    // Movimento real só se detectado em N frames consecutivos
+    // Presença confirmada se detectada em frames consecutivos
     const hasMotion = this.consecutiveMotionFrames >= MIN_CONSECUTIVE_MOTION_FRAMES;
     
-    // Subtrair ruído base do percentual de movimento para exibição
-    const adjustedMotionPercent = Math.max(0, rawMotionPercent - this.noiseBaseline);
-    
-    const now = Date.now();
-    
-    // Se detectou movimento real, atualizar timestamp
+    // Detecção de estabilização: veículo presente MAS não está se movendo
     if (hasMotion) {
-      this.lastMotionTime = now;
-      this.isStabilizing = true;
-    }
-    
-    // Verificar se está estável (sem movimento por tempo suficiente após detecção)
-    const isStable = this.isStabilizing && 
-                     (now - this.lastMotionTime >= this.config.stabilizationMs);
-    
-    // Se está estável, resetar flag
-    if (isStable) {
+      // Verificar se o veículo está parado (pouca diferença entre frames consecutivos)
+      const isVehicleStatic = previousFrameDiff < 0.05; // Menos de 5% de mudança entre frames
+      
+      if (isVehicleStatic) {
+        if (this.lastMotionTime === 0) {
+          this.lastMotionTime = now;
+        }
+        this.isStabilizing = true;
+      } else {
+        this.lastMotionTime = now;
+      }
+    } else {
+      this.lastMotionTime = 0;
       this.isStabilizing = false;
     }
     
-    return { hasMotion, isStable, motionPercent: adjustedMotionPercent };
+    // Verificar se está estável (veículo parado por tempo suficiente)
+    const isStable = this.isStabilizing && 
+                     this.lastMotionTime > 0 &&
+                     (now - this.lastMotionTime >= this.config.stabilizationMs);
+    
+    // Se está estável, resetar flag para não disparar OCR múltiplas vezes
+    if (isStable) {
+      this.isStabilizing = false;
+      this.lastMotionTime = 0;
+    }
+    
+    return { hasMotion, isStable, motionPercent: diffPercent, shouldUpdateReference };
   }
   
   /**
@@ -398,15 +477,23 @@ export class MotionDetector {
   }
   
   /**
-   * Reseta o estado do detector
+   * Reseta o estado do detector (mantém referência se existir)
    */
   reset(): void {
     this.previousFrame = null;
     this.lastMotionTime = 0;
     this.isStabilizing = false;
     this.consecutiveMotionFrames = 0;
-    this.noiseBaseline = 0;
-    this.baselineFrames = [];
+    this.lastCleanTime = 0;
+    this.referenceUpdatePending = false;
+  }
+  
+  /**
+   * Reseta completamente incluindo a referência
+   */
+  fullReset(): void {
+    this.reset();
+    this.referenceFrame = null;
   }
   
   /**
