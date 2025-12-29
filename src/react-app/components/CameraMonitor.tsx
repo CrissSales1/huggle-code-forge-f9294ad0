@@ -66,6 +66,20 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
   const [draggingPoint, setDraggingPoint] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   
+  // Toggle de visibilidade da área poligonal
+  const [showPolygonOverlay, setShowPolygonOverlay] = useState<boolean>(() => {
+    const saved = localStorage.getItem('portacerta_show_polygon');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+  
+  const togglePolygonVisibility = () => {
+    setShowPolygonOverlay(prev => {
+      const newValue = !prev;
+      localStorage.setItem('portacerta_show_polygon', JSON.stringify(newValue));
+      return newValue;
+    });
+  };
+  
   // Notificar detecções
   useEffect(() => {
     if (lastDetection && onDetection) {
@@ -270,6 +284,25 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
             )}
           </div>
           
+          {/* Toggle de visibilidade da área */}
+          <div className="flex items-center gap-3">
+            <label className="text-sm font-medium text-gray-700 min-w-[70px]">Mostrar área:</label>
+            <button
+              onClick={togglePolygonVisibility}
+              className={`relative w-11 h-6 rounded-full transition-colors ${
+                showPolygonOverlay ? 'bg-blue-600' : 'bg-gray-300'
+              }`}
+              title={showPolygonOverlay ? 'Clique para ocultar a área de detecção' : 'Clique para mostrar a área de detecção'}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                showPolygonOverlay ? 'translate-x-5' : 'translate-x-0'
+              }`} />
+            </button>
+            <span className="text-xs text-gray-500">
+              {showPolygonOverlay ? 'Área visível' : 'Área oculta (ainda funciona)'}
+            </span>
+          </div>
+          
           <div className="flex items-center gap-2 flex-wrap">
             {editMode === 'none' ? (
               <>
@@ -349,8 +382,8 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
         {/* Canvas oculto para processamento */}
         <canvas ref={canvasRef} className="hidden" />
         
-        {/* Polygon Overlay SVG */}
-        {isActive && displayPoints.length >= 2 && (
+        {/* Polygon Overlay SVG - só mostra se toggle ativo ou em modo edição */}
+        {isActive && displayPoints.length >= 2 && (showPolygonOverlay || editMode !== 'none') && (
           <svg 
             className="absolute inset-0 w-full h-full pointer-events-none"
             viewBox="0 0 100 100"
@@ -431,8 +464,8 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
           </svg>
         )}
         
-        {/* Label da área */}
-        {isActive && displayPoints.length >= 3 && editMode === 'none' && (
+        {/* Label da área - só mostra se toggle ativo */}
+        {isActive && displayPoints.length >= 3 && editMode === 'none' && showPolygonOverlay && (
           <div 
             className="absolute text-xs text-white bg-black/50 px-2 py-0.5 rounded pointer-events-none"
             style={{
