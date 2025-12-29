@@ -14,13 +14,17 @@ import {
   Activity,
   Home,
   RotateCcw,
-  Check
+  Check,
+  Gauge,
+  Clock
 } from 'lucide-react';
 import { useContinuousMonitoring, MonitoringStatus } from '../hooks/useContinuousMonitoring';
 import { 
   Point, 
   VirtualAreaPolygon, 
   getPolygonPoints,
+  CameraResolution,
+  RESOLUTION_OPTIONS,
 } from '../utils/motionDetection';
 import PlacaVeiculo from './PlacaVeiculo';
 
@@ -49,6 +53,9 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
     selectedCamera,
     setSelectedCamera,
     motionPercent,
+    processingInfo,
+    selectedResolution,
+    setSelectedResolution,
   } = useContinuousMonitoring();
   
   const [showSettings, setShowSettings] = useState(false);
@@ -224,12 +231,13 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
       {/* Settings Panel */}
       {showSettings && (
         <div className="p-3 border-b border-gray-200 bg-gray-50 space-y-3">
+          {/* Seletor de Câmera */}
           <div className="flex items-center gap-3">
-            <label className="text-sm font-medium text-gray-700">Câmera:</label>
+            <label className="text-sm font-medium text-gray-700 min-w-[70px]">Câmera:</label>
             <select
               value={selectedCamera}
               onChange={(e) => setSelectedCamera(e.target.value)}
-              className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-1.5"
+              className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white"
               disabled={isActive}
             >
               {availableCameras.map(cam => (
@@ -238,6 +246,26 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
                 </option>
               ))}
             </select>
+          </div>
+          
+          {/* Seletor de Resolução */}
+          <div className="flex items-center gap-3">
+            <label className="text-sm font-medium text-gray-700 min-w-[70px]">Resolução:</label>
+            <select
+              value={selectedResolution}
+              onChange={(e) => setSelectedResolution(e.target.value as CameraResolution)}
+              className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white"
+              disabled={isActive}
+            >
+              {(Object.keys(RESOLUTION_OPTIONS) as CameraResolution[]).map(key => (
+                <option key={key} value={key}>
+                  {RESOLUTION_OPTIONS[key].label} - {RESOLUTION_OPTIONS[key].description}
+                </option>
+              ))}
+            </select>
+            {isActive && (
+              <span className="text-xs text-amber-600">Pare para alterar</span>
+            )}
           </div>
           
           <div className="flex items-center gap-2 flex-wrap">
@@ -432,6 +460,48 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
           </div>
         )}
       </div>
+      
+      {/* Processing Info Panel */}
+      {isActive && (
+        <div className="p-3 border-t border-gray-200 bg-gradient-to-r from-gray-50 to-blue-50">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Gauge className="w-4 h-4 text-blue-600" />
+              <span className="text-sm font-medium text-gray-700">Processamento</span>
+            </div>
+            
+            {/* Etapa atual */}
+            <div className="flex items-center gap-2 px-2 py-1 bg-white rounded border border-gray-200">
+              {processingInfo.stage !== 'idle' && processingInfo.stage !== 'done' ? (
+                <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <div className={`w-2 h-2 rounded-full ${processingInfo.stage === 'done' ? 'bg-green-500' : 'bg-gray-300'}`} />
+              )}
+              <span className="text-xs text-gray-600">{processingInfo.stageLabel}</span>
+            </div>
+            
+            {/* Métricas de tempo */}
+            <div className="flex items-center gap-3 ml-auto text-xs">
+              {processingInfo.currentTimeMs > 0 && processingInfo.stage !== 'idle' && (
+                <span className="text-blue-600 font-medium">
+                  {(processingInfo.currentTimeMs / 1000).toFixed(1)}s
+                </span>
+              )}
+              {processingInfo.lastOcrTimeMs > 0 && (
+                <div className="flex items-center gap-1 text-gray-500">
+                  <Clock className="w-3 h-3" />
+                  <span>Última: {(processingInfo.lastOcrTimeMs / 1000).toFixed(2)}s</span>
+                </div>
+              )}
+              {processingInfo.avgTimeMs > 0 && (
+                <div className="text-gray-500">
+                  Média: {(processingInfo.avgTimeMs / 1000).toFixed(2)}s
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Controls */}
       <div className="p-3 border-t border-gray-200 bg-gray-50">

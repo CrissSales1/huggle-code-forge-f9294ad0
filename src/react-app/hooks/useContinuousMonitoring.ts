@@ -13,9 +13,15 @@ import {
   getDefaultVirtualArea,
   loadSelectedCamera,
   saveSelectedCamera,
+  CameraResolution,
+  RESOLUTION_OPTIONS,
+  loadCameraResolution,
+  saveCameraResolution,
 } from '../utils/motionDetection';
 
 export type MonitoringStatus = 'idle' | 'starting' | 'monitoring' | 'motion_detected' | 'processing' | 'error';
+
+export type ProcessingStage = 'idle' | 'capturing' | 'preprocessing' | 'ocr' | 'validating' | 'done';
 
 interface Detection {
   placa: string;
@@ -24,6 +30,14 @@ interface Detection {
   casa?: string;
   confidence: number;
   usedFallback: boolean;
+}
+
+export interface ProcessingInfo {
+  stage: ProcessingStage;
+  stageLabel: string;
+  currentTimeMs: number;
+  lastOcrTimeMs: number;
+  avgTimeMs: number;
 }
 
 interface UseContinuousMonitoringReturn {
@@ -42,6 +56,10 @@ interface UseContinuousMonitoringReturn {
   selectedCamera: string;
   setSelectedCamera: (deviceId: string) => void;
   motionPercent: number;
+  // Novas propriedades
+  processingInfo: ProcessingInfo;
+  selectedResolution: CameraResolution;
+  setSelectedResolution: (resolution: CameraResolution) => void;
 }
 
 const COOLDOWN_MS = 30000; // 30 segundos entre detecções da mesma placa
@@ -59,6 +77,20 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
   const [selectedCamera, setSelectedCameraState] = useState<string>('');
   const [motionPercent, setMotionPercent] = useState(0);
+  const [selectedResolution, setSelectedResolutionState] = useState<CameraResolution>(loadCameraResolution());
+  
+  // Estado de métricas de processamento
+  const [processingInfo, setProcessingInfo] = useState<ProcessingInfo>({
+    stage: 'idle',
+    stageLabel: 'Aguardando',
+    currentTimeMs: 0,
+    lastOcrTimeMs: 0,
+    avgTimeMs: 0,
+  });
+  
+  // Ref para calcular média de tempo
+  const processingTimesRef = useRef<number[]>([]);
+  const processingStartRef = useRef<number>(0);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -95,6 +127,57 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
   const setSelectedCamera = useCallback((deviceId: string) => {
     setSelectedCameraState(deviceId);
     saveSelectedCamera(deviceId);
+  }, []);
+  
+  // Função para salvar resolução selecionada
+  const setSelectedResolution = useCallback((resolution: CameraResolution) => {
+    setSelectedResolutionState(resolution);
+    saveCameraResolution(resolution);
+  }, []);
+  
+  // Funções de métricas de processamento
+  const updateProcessingStage = useCallback((stage: ProcessingStage, stageLabel: string) => {
+    const currentTimeMs = stage === 'idle' ? 0 : Date.now() - processingStartRef.current;
+    setProcessingInfo(prev => ({
+      ...prev,
+      stage,
+      stageLabel,
+      currentTimeMs,
+    }));
+  }, []);
+  
+  const startProcessingTimer = useCallback(() => {
+    processingStartRef.current = Date.now();
+    updateProcessingStage('capturing', 'Capturando frame...');
+  }, [updateProcessingStage]);
+  
+  const finishProcessingTimer = useCallback(() => {
+    const totalTime = Date.now() - processingStartRef.current;
+    processingTimesRef.current.push(totalTime);
+    // Manter apenas as últimas 10 medições
+    if (processingTimesRef.current.length > 10) {
+      processingTimesRef.current.shift();
+    }
+    const avgTime = processingTimesRef.current.reduce((a, b) => a + b, 0) / processingTimesRef.current.length;
+    
+    setProcessingInfo(prev => ({
+      ...prev,
+      stage: 'done',
+      stageLabel: 'Concluído',
+      currentTimeMs: totalTime,
+      lastOcrTimeMs: totalTime,
+      avgTimeMs: Math.round(avgTime),
+    }));
+    
+    // Reset após 1.5s
+    setTimeout(() => {
+      setProcessingInfo(prev => ({
+        ...prev,
+        stage: 'idle',
+        stageLabel: 'Aguardando',
+        currentTimeMs: 0,
+      }));
+    }, 1500);
   }, []);
   
   // Verificar se placa foi detectada recentemente (deduplicação)
@@ -174,13 +257,26 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
     setStatus('processing');
     setStatusMessage('🔍 Reconhecendo placa...');
     
+    // Iniciar timer de processamento
+    startProcessingTimer();
+    
     try {
+      // Etapa 1: Capturar
+      updateProcessingStage('capturing', 'Capturando frame...');
       const capturedCanvas = motionDetectorRef.current.captureArea(
         videoRef.current,
         virtualArea
       );
       
+      // Etapa 2: Pre-processamento (acontece dentro do OCR)
+      updateProcessingStage('preprocessing', 'Pré-processando...');
+      
+      // Etapa 3: OCR
+      updateProcessingStage('ocr', 'Executando OCR...');
       const result = await recognizeFromCanvas(capturedCanvas);
+      
+      // Etapa 4: Validação
+      updateProcessingStage('validating', 'Validando placa...');
       
       if (result.success && result.validation.isValid) {
         const placa = result.validation.formatted;
@@ -188,6 +284,7 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
         // Verificar deduplicação
         if (isPlateRecent(placa)) {
           console.log(`⏳ Placa ${placa} detectada recentemente, ignorando...`);
+          finishProcessingTimer();
           setStatus('monitoring');
           setStatusMessage('🟢 Monitorando...');
           return;
@@ -213,16 +310,20 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
         // Salvar no banco
         await saveDetection(placa, isMorador, casa, result.validation.confidence);
         
+        finishProcessingTimer();
+        
         if (isMorador) {
           setStatusMessage(`✅ Morador: ${placa} - Casa ${casa}`);
         } else {
           setStatusMessage(`⚠️ Não cadastrado: ${placa}`);
         }
       } else {
+        finishProcessingTimer();
         setStatusMessage('❌ Placa não reconhecida');
       }
     } catch (e) {
       console.error('Erro ao processar OCR:', e);
+      finishProcessingTimer();
       setStatusMessage('❌ Erro no processamento');
     }
     
@@ -242,7 +343,10 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
     checkIfMorador, 
     saveDetection, 
     usedFallback,
-    isActive
+    isActive,
+    startProcessingTimer,
+    updateProcessingStage,
+    finishProcessingTimer,
   ]);
   
   // Loop de processamento de frames
@@ -290,11 +394,14 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
       setStatus('starting');
       setStatusMessage('Iniciando câmera...');
       
+      // Usar resolução selecionada
+      const resConfig = RESOLUTION_OPTIONS[selectedResolution];
+      
       const constraints: MediaStreamConstraints = {
         video: {
           deviceId: deviceId || selectedCamera ? { exact: deviceId || selectedCamera } : undefined,
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          width: { ideal: resConfig.width },
+          height: { ideal: resConfig.height },
         }
       };
       
@@ -310,6 +417,16 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
       recentPlatesRef.current.clear();
       resetOCR();
       
+      // Resetar métricas
+      processingTimesRef.current = [];
+      setProcessingInfo({
+        stage: 'idle',
+        stageLabel: 'Aguardando',
+        currentTimeMs: 0,
+        lastOcrTimeMs: 0,
+        avgTimeMs: 0,
+      });
+      
       setIsActive(true);
       setStatus('monitoring');
       setStatusMessage('🟢 Monitorando...');
@@ -319,7 +436,7 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
       setStatus('error');
       setStatusMessage('❌ Erro ao acessar câmera');
     }
-  }, [selectedCamera, resetOCR]);
+  }, [selectedCamera, selectedResolution, resetOCR]);
   
   // Parar monitoramento
   const stopMonitoring = useCallback(() => {
@@ -373,5 +490,9 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
     selectedCamera,
     setSelectedCamera,
     motionPercent,
+    // Novas propriedades
+    processingInfo,
+    selectedResolution,
+    setSelectedResolution,
   };
 }

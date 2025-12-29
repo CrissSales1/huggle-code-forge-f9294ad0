@@ -41,6 +41,58 @@ const DEFAULT_CONFIG: MotionDetectionConfig = {
 
 const STORAGE_KEY = 'portacerta_virtual_area';
 const CAMERA_STORAGE_KEY = 'portacerta_selected_camera';
+const RESOLUTION_STORAGE_KEY = 'portacerta_camera_resolution';
+
+// === Opções de resolução da câmera ===
+export type CameraResolution = 'low' | 'medium' | 'high';
+
+export interface ResolutionConfig {
+  label: string;
+  description: string;
+  width: number;
+  height: number;
+}
+
+export const RESOLUTION_OPTIONS: Record<CameraResolution, ResolutionConfig> = {
+  low: {
+    label: '480p',
+    description: 'Mais rápido (menos delay)',
+    width: 640,
+    height: 480,
+  },
+  medium: {
+    label: '720p',
+    description: 'Equilibrado (padrão)',
+    width: 1280,
+    height: 720,
+  },
+  high: {
+    label: '1080p',
+    description: 'Melhor qualidade',
+    width: 1920,
+    height: 1080,
+  },
+};
+
+export function loadCameraResolution(): CameraResolution {
+  try {
+    const saved = localStorage.getItem(RESOLUTION_STORAGE_KEY);
+    if (saved && (saved === 'low' || saved === 'medium' || saved === 'high')) {
+      return saved;
+    }
+  } catch (e) {
+    console.warn('Erro ao carregar resolução:', e);
+  }
+  return 'medium'; // Padrão
+}
+
+export function saveCameraResolution(resolution: CameraResolution): void {
+  try {
+    localStorage.setItem(RESOLUTION_STORAGE_KEY, resolution);
+  } catch (e) {
+    console.warn('Erro ao salvar resolução:', e);
+  }
+}
 
 // === Funções de persistência ===
 
