@@ -34,10 +34,13 @@ export interface MotionDetectionConfig {
 }
 
 const DEFAULT_CONFIG: MotionDetectionConfig = {
-  threshold: 0.10,
-  minPixelDifference: 30,
+  threshold: 0.20,        // 20% de mudança para considerar movimento (era 10%)
+  minPixelDifference: 45, // Menos sensível a ruído (era 30)
   stabilizationMs: 500,
 };
+
+// Número mínimo de frames consecutivos para confirmar movimento real
+const MIN_CONSECUTIVE_MOTION_FRAMES = 2;
 
 const STORAGE_KEY = 'portacerta_virtual_area';
 const CAMERA_STORAGE_KEY = 'portacerta_selected_camera';
@@ -274,6 +277,7 @@ export class MotionDetector {
   private config: MotionDetectionConfig;
   private lastMotionTime: number = 0;
   private isStabilizing: boolean = false;
+  private consecutiveMotionFrames: number = 0;
   
   constructor(config: Partial<MotionDetectionConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -312,14 +316,24 @@ export class MotionDetector {
     
     // Comparar com frame anterior
     const motionPercent = compareFrames(this.previousFrame, currentFrame, this.config);
-    const hasMotion = motionPercent >= this.config.threshold;
+    const rawMotion = motionPercent >= this.config.threshold;
     
     // Salvar frame atual para próxima comparação
     this.previousFrame = currentFrame;
     
+    // Filtro temporal: só considera movimento se detectado em frames consecutivos
+    if (rawMotion) {
+      this.consecutiveMotionFrames++;
+    } else {
+      this.consecutiveMotionFrames = 0;
+    }
+    
+    // Movimento real só se detectado em N frames consecutivos
+    const hasMotion = this.consecutiveMotionFrames >= MIN_CONSECUTIVE_MOTION_FRAMES;
+    
     const now = Date.now();
     
-    // Se detectou movimento, atualizar timestamp
+    // Se detectou movimento real, atualizar timestamp
     if (hasMotion) {
       this.lastMotionTime = now;
       this.isStabilizing = true;
@@ -375,6 +389,7 @@ export class MotionDetector {
     this.previousFrame = null;
     this.lastMotionTime = 0;
     this.isStabilizing = false;
+    this.consecutiveMotionFrames = 0;
   }
   
   /**

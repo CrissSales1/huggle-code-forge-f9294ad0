@@ -351,7 +351,12 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
   
   // Loop de processamento de frames
   const processFrame = useCallback(() => {
-    if (!videoRef.current || !canvasRef.current || status !== 'monitoring') {
+    if (!videoRef.current || !canvasRef.current) {
+      return;
+    }
+    
+    // Só processar se está monitorando ou com movimento detectado
+    if (status !== 'monitoring' && status !== 'motion_detected') {
       return;
     }
     
@@ -366,6 +371,10 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
     if (result.hasMotion) {
       setStatus('motion_detected');
       setStatusMessage('🟡 Movimento detectado...');
+    } else if (!result.hasMotion && status === 'motion_detected') {
+      // Resetar para monitoramento quando não há mais movimento
+      setStatus('monitoring');
+      setStatusMessage('🟢 Monitorando...');
     }
     
     // Se estabilizou após movimento, processar OCR
@@ -376,7 +385,7 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
   
   // Iniciar loop de frames
   useEffect(() => {
-    if (isActive && status === 'monitoring') {
+    if (isActive && (status === 'monitoring' || status === 'motion_detected')) {
       frameIntervalRef.current = window.setInterval(processFrame, FRAME_INTERVAL_MS);
     }
     
