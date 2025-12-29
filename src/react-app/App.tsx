@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import Header from '@/react-app/components/Header';
@@ -9,6 +10,7 @@ import Estatisticas from '@/react-app/pages/Estatisticas';
 import Monitoramento from '@/react-app/pages/Monitoramento';
 import Configuracoes from '@/react-app/pages/Configuracoes';
 import Instalar from '@/react-app/pages/Instalar';
+import { preloadOCR } from '@/react-app/utils/plateOCR';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, loading } = useAuth();
@@ -28,6 +30,11 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 }
 
 function App() {
+  // Pré-carregar OCR no startup para acelerar primeira leitura
+  useEffect(() => {
+    preloadOCR();
+  }, []);
+
   return (
     <BrowserRouter>
       <Routes>

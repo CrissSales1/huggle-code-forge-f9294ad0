@@ -1,9 +1,10 @@
 /**
  * Hook para reconhecimento de placas usando OCR local gratuito
  * Com fallback para Plate Recognizer API quando confiança < 75%
+ * OTIMIZADO: Usa recognizePlateFast (pré-processamento leve)
  */
 import { useState, useCallback, useRef } from 'react';
-import { recognizePlate, terminateOCR, type OCRResult } from '../utils/plateOCR';
+import { recognizePlateFast, terminateOCR, type OCRResult } from '../utils/plateOCR';
 import { validateAndCorrectPlate } from '../utils/plateValidator';
 
 const CONFIDENCE_THRESHOLD = 0.75; // 75% - abaixo disso usa fallback
@@ -126,10 +127,10 @@ export function usePlateRecognition(): UsePlateRecognitionReturn {
     setStatusMessage('Processando imagem...');
     
     try {
-      // Primeira tentativa: OCR local gratuito
+      // Primeira tentativa: OCR local rápido (gratuito)
       setStatusMessage('🔍 Reconhecendo com OCR local...');
       
-      const localResult = await recognizePlate(canvas);
+      const localResult = await recognizePlateFast(canvas);
       
       // Verificar se ainda é a tentativa atual
       if (currentAttempt !== attemptRef.current) {

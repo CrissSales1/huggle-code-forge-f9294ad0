@@ -45,7 +45,7 @@ interface UseContinuousMonitoringReturn {
 }
 
 const COOLDOWN_MS = 30000; // 30 segundos entre detecções da mesma placa
-const FRAME_INTERVAL_MS = 200; // Processar frame a cada 200ms
+const FRAME_INTERVAL_MS = 350; // Processar frame a cada 350ms (otimizado)
 
 export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
   const [status, setStatus] = useState<MonitoringStatus>('idle');
