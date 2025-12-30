@@ -1,7 +1,8 @@
 /**
- * Componente de monitoramento contínuo com webcam local
+ * Componente de monitoramento contínuo com webcam local ou câmera IP
  * Exibe vídeo, área virtual poligonal, status e controles
  * Suporta tipo de câmera: entrada ou saída
+ * Suporta fonte: webcam ou go2rtc (câmera IP via RTSP)
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { 
@@ -31,12 +32,16 @@ import {
 } from '../utils/motionDetection';
 import PlacaVeiculo from './PlacaVeiculo';
 
+export type StreamMode = 'webcam' | 'go2rtc';
+
 interface CameraMonitorProps {
   onDetection?: (placa: string, isMorador: boolean, casa?: string) => void;
   /** Modo compacto: esconde resultado interno e detecções recentes */
   compact?: boolean;
   /** Tipo de câmera: entrada ou saída */
   cameraType?: CameraType;
+  /** Modo de stream (opcional, carrega do localStorage se não fornecido) */
+  streamMode?: StreamMode;
 }
 
 type EditMode = 'none' | 'creating' | 'adjusting';
