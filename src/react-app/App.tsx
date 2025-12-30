@@ -8,9 +8,7 @@ import Cadastro from '@/react-app/pages/Cadastro';
 import Relatorios from '@/react-app/pages/Relatorios';
 import Estatisticas from '@/react-app/pages/Estatisticas';
 import Monitoramento from '@/react-app/pages/Monitoramento';
-import MonitoramentoDual from '@/react-app/pages/MonitoramentoDual';
 import Configuracoes from '@/react-app/pages/Configuracoes';
-import ConfiguracoesCameras from '@/react-app/pages/ConfiguracoesCameras';
 import Instalar from '@/react-app/pages/Instalar';
 import { preloadOCR } from '@/react-app/utils/plateOCR';
 
@@ -55,9 +53,7 @@ function App() {
                     <Route path="/relatorios" element={<Relatorios />} />
                     <Route path="/estatisticas" element={<Estatisticas />} />
                     <Route path="/monitoramento" element={<Monitoramento />} />
-                    <Route path="/monitoramento-dual" element={<MonitoramentoDual />} />
                     <Route path="/configuracoes" element={<Configuracoes />} />
-                    <Route path="/configuracoes-cameras" element={<ConfiguracoesCameras />} />
                   </Routes>
                 </main>
               </div>
