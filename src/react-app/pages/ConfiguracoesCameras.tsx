@@ -77,7 +77,8 @@ export default function ConfiguracoesCameras() {
     try {
       // Tentar fetch com mode no-cors primeiro para verificar se servidor responde
       // Depois verificar via imagem MJPEG que não tem problema de CORS
-      const mjpegUrl = `${serverUrl}/api/frame.jpeg?src=${streamName}&t=${Date.now()}`;
+      const normalizedUrl = serverUrl.replace(/\/+$/, '');
+      const mjpegUrl = `${normalizedUrl}/api/frame.jpeg?src=${streamName}&t=${Date.now()}`;
       
       // Criar uma imagem para testar - MJPEG frames não têm problema de CORS
       const testImage = new Image();
