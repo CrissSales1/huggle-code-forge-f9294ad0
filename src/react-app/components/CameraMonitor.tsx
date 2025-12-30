@@ -1,5 +1,5 @@
 /**
- * Componente de monitoramento contínuo com webcam local
+ * Componente de monitoramento contínuo com webcam local ou stream HLS (IPCamLive)
  * Exibe vídeo, área virtual poligonal, status e controles
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
@@ -16,7 +16,10 @@ import {
   RotateCcw,
   Check,
   Gauge,
-  Clock
+  Clock,
+  Wifi,
+  WifiOff,
+  Radio
 } from 'lucide-react';
 import { useContinuousMonitoring, MonitoringStatus } from '../hooks/useContinuousMonitoring';
 import { 
@@ -58,6 +61,13 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
     setSelectedResolution,
     hasReference,
     recaptureReference,
+    // HLS
+    sourceMode,
+    setSourceMode,
+    hlsUrl,
+    setHlsUrl,
+    hlsStatus,
+    startMonitoringHLS,
   } = useContinuousMonitoring();
   
   const [showSettings, setShowSettings] = useState(false);
@@ -222,8 +232,28 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
       {/* Header */}
       <div className="flex items-center justify-between p-3 border-b border-gray-200 bg-gray-50">
         <div className="flex items-center gap-2">
-          <Camera className="w-5 h-5 text-blue-600" />
-          <h3 className="font-semibold text-gray-900">Monitoramento Local</h3>
+          {sourceMode === 'hls' ? (
+            <Radio className="w-5 h-5 text-purple-600" />
+          ) : (
+            <Camera className="w-5 h-5 text-blue-600" />
+          )}
+          <h3 className="font-semibold text-gray-900">
+            {sourceMode === 'hls' ? 'Stream RTSP (IPCamLive)' : 'Monitoramento Local'}
+          </h3>
+          {sourceMode === 'hls' && (
+            <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${
+              hlsStatus === 'connected' ? 'bg-green-100 text-green-700' :
+              hlsStatus === 'connecting' ? 'bg-yellow-100 text-yellow-700' :
+              hlsStatus === 'error' ? 'bg-red-100 text-red-700' :
+              'bg-gray-100 text-gray-600'
+            }`}>
+              {hlsStatus === 'connected' ? <Wifi className="w-3 h-3" /> : 
+               hlsStatus === 'error' ? <WifiOff className="w-3 h-3" /> : null}
+              {hlsStatus === 'connected' ? 'Conectado' :
+               hlsStatus === 'connecting' ? 'Conectando...' :
+               hlsStatus === 'error' ? 'Erro' : 'Desconectado'}
+            </span>
+          )}
         </div>
         
         <div className="flex items-center gap-2">
@@ -247,42 +277,95 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
       {/* Settings Panel */}
       {showSettings && (
         <div className="p-3 border-b border-gray-200 bg-gray-50 space-y-3">
-          {/* Seletor de Câmera */}
+          {/* Seletor de Fonte */}
           <div className="flex items-center gap-3">
-            <label className="text-sm font-medium text-gray-700 min-w-[70px]">Câmera:</label>
-            <select
-              value={selectedCamera}
-              onChange={(e) => setSelectedCamera(e.target.value)}
-              className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white"
-              disabled={isActive}
-            >
-              {availableCameras.map(cam => (
-                <option key={cam.deviceId} value={cam.deviceId}>
-                  {cam.label || `Câmera ${cam.deviceId.slice(0, 8)}`}
-                </option>
-              ))}
-            </select>
-          </div>
-          
-          {/* Seletor de Resolução */}
-          <div className="flex items-center gap-3">
-            <label className="text-sm font-medium text-gray-700 min-w-[70px]">Resolução:</label>
-            <select
-              value={selectedResolution}
-              onChange={(e) => setSelectedResolution(e.target.value as CameraResolution)}
-              className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white"
-              disabled={isActive}
-            >
-              {(Object.keys(RESOLUTION_OPTIONS) as CameraResolution[]).map(key => (
-                <option key={key} value={key}>
-                  {RESOLUTION_OPTIONS[key].label} - {RESOLUTION_OPTIONS[key].description}
-                </option>
-              ))}
-            </select>
+            <label className="text-sm font-medium text-gray-700 min-w-[70px]">Fonte:</label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setSourceMode('webcam')}
+                disabled={isActive}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                  sourceMode === 'webcam' 
+                    ? 'bg-blue-600 text-white' 
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                } ${isActive ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                <Camera className="w-4 h-4" />
+                Webcam Local
+              </button>
+              <button
+                onClick={() => setSourceMode('hls')}
+                disabled={isActive}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                  sourceMode === 'hls' 
+                    ? 'bg-purple-600 text-white' 
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                } ${isActive ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                <Radio className="w-4 h-4" />
+                Stream RTSP
+              </button>
+            </div>
             {isActive && (
               <span className="text-xs text-amber-600">Pare para alterar</span>
             )}
           </div>
+          
+          {/* Configuração HLS */}
+          {sourceMode === 'hls' && (
+            <div className="flex items-center gap-3">
+              <label className="text-sm font-medium text-gray-700 min-w-[70px]">URL HLS:</label>
+              <input
+                type="url"
+                value={hlsUrl}
+                onChange={(e) => setHlsUrl(e.target.value)}
+                placeholder="https://ipcamlive.com/.../playlist.m3u8"
+                className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white"
+                disabled={isActive}
+              />
+            </div>
+          )}
+          
+          {/* Seletor de Câmera - só para webcam */}
+          {sourceMode === 'webcam' && (
+            <div className="flex items-center gap-3">
+              <label className="text-sm font-medium text-gray-700 min-w-[70px]">Câmera:</label>
+              <select
+                value={selectedCamera}
+                onChange={(e) => setSelectedCamera(e.target.value)}
+                className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white"
+                disabled={isActive}
+              >
+                {availableCameras.map(cam => (
+                  <option key={cam.deviceId} value={cam.deviceId}>
+                    {cam.label || `Câmera ${cam.deviceId.slice(0, 8)}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          
+          {/* Seletor de Resolução - só para webcam */}
+          {sourceMode === 'webcam' && (
+            <div className="flex items-center gap-3">
+              <label className="text-sm font-medium text-gray-700 min-w-[70px]">Resolução:</label>
+              <select
+                value={selectedResolution}
+                onChange={(e) => setSelectedResolution(e.target.value as CameraResolution)}
+                className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white"
+                disabled={isActive}
+              >
+                {(Object.keys(RESOLUTION_OPTIONS) as CameraResolution[]).map(key => (
+                  <option key={key} value={key}>
+                    {RESOLUTION_OPTIONS[key].label} - {RESOLUTION_OPTIONS[key].description}
+                  </option>
+                ))}
+              </select>
+              {isActive && (
+                <span className="text-xs text-amber-600">Pare para alterar</span>
+              )}
+            </div>
+          )}
           
           {/* Toggle de visibilidade da área */}
           <div className="flex items-center gap-3">
@@ -579,11 +662,16 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
         <div className="flex items-center gap-2">
           {!isActive ? (
             <button
-              onClick={() => startMonitoring()}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              onClick={() => sourceMode === 'hls' ? startMonitoringHLS() : startMonitoring()}
+              disabled={sourceMode === 'hls' && !hlsUrl}
+              className={`flex items-center gap-2 px-4 py-2 text-white rounded-lg transition-colors ${
+                sourceMode === 'hls' 
+                  ? 'bg-purple-600 hover:bg-purple-700' 
+                  : 'bg-green-600 hover:bg-green-700'
+              } ${sourceMode === 'hls' && !hlsUrl ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               <Play className="w-4 h-4" />
-              Iniciar
+              {sourceMode === 'hls' ? 'Conectar Stream' : 'Iniciar'}
             </button>
           ) : (
             <button
@@ -593,6 +681,10 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
               <Square className="w-4 h-4" />
               Parar
             </button>
+          )}
+          
+          {sourceMode === 'hls' && !hlsUrl && !isActive && (
+            <span className="text-xs text-amber-600">Configure a URL HLS nas configurações</span>
           )}
         </div>
       </div>

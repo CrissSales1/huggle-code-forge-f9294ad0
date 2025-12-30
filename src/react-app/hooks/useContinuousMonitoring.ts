@@ -1,8 +1,9 @@
 /**
- * Hook para monitoramento contínuo com webcam local
+ * Hook para monitoramento contínuo com webcam local ou stream HLS (IPCamLive)
  * Detecta movimento em área virtual e dispara OCR híbrido
  */
 import { useState, useCallback, useRef, useEffect } from 'react';
+import Hls from 'hls.js';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlateRecognition } from './usePlateRecognition';
 import { 
@@ -18,6 +19,29 @@ import {
   loadCameraResolution,
   saveCameraResolution,
 } from '../utils/motionDetection';
+
+export type SourceMode = 'webcam' | 'hls';
+
+// Helpers para persistência de configurações HLS
+const HLS_URL_KEY = 'portacerta_hls_url';
+const SOURCE_MODE_KEY = 'portacerta_source_mode';
+
+export function loadHlsUrl(): string {
+  return localStorage.getItem(HLS_URL_KEY) || '';
+}
+
+export function saveHlsUrl(url: string): void {
+  localStorage.setItem(HLS_URL_KEY, url);
+}
+
+export function loadSourceMode(): SourceMode {
+  const saved = localStorage.getItem(SOURCE_MODE_KEY);
+  return (saved === 'hls' ? 'hls' : 'webcam') as SourceMode;
+}
+
+export function saveSourceMode(mode: SourceMode): void {
+  localStorage.setItem(SOURCE_MODE_KEY, mode);
+}
 
 export type MonitoringStatus = 'idle' | 'starting' | 'monitoring' | 'motion_detected' | 'processing' | 'error';
 
@@ -63,6 +87,13 @@ interface UseContinuousMonitoringReturn {
   // Propriedades de referência
   hasReference: boolean;
   recaptureReference: () => void;
+  // HLS/RTSP streaming
+  sourceMode: SourceMode;
+  setSourceMode: (mode: SourceMode) => void;
+  hlsUrl: string;
+  setHlsUrl: (url: string) => void;
+  hlsStatus: 'idle' | 'connecting' | 'connected' | 'error';
+  startMonitoringHLS: () => Promise<void>;
 }
 
 const COOLDOWN_MS = 30000; // 30 segundos entre detecções da mesma placa
@@ -83,6 +114,11 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
   const [selectedResolution, setSelectedResolutionState] = useState<CameraResolution>(loadCameraResolution());
   const [hasReference, setHasReference] = useState(false);
   
+  // Estados HLS/RTSP
+  const [sourceMode, setSourceModeState] = useState<SourceMode>(loadSourceMode());
+  const [hlsUrl, setHlsUrlState] = useState<string>(loadHlsUrl());
+  const [hlsStatus, setHlsStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
+  
   // Estado de métricas de processamento
   const [processingInfo, setProcessingInfo] = useState<ProcessingInfo>({
     stage: 'idle',
@@ -99,6 +135,7 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const hlsRef = useRef<Hls | null>(null);
   const motionDetectorRef = useRef<MotionDetector>(new MotionDetector());
   const frameIntervalRef = useRef<number | null>(null);
   const recentPlatesRef = useRef<Map<string, number>>(new Map());
@@ -137,6 +174,17 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
   const setSelectedResolution = useCallback((resolution: CameraResolution) => {
     setSelectedResolutionState(resolution);
     saveCameraResolution(resolution);
+  }, []);
+  
+  // Funções HLS
+  const setSourceMode = useCallback((mode: SourceMode) => {
+    setSourceModeState(mode);
+    saveSourceMode(mode);
+  }, []);
+  
+  const setHlsUrl = useCallback((url: string) => {
+    setHlsUrlState(url);
+    saveHlsUrl(url);
   }, []);
   
   // Funções de métricas de processamento
@@ -557,13 +605,21 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
   
   // Parar monitoramento
   const stopMonitoring = useCallback(() => {
+    // Parar webcam se ativa
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
     }
     
+    // Parar HLS se ativo
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+    
     if (videoRef.current) {
       videoRef.current.srcObject = null;
+      videoRef.current.src = '';
     }
     
     if (frameIntervalRef.current) {
@@ -577,7 +633,130 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
     setStatus('idle');
     setStatusMessage('Parado');
     setMotionPercent(0);
+    setHlsStatus('idle');
   }, []);
+  
+  // Iniciar monitoramento via HLS (IPCamLive)
+  const startMonitoringHLS = useCallback(async () => {
+    if (!hlsUrl) {
+      setStatus('error');
+      setStatusMessage('❌ URL HLS não configurada');
+      return;
+    }
+    
+    try {
+      setStatus('starting');
+      setStatusMessage('Conectando ao stream...');
+      setHlsStatus('connecting');
+      
+      // Verificar suporte a HLS
+      if (!Hls.isSupported() && !videoRef.current?.canPlayType('application/vnd.apple.mpegurl')) {
+        throw new Error('Navegador não suporta HLS');
+      }
+      
+      // Parar qualquer monitoramento anterior
+      stopMonitoring();
+      
+      motionDetectorRef.current.fullReset();
+      recentPlatesRef.current.clear();
+      resetOCR();
+      setHasReference(false);
+      
+      // Resetar métricas
+      processingTimesRef.current = [];
+      setProcessingInfo({
+        stage: 'idle',
+        stageLabel: 'Conectando stream...',
+        currentTimeMs: 0,
+        lastOcrTimeMs: 0,
+        avgTimeMs: 0,
+      });
+      
+      if (Hls.isSupported()) {
+        const hls = new Hls({
+          enableWorker: true,
+          lowLatencyMode: true,
+          backBufferLength: 30,
+        });
+        
+        hlsRef.current = hls;
+        
+        hls.loadSource(hlsUrl);
+        hls.attachMedia(videoRef.current!);
+        
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          console.log('✅ HLS: Manifest carregado');
+          videoRef.current?.play();
+        });
+        
+        hls.on(Hls.Events.ERROR, (_event, data) => {
+          console.error('❌ HLS Error:', data);
+          if (data.fatal) {
+            setHlsStatus('error');
+            setStatus('error');
+            setStatusMessage(`❌ Erro no stream: ${data.type}`);
+            
+            // Tentar reconectar após 5 segundos
+            setTimeout(() => {
+              if (hlsRef.current && isActive) {
+                console.log('🔄 Tentando reconectar...');
+                hls.startLoad();
+              }
+            }, 5000);
+          }
+        });
+        
+        // Aguardar vídeo iniciar
+        videoRef.current!.onplaying = () => {
+          console.log('🎥 HLS: Reprodução iniciada');
+          setHlsStatus('connected');
+          setIsActive(true);
+          setStatus('monitoring');
+          setStatusMessage('📸 Capturando referência...');
+          
+          // Aguardar vídeo estabilizar e capturar referência
+          setTimeout(() => {
+            if (videoRef.current && canvasRef.current) {
+              const success = motionDetectorRef.current.captureReference(
+                videoRef.current,
+                canvasRef.current,
+                loadVirtualArea() || getDefaultVirtualArea()
+              );
+              
+              setHasReference(success);
+              
+              if (success) {
+                setStatusMessage('🟢 Monitorando stream...');
+                setProcessingInfo(prev => ({
+                  ...prev,
+                  stageLabel: 'Monitorando área...',
+                }));
+              } else {
+                setStatusMessage('⚠️ Erro ao capturar referência');
+              }
+            }
+          }, 1500);
+        };
+        
+      } else if (videoRef.current?.canPlayType('application/vnd.apple.mpegurl')) {
+        // Safari nativo
+        videoRef.current.src = hlsUrl;
+        videoRef.current.addEventListener('loadedmetadata', () => {
+          videoRef.current?.play();
+          setHlsStatus('connected');
+          setIsActive(true);
+          setStatus('monitoring');
+          setStatusMessage('🟢 Monitorando stream...');
+        });
+      }
+      
+    } catch (e) {
+      console.error('Erro ao iniciar HLS:', e);
+      setStatus('error');
+      setHlsStatus('error');
+      setStatusMessage(`❌ ${e instanceof Error ? e.message : 'Erro ao conectar'}`);
+    }
+  }, [hlsUrl, stopMonitoring, resetOCR, isActive]);
   
   // Atualizar área virtual
   const updateVirtualArea = useCallback((area: VirtualArea) => {
@@ -615,5 +794,12 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
     // Propriedades de referência
     hasReference,
     recaptureReference,
+    // HLS/RTSP streaming
+    sourceMode,
+    setSourceMode,
+    hlsUrl,
+    setHlsUrl,
+    hlsStatus,
+    startMonitoringHLS,
   };
 }
