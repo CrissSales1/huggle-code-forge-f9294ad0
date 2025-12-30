@@ -75,37 +75,57 @@ export default function ConfiguracoesCameras() {
     setTest({ status: 'testing', message: 'Testando conexão...' });
     
     try {
-      // Verificar se servidor responde
-      const apiUrl = `${serverUrl}/api/streams`;
-      const response = await fetch(apiUrl, { 
-        method: 'GET',
-        signal: AbortSignal.timeout(5000),
+      // Tentar fetch com mode no-cors primeiro para verificar se servidor responde
+      // Depois verificar via imagem MJPEG que não tem problema de CORS
+      const mjpegUrl = `${serverUrl}/api/frame.jpeg?src=${streamName}&t=${Date.now()}`;
+      
+      // Criar uma imagem para testar - MJPEG frames não têm problema de CORS
+      const testImage = new Image();
+      
+      const imagePromise = new Promise<boolean>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          testImage.src = '';
+          reject(new Error('Timeout - servidor não respondeu em 5s'));
+        }, 5000);
+        
+        testImage.onload = () => {
+          clearTimeout(timeout);
+          resolve(true);
+        };
+        
+        testImage.onerror = () => {
+          clearTimeout(timeout);
+          reject(new Error('Não foi possível carregar frame do stream'));
+        };
+        
+        testImage.src = mjpegUrl;
       });
       
-      if (!response.ok) {
-        throw new Error(`Servidor retornou ${response.status}`);
-      }
+      await imagePromise;
       
-      const streams = await response.json();
+      setTest({ 
+        status: 'success', 
+        message: `✅ Stream "${streamName}" está funcionando!`
+      });
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Erro desconhecido';
       
-      // Verificar se stream existe
-      if (streams[streamName]) {
+      // Verificar se é problema de CORS ou conexão
+      const isCorsOrNetwork = errorMessage.includes('Failed to fetch') || 
+                              errorMessage.includes('NetworkError') ||
+                              errorMessage.includes('frame');
+      
+      if (isCorsOrNetwork) {
         setTest({ 
-          status: 'success', 
-          message: `✅ Stream "${streamName}" encontrado e ativo!`
+          status: 'error', 
+          message: `❌ Falha ao conectar. Possíveis causas:\n• go2rtc não está rodando em ${serverUrl}\n• Stream "${streamName}" não existe no go2rtc\n• Firewall bloqueando conexão`
         });
       } else {
         setTest({ 
           status: 'error', 
-          message: `⚠️ Servidor OK, mas stream "${streamName}" não encontrado. Verifique o go2rtc.yaml`
+          message: `❌ ${errorMessage}`
         });
       }
-    } catch (e) {
-      const errorMessage = e instanceof Error ? e.message : 'Erro desconhecido';
-      setTest({ 
-        status: 'error', 
-        message: `❌ Falha: ${errorMessage}. Verifique se go2rtc está rodando em ${serverUrl}`
-      });
     }
   };
   
@@ -256,13 +276,13 @@ export default function ConfiguracoesCameras() {
           
           {/* Resultado do Teste */}
           {testEntrada.status !== 'idle' && (
-            <div className={`mt-3 flex items-center gap-2 p-3 rounded-lg ${
+            <div className={`mt-3 flex items-start gap-2 p-3 rounded-lg ${
               testEntrada.status === 'success' ? 'bg-green-50 text-green-800' :
               testEntrada.status === 'error' ? 'bg-red-50 text-red-800' :
               'bg-blue-50 text-blue-800'
             }`}>
               <TestStatusIcon status={testEntrada.status} />
-              <span className="text-sm">{testEntrada.message}</span>
+              <span className="text-sm whitespace-pre-line">{testEntrada.message}</span>
             </div>
           )}
         </div>
@@ -338,13 +358,13 @@ export default function ConfiguracoesCameras() {
           
           {/* Resultado do Teste */}
           {testSaida.status !== 'idle' && (
-            <div className={`mt-3 flex items-center gap-2 p-3 rounded-lg ${
+            <div className={`mt-3 flex items-start gap-2 p-3 rounded-lg ${
               testSaida.status === 'success' ? 'bg-green-50 text-green-800' :
               testSaida.status === 'error' ? 'bg-red-50 text-red-800' :
               'bg-blue-50 text-blue-800'
             }`}>
               <TestStatusIcon status={testSaida.status} />
-              <span className="text-sm">{testSaida.message}</span>
+              <span className="text-sm whitespace-pre-line">{testSaida.message}</span>
             </div>
           )}
         </div>
