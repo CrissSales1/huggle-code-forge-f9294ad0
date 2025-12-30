@@ -20,7 +20,11 @@ import {
   Gauge,
   Clock,
   ArrowDown,
-  ArrowUp
+  ArrowUp,
+  Wifi,
+  WifiOff,
+  Video,
+  Globe
 } from 'lucide-react';
 import { useContinuousMonitoring, MonitoringStatus, CameraType } from '../hooks/useContinuousMonitoring';
 import { 
@@ -30,6 +34,7 @@ import {
   CameraResolution,
   RESOLUTION_OPTIONS,
 } from '../utils/motionDetection';
+import { loadStreamMode } from '../hooks/useGo2rtcStream';
 import PlacaVeiculo from './PlacaVeiculo';
 
 export type StreamMode = 'webcam' | 'go2rtc';
@@ -72,6 +77,7 @@ export default function CameraMonitor({
     setSelectedResolution,
     hasReference,
     recaptureReference,
+    connectionMode,
   } = useContinuousMonitoring({ cameraType });
   
   const [showSettings, setShowSettings] = useState(false);
@@ -84,6 +90,10 @@ export default function CameraMonitor({
   const isEntrada = cameraType === 'entrada';
   const CameraIcon = isEntrada ? ArrowDown : ArrowUp;
   const cameraLabel = isEntrada ? 'Entrada' : 'Saída';
+  
+  // Verificar modo atual
+  const currentStreamMode = loadStreamMode(cameraType);
+  const isIpCamera = currentStreamMode === 'go2rtc';
   
   // Toggle de visibilidade da área poligonal
   const [showPolygonOverlay, setShowPolygonOverlay] = useState<boolean>(() => {
@@ -114,6 +124,7 @@ export default function CameraMonitor({
       case 'monitoring': return isEntrada ? 'text-green-600 bg-green-100' : 'text-orange-600 bg-orange-100';
       case 'motion_detected': return 'text-yellow-600 bg-yellow-100';
       case 'processing': return 'text-blue-600 bg-blue-100';
+      case 'connecting': return 'text-purple-600 bg-purple-100';
       case 'error': return 'text-red-600 bg-red-100';
       default: return 'text-gray-600 bg-gray-100';
     }
@@ -125,8 +136,28 @@ export default function CameraMonitor({
       case 'monitoring': return <Activity className="w-4 h-4" />;
       case 'motion_detected': return <AlertCircle className="w-4 h-4" />;
       case 'processing': return <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />;
+      case 'connecting': return <Wifi className="w-4 h-4 animate-pulse" />;
       case 'error': return <XCircle className="w-4 h-4" />;
       default: return <Camera className="w-4 h-4" />;
+    }
+  };
+  
+  // Ícone do modo de conexão
+  const ConnectionModeIcon = () => {
+    switch (connectionMode) {
+      case 'webrtc': return <Globe className="w-3.5 h-3.5" />;
+      case 'mse': return <Wifi className="w-3.5 h-3.5" />;
+      case 'local': return <Video className="w-3.5 h-3.5" />;
+      default: return <WifiOff className="w-3.5 h-3.5" />;
+    }
+  };
+  
+  const getConnectionModeLabel = () => {
+    switch (connectionMode) {
+      case 'webrtc': return 'WebRTC';
+      case 'mse': return 'MSE';
+      case 'local': return 'Webcam';
+      default: return 'Desconectado';
     }
   };
   
@@ -250,9 +281,30 @@ export default function CameraMonitor({
         <div className="flex items-center gap-2">
           <CameraIcon className={`w-5 h-5 ${iconColorClass}`} />
           <h3 className="font-semibold text-gray-900">Câmera {cameraLabel}</h3>
-          <span className={`text-xs px-2 py-0.5 rounded-full ${isEntrada ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
-            {cameraLabel}
+          
+          {/* Badge do tipo de câmera */}
+          <span className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1 ${
+            isIpCamera 
+              ? 'bg-purple-100 text-purple-700' 
+              : isEntrada 
+                ? 'bg-blue-100 text-blue-700' 
+                : 'bg-orange-100 text-orange-700'
+          }`}>
+            {isIpCamera ? <Globe className="w-3 h-3" /> : <Video className="w-3 h-3" />}
+            {isIpCamera ? 'IP' : 'Webcam'}
           </span>
+          
+          {/* Badge de conexão quando ativo */}
+          {isActive && connectionMode !== 'none' && (
+            <span className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1 ${
+              connectionMode === 'webrtc' ? 'bg-green-100 text-green-700' :
+              connectionMode === 'mse' ? 'bg-yellow-100 text-yellow-700' :
+              'bg-gray-100 text-gray-700'
+            }`}>
+              <ConnectionModeIcon />
+              {getConnectionModeLabel()}
+            </span>
+          )}
         </div>
         
         <div className="flex items-center gap-2">
@@ -276,42 +328,57 @@ export default function CameraMonitor({
       {/* Settings Panel */}
       {showSettings && (
         <div className="p-3 border-b border-gray-200 bg-gray-50 space-y-3">
-          {/* Seletor de Câmera */}
-          <div className="flex items-center gap-3">
-            <label className="text-sm font-medium text-gray-700 min-w-[70px]">Câmera:</label>
-            <select
-              value={selectedCamera}
-              onChange={(e) => setSelectedCamera(e.target.value)}
-              className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white"
-              disabled={isActive}
-            >
-              {availableCameras.map(cam => (
-                <option key={cam.deviceId} value={cam.deviceId}>
-                  {cam.label || `Câmera ${cam.deviceId.slice(0, 8)}`}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Aviso sobre modo IP */}
+          {isIpCamera && (
+            <div className="flex items-start gap-2 p-2 bg-purple-50 border border-purple-200 rounded-lg">
+              <Globe className="w-4 h-4 text-purple-600 mt-0.5 flex-shrink-0" />
+              <div className="text-xs text-purple-700">
+                <strong>Modo Câmera IP:</strong> Usando stream via go2rtc. 
+                Para alterar configurações, vá em <a href="/configuracoes-cameras" className="underline font-medium">Configurações → Câmeras</a>.
+              </div>
+            </div>
+          )}
           
-          {/* Seletor de Resolução */}
-          <div className="flex items-center gap-3">
-            <label className="text-sm font-medium text-gray-700 min-w-[70px]">Resolução:</label>
-            <select
-              value={selectedResolution}
-              onChange={(e) => setSelectedResolution(e.target.value as CameraResolution)}
-              className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white"
-              disabled={isActive}
-            >
-              {(Object.keys(RESOLUTION_OPTIONS) as CameraResolution[]).map(key => (
-                <option key={key} value={key}>
-                  {RESOLUTION_OPTIONS[key].label} - {RESOLUTION_OPTIONS[key].description}
-                </option>
-              ))}
-            </select>
-            {isActive && (
-              <span className="text-xs text-amber-600">Pare para alterar</span>
-            )}
-          </div>
+          {/* Seletor de Câmera (apenas para webcam) */}
+          {!isIpCamera && (
+            <div className="flex items-center gap-3">
+              <label className="text-sm font-medium text-gray-700 min-w-[70px]">Câmera:</label>
+              <select
+                value={selectedCamera}
+                onChange={(e) => setSelectedCamera(e.target.value)}
+                className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white"
+                disabled={isActive}
+              >
+                {availableCameras.map(cam => (
+                  <option key={cam.deviceId} value={cam.deviceId}>
+                    {cam.label || `Câmera ${cam.deviceId.slice(0, 8)}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          
+          {/* Seletor de Resolução (apenas para webcam) */}
+          {!isIpCamera && (
+            <div className="flex items-center gap-3">
+              <label className="text-sm font-medium text-gray-700 min-w-[70px]">Resolução:</label>
+              <select
+                value={selectedResolution}
+                onChange={(e) => setSelectedResolution(e.target.value as CameraResolution)}
+                className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white"
+                disabled={isActive}
+              >
+                {(Object.keys(RESOLUTION_OPTIONS) as CameraResolution[]).map(key => (
+                  <option key={key} value={key}>
+                    {RESOLUTION_OPTIONS[key].label} - {RESOLUTION_OPTIONS[key].description}
+                  </option>
+                ))}
+              </select>
+              {isActive && (
+                <span className="text-xs text-amber-600">Pare para alterar</span>
+              )}
+            </div>
+          )}
           
           {/* Toggle de visibilidade da área */}
           <div className="flex items-center gap-3">
@@ -506,14 +573,39 @@ export default function CameraMonitor({
         {/* Overlay de status quando parado */}
         {!isActive && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60">
-            <Camera className={`w-16 h-16 mb-4 ${iconColorClass}`} />
-            <p className="text-white text-lg font-medium mb-2">Câmera de {cameraLabel} Parada</p>
-            <p className="text-gray-400 text-sm mb-4">Clique em Iniciar para começar o monitoramento</p>
+            {isIpCamera ? (
+              <Globe className={`w-16 h-16 mb-4 text-purple-400`} />
+            ) : (
+              <Camera className={`w-16 h-16 mb-4 ${iconColorClass}`} />
+            )}
+            <p className="text-white text-lg font-medium mb-2">
+              Câmera de {cameraLabel} Parada
+            </p>
+            <p className="text-gray-400 text-sm mb-4">
+              {isIpCamera 
+                ? 'Clique em Iniciar para conectar à câmera IP'
+                : 'Clique em Iniciar para começar o monitoramento'
+              }
+            </p>
+            {isIpCamera && (
+              <p className="text-purple-400 text-xs">
+                Modo: Câmera IP via go2rtc
+              </p>
+            )}
+          </div>
+        )}
+        
+        {/* Overlay de conexão */}
+        {status === 'connecting' && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60">
+            <div className="w-12 h-12 border-4 border-purple-400 border-t-transparent rounded-full animate-spin mb-4" />
+            <p className="text-white text-lg font-medium">Conectando...</p>
+            <p className="text-gray-400 text-sm">{statusMessage}</p>
           </div>
         )}
         
         {/* Métricas em tempo real */}
-        {isActive && (
+        {isActive && status !== 'connecting' && (
           <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
             {/* Movimento */}
             <div className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs ${
@@ -551,9 +643,11 @@ export default function CameraMonitor({
           {!isActive ? (
             <button
               onClick={() => startMonitoring()}
-              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-white rounded-lg transition-colors ${buttonBgClass}`}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-white rounded-lg transition-colors ${
+                isIpCamera ? 'bg-purple-600 hover:bg-purple-700' : buttonBgClass
+              }`}
             >
-              <Play className="w-5 h-5" />
+              {isIpCamera ? <Globe className="w-5 h-5" /> : <Play className="w-5 h-5" />}
               <span>Iniciar {cameraLabel}</span>
             </button>
           ) : (
