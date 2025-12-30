@@ -6,6 +6,7 @@
   "dependencies": {
     "@hono/zod-validator": "^0.5.0",
     "@supabase/supabase-js": "^2.89.0",
+    "hls.js": "^1.6.15",
     "hono": "4.7.7",
     "lovable-tagger": "^1.1.13",
     "lucide-react": "^0.510.0",
