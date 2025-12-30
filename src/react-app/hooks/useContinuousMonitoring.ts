@@ -1,7 +1,6 @@
 /**
  * Hook para monitoramento contínuo com webcam local
  * Detecta movimento em área virtual e dispara OCR híbrido
- * Suporta tipo de câmera: entrada ou saída
  */
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
@@ -9,16 +8,20 @@ import { usePlateRecognition } from './usePlateRecognition';
 import { 
   MotionDetector, 
   VirtualArea, 
+  loadVirtualArea, 
+  saveVirtualArea,
   getDefaultVirtualArea,
+  loadSelectedCamera,
+  saveSelectedCamera,
   CameraResolution,
   RESOLUTION_OPTIONS,
+  loadCameraResolution,
+  saveCameraResolution,
 } from '../utils/motionDetection';
 
 export type MonitoringStatus = 'idle' | 'starting' | 'monitoring' | 'motion_detected' | 'processing' | 'error';
 
 export type ProcessingStage = 'idle' | 'capturing' | 'preprocessing' | 'ocr' | 'validating' | 'done';
-
-export type CameraType = 'entrada' | 'saida';
 
 interface Detection {
   placa: string;
@@ -27,7 +30,6 @@ interface Detection {
   casa?: string;
   confidence: number;
   usedFallback: boolean;
-  direcao: CameraType;
 }
 
 export interface ProcessingInfo {
@@ -36,10 +38,6 @@ export interface ProcessingInfo {
   currentTimeMs: number;
   lastOcrTimeMs: number;
   avgTimeMs: number;
-}
-
-interface UseContinuousMonitoringOptions {
-  cameraType?: CameraType;
 }
 
 interface UseContinuousMonitoringReturn {
@@ -58,110 +56,34 @@ interface UseContinuousMonitoringReturn {
   selectedCamera: string;
   setSelectedCamera: (deviceId: string) => void;
   motionPercent: number;
+  // Novas propriedades
   processingInfo: ProcessingInfo;
   selectedResolution: CameraResolution;
   setSelectedResolution: (resolution: CameraResolution) => void;
+  // Propriedades de referência
   hasReference: boolean;
   recaptureReference: () => void;
-  cameraType: CameraType;
 }
 
 const COOLDOWN_MS = 30000; // 30 segundos entre detecções da mesma placa
 const FRAME_INTERVAL_MS = 350; // Processar frame a cada 350ms (otimizado)
 
-// Funções de storage com suporte a tipo de câmera
-function getStorageKey(baseKey: string, cameraType: CameraType): string {
-  return `${baseKey}_${cameraType}`;
-}
-
-function loadVirtualAreaForCamera(cameraType: CameraType): VirtualArea | null {
-  try {
-    const key = getStorageKey('portacerta_virtual_area', cameraType);
-    const saved = localStorage.getItem(key);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (!parsed.type && parsed.x !== undefined) {
-        return { ...parsed, type: 'rect' };
-      }
-      return parsed;
-    }
-  } catch (e) {
-    console.warn('Erro ao carregar área virtual:', e);
-  }
-  return null;
-}
-
-function saveVirtualAreaForCamera(area: VirtualArea, cameraType: CameraType): void {
-  try {
-    const key = getStorageKey('portacerta_virtual_area', cameraType);
-    localStorage.setItem(key, JSON.stringify(area));
-  } catch (e) {
-    console.warn('Erro ao salvar área virtual:', e);
-  }
-}
-
-function loadSelectedCameraForType(cameraType: CameraType): string | null {
-  try {
-    const key = getStorageKey('portacerta_selected_camera', cameraType);
-    return localStorage.getItem(key);
-  } catch (e) {
-    console.warn('Erro ao carregar câmera:', e);
-  }
-  return null;
-}
-
-function saveSelectedCameraForType(deviceId: string, cameraType: CameraType): void {
-  try {
-    const key = getStorageKey('portacerta_selected_camera', cameraType);
-    localStorage.setItem(key, deviceId);
-  } catch (e) {
-    console.warn('Erro ao salvar câmera:', e);
-  }
-}
-
-function loadResolutionForCamera(cameraType: CameraType): CameraResolution {
-  try {
-    const key = getStorageKey('portacerta_camera_resolution', cameraType);
-    const saved = localStorage.getItem(key);
-    if (saved && (saved === 'low' || saved === 'medium' || saved === 'high')) {
-      return saved;
-    }
-  } catch (e) {
-    console.warn('Erro ao carregar resolução:', e);
-  }
-  return 'medium';
-}
-
-function saveResolutionForCamera(resolution: CameraResolution, cameraType: CameraType): void {
-  try {
-    const key = getStorageKey('portacerta_camera_resolution', cameraType);
-    localStorage.setItem(key, resolution);
-  } catch (e) {
-    console.warn('Erro ao salvar resolução:', e);
-  }
-}
-
-export function useContinuousMonitoring(
-  options: UseContinuousMonitoringOptions = {}
-): UseContinuousMonitoringReturn {
-  const { cameraType = 'entrada' } = options;
-  
+export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
   const [status, setStatus] = useState<MonitoringStatus>('idle');
   const [statusMessage, setStatusMessage] = useState('Parado');
   const [isActive, setIsActive] = useState(false);
   const [virtualArea, setVirtualArea] = useState<VirtualArea>(
-    loadVirtualAreaForCamera(cameraType) || getDefaultVirtualArea()
+    loadVirtualArea() || getDefaultVirtualArea()
   );
   const [lastDetection, setLastDetection] = useState<Detection | null>(null);
   const [recentDetections, setRecentDetections] = useState<Detection[]>([]);
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
   const [selectedCamera, setSelectedCameraState] = useState<string>('');
   const [motionPercent, setMotionPercent] = useState(0);
-  const [selectedResolution, setSelectedResolutionState] = useState<CameraResolution>(
-    loadResolutionForCamera(cameraType)
-  );
+  const [selectedResolution, setSelectedResolutionState] = useState<CameraResolution>(loadCameraResolution());
   const [hasReference, setHasReference] = useState(false);
   
+  // Estado de métricas de processamento
   const [processingInfo, setProcessingInfo] = useState<ProcessingInfo>({
     stage: 'idle',
     stageLabel: 'Aguardando',
@@ -170,6 +92,7 @@ export function useContinuousMonitoring(
     avgTimeMs: 0,
   });
   
+  // Ref para calcular média de tempo
   const processingTimesRef = useRef<number[]>([]);
   const processingStartRef = useRef<number>(0);
   
@@ -190,34 +113,33 @@ export function useContinuousMonitoring(
         const cameras = devices.filter(d => d.kind === 'videoinput');
         setAvailableCameras(cameras);
         
-        const savedCamera = loadSelectedCameraForType(cameraType);
+        // Tentar usar câmera salva
+        const savedCamera = loadSelectedCamera();
         if (savedCamera && cameras.find(c => c.deviceId === savedCamera)) {
           setSelectedCameraState(savedCamera);
         } else if (cameras.length > 0) {
-          // Para saída, tentar usar segunda câmera se disponível
-          if (cameraType === 'saida' && cameras.length > 1) {
-            setSelectedCameraState(cameras[1].deviceId);
-          } else {
-            setSelectedCameraState(cameras[0].deviceId);
-          }
+          setSelectedCameraState(cameras[0].deviceId);
         }
       } catch (e) {
         console.warn('Erro ao listar câmeras:', e);
       }
     }
     loadCameras();
-  }, [cameraType]);
+  }, []);
   
+  // Função para salvar câmera selecionada
   const setSelectedCamera = useCallback((deviceId: string) => {
     setSelectedCameraState(deviceId);
-    saveSelectedCameraForType(deviceId, cameraType);
-  }, [cameraType]);
+    saveSelectedCamera(deviceId);
+  }, []);
   
+  // Função para salvar resolução selecionada
   const setSelectedResolution = useCallback((resolution: CameraResolution) => {
     setSelectedResolutionState(resolution);
-    saveResolutionForCamera(resolution, cameraType);
-  }, [cameraType]);
+    saveCameraResolution(resolution);
+  }, []);
   
+  // Funções de métricas de processamento
   const updateProcessingStage = useCallback((stage: ProcessingStage, stageLabel: string) => {
     const currentTimeMs = stage === 'idle' ? 0 : Date.now() - processingStartRef.current;
     setProcessingInfo(prev => ({
@@ -236,6 +158,7 @@ export function useContinuousMonitoring(
   const finishProcessingTimer = useCallback(() => {
     const totalTime = Date.now() - processingStartRef.current;
     processingTimesRef.current.push(totalTime);
+    // Manter apenas as últimas 10 medições
     if (processingTimesRef.current.length > 10) {
       processingTimesRef.current.shift();
     }
@@ -250,6 +173,7 @@ export function useContinuousMonitoring(
       avgTimeMs: Math.round(avgTime),
     }));
     
+    // Reset após 1.5s
     setTimeout(() => {
       setProcessingInfo(prev => ({
         ...prev,
@@ -260,6 +184,7 @@ export function useContinuousMonitoring(
     }, 1500);
   }, []);
   
+  // Verificar se placa foi detectada recentemente (deduplicação)
   const isPlateRecent = useCallback((placa: string): boolean => {
     const now = Date.now();
     const lastTime = recentPlatesRef.current.get(placa);
@@ -268,6 +193,7 @@ export function useContinuousMonitoring(
       return true;
     }
     
+    // Limpar placas antigas
     for (const [plate, time] of recentPlatesRef.current.entries()) {
       if (now - time >= COOLDOWN_MS) {
         recentPlatesRef.current.delete(plate);
@@ -277,6 +203,7 @@ export function useContinuousMonitoring(
     return false;
   }, []);
   
+  // Marcar placa como detectada
   const markPlateDetected = useCallback((placa: string) => {
     recentPlatesRef.current.set(placa, Date.now());
   }, []);
@@ -286,7 +213,7 @@ export function useContinuousMonitoring(
     try {
       const { data, error } = await supabase
         .from('veiculos_moradores')
-        .select('casa, status_presenca')
+        .select('casa')
         .eq('placa_veiculo', placa.toUpperCase().replace(/[^A-Z0-9]/g, ''))
         .maybeSingle();
       
@@ -302,32 +229,12 @@ export function useContinuousMonitoring(
     }
   }, []);
   
-  // Atualizar status de presença do morador
-  const updatePresencaStatus = useCallback(async (placa: string, novoStatus: 'dentro' | 'fora') => {
-    try {
-      const placaNormalizada = placa.toUpperCase().replace(/[^A-Z0-9]/g, '');
-      const { error } = await supabase
-        .from('veiculos_moradores')
-        .update({
-          status_presenca: novoStatus,
-          ultima_movimentacao: new Date().toISOString(),
-        })
-        .eq('placa_veiculo', placaNormalizada);
-      
-      if (error) throw error;
-      console.log(`✅ Status de presença atualizado: ${placa} -> ${novoStatus}`);
-    } catch (e) {
-      console.error('Erro ao atualizar status de presença:', e);
-    }
-  }, []);
-  
-  // Salvar detecção no banco com direção
+  // Salvar detecção no banco
   const saveDetection = useCallback(async (
     placa: string, 
     isMorador: boolean, 
     casa: string | undefined,
-    confidence: number,
-    direcao: CameraType
+    confidence: number
   ) => {
     try {
       const { error } = await supabase
@@ -338,21 +245,14 @@ export function useContinuousMonitoring(
           is_morador: isMorador,
           casa_morador: casa || null,
           confidence: confidence,
-          direcao: direcao,
         });
       
       if (error) throw error;
-      console.log(`✅ Detecção salva: ${placa} (${direcao})`);
-      
-      // Se é morador, atualizar status de presença
-      if (isMorador) {
-        const novoStatus = direcao === 'entrada' ? 'dentro' : 'fora';
-        await updatePresencaStatus(placa, novoStatus);
-      }
+      console.log('✅ Detecção salva:', placa);
     } catch (e) {
       console.error('Erro ao salvar detecção:', e);
     }
-  }, [updatePresencaStatus]);
+  }, []);
   
   // Processar frame para OCR
   const processFrameForOCR = useCallback(async (): Promise<boolean> => {
@@ -361,36 +261,47 @@ export function useContinuousMonitoring(
     setStatus('processing');
     setStatusMessage('🔍 Reconhecendo placa...');
     
+    // Marcar que tentativa de OCR foi feita
     motionDetectorRef.current.markOcrAttempted();
+    
+    // Iniciar timer de processamento
     startProcessingTimer();
     
     try {
+      // Etapa 1: Capturar
       updateProcessingStage('capturing', 'Capturando frame...');
       const capturedCanvas = motionDetectorRef.current.captureArea(
         videoRef.current,
         virtualArea
       );
       
+      // Etapa 2: Pre-processamento (acontece dentro do OCR)
       updateProcessingStage('preprocessing', 'Pré-processando...');
+      
+      // Etapa 3: OCR
       updateProcessingStage('ocr', 'Executando OCR...');
       const result = await recognizeFromCanvas(capturedCanvas);
       
+      // Etapa 4: Validação
       updateProcessingStage('validating', 'Validando placa...');
       
       if (result.success && result.validation.isValid) {
         const placa = result.validation.formatted;
         
+        // Verificar deduplicação
         if (isPlateRecent(placa)) {
           console.log(`⏳ Placa ${placa} detectada recentemente, ignorando...`);
           finishProcessingTimer();
           setStatus('monitoring');
           setStatusMessage('🟢 Monitorando...');
+          // Marcar como sucesso para não tentar novamente
           motionDetectorRef.current.markOcrSuccess();
           return true;
         }
         
         markPlateDetected(placa);
         
+        // Verificar se é morador
         const { isMorador, casa } = await checkIfMorador(placa);
         
         const detection: Detection = {
@@ -400,22 +311,23 @@ export function useContinuousMonitoring(
           casa,
           confidence: result.validation.confidence,
           usedFallback,
-          direcao: cameraType,
         };
         
         setLastDetection(detection);
         setRecentDetections(prev => [detection, ...prev.slice(0, 9)]);
         
-        await saveDetection(placa, isMorador, casa, result.validation.confidence, cameraType);
+        // Salvar no banco
+        await saveDetection(placa, isMorador, casa, result.validation.confidence);
         
         finishProcessingTimer();
+        
+        // Marcar OCR como sucesso - não tentar novamente
         motionDetectorRef.current.markOcrSuccess();
         
-        const direcaoLabel = cameraType === 'entrada' ? '⬇️' : '⬆️';
         if (isMorador) {
-          setStatusMessage(`${direcaoLabel} ✅ Morador: ${placa} - Casa ${casa}`);
+          setStatusMessage(`✅ Morador: ${placa} - Casa ${casa}`);
         } else {
-          setStatusMessage(`${direcaoLabel} ⚠️ Não cadastrado: ${placa}`);
+          setStatusMessage(`⚠️ Não cadastrado: ${placa}`);
         }
         
         return true;
@@ -431,6 +343,9 @@ export function useContinuousMonitoring(
       setStatusMessage('❌ Erro no processamento - tentando novamente...');
       return false;
     }
+    
+    // Voltar ao monitoramento após 2 segundos
+    // (movido para processFrame para manter o fluxo)
   }, [
     status, 
     virtualArea, 
@@ -443,9 +358,9 @@ export function useContinuousMonitoring(
     startProcessingTimer,
     updateProcessingStage,
     finishProcessingTimer,
-    cameraType,
   ]);
   
+  // Função para capturar/recapturar referência
   const captureReferenceFrame = useCallback(() => {
     if (!videoRef.current || !canvasRef.current) return false;
     
@@ -463,6 +378,7 @@ export function useContinuousMonitoring(
         stageLabel: 'Referência capturada!',
       }));
       
+      // Mostrar mensagem por 2 segundos e depois voltar ao normal
       setTimeout(() => {
         setProcessingInfo(prev => ({
           ...prev,
@@ -474,21 +390,25 @@ export function useContinuousMonitoring(
     return success;
   }, [virtualArea]);
   
+  // Recapturar referência manualmente
   const recaptureReference = useCallback(() => {
     if (isActive && videoRef.current && canvasRef.current) {
       captureReferenceFrame();
     }
   }, [isActive, captureReferenceFrame]);
   
+  // Loop de processamento de frames
   const processFrame = useCallback(async () => {
     if (!videoRef.current || !canvasRef.current) {
       return;
     }
     
+    // Só processar se está monitorando ou com movimento detectado
     if (status !== 'monitoring' && status !== 'motion_detected') {
       return;
     }
     
+    // Verificar se tem referência
     if (!motionDetectorRef.current.hasReference()) {
       return;
     }
@@ -501,11 +421,13 @@ export function useContinuousMonitoring(
     
     setMotionPercent(result.motionPercent);
     
+    // Auto-atualizar referência se necessário
     if (result.shouldUpdateReference) {
       console.log('🔄 Auto-atualizando referência...');
       captureReferenceFrame();
     }
     
+    // Atualizar stageLabel baseado no estado atual
     if (result.hasMotion) {
       setStatus('motion_detected');
       setStatusMessage('🟡 Veículo detectado...');
@@ -515,6 +437,7 @@ export function useContinuousMonitoring(
         stageLabel: 'Veículo detectado!',
       }));
     } else if (!result.hasMotion && status === 'motion_detected') {
+      // Resetar para monitoramento quando não há mais veículo
       setStatus('monitoring');
       setStatusMessage('🟢 Monitorando...');
       setProcessingInfo(prev => ({
@@ -523,15 +446,18 @@ export function useContinuousMonitoring(
         stageLabel: 'Monitorando área...',
       }));
     } else if (status === 'monitoring' && processingInfo.stage === 'idle' && processingInfo.stageLabel === 'Aguardando') {
+      // Atualizar label inicial quando começar a monitorar
       setProcessingInfo(prev => ({
         ...prev,
         stageLabel: 'Monitorando área...',
       }));
     }
     
+    // Se deve tentar OCR (primeira vez ou re-tentativa)
     if (result.shouldAttemptOCR) {
       const success = await processFrameForOCR();
       
+      // Voltar ao monitoramento após 2 segundos
       setTimeout(() => {
         if (isActive) {
           setStatus('monitoring');
@@ -541,6 +467,7 @@ export function useContinuousMonitoring(
     }
   }, [status, virtualArea, processFrameForOCR, captureReferenceFrame, processingInfo.stage, processingInfo.stageLabel, isActive]);
   
+  // Iniciar loop de frames
   useEffect(() => {
     if (isActive && (status === 'monitoring' || status === 'motion_detected')) {
       frameIntervalRef.current = window.setInterval(processFrame, FRAME_INTERVAL_MS);
@@ -554,11 +481,13 @@ export function useContinuousMonitoring(
     };
   }, [isActive, status, processFrame]);
   
+  // Iniciar monitoramento
   const startMonitoring = useCallback(async (deviceId?: string) => {
     try {
       setStatus('starting');
       setStatusMessage('Iniciando câmera...');
       
+      // Usar resolução selecionada
       const resConfig = RESOLUTION_OPTIONS[selectedResolution];
       
       const constraints: MediaStreamConstraints = {
@@ -582,6 +511,7 @@ export function useContinuousMonitoring(
       resetOCR();
       setHasReference(false);
       
+      // Resetar métricas
       processingTimesRef.current = [];
       setProcessingInfo({
         stage: 'idle',
@@ -595,13 +525,13 @@ export function useContinuousMonitoring(
       setStatus('monitoring');
       setStatusMessage('📸 Capturando referência...');
       
+      // Aguardar vídeo estabilizar e capturar referência
       setTimeout(() => {
         if (videoRef.current && canvasRef.current) {
-          const currentArea = loadVirtualAreaForCamera(cameraType) || getDefaultVirtualArea();
           const success = motionDetectorRef.current.captureReference(
             videoRef.current,
             canvasRef.current,
-            currentArea
+            loadVirtualArea() || getDefaultVirtualArea()
           );
           
           setHasReference(success);
@@ -616,15 +546,16 @@ export function useContinuousMonitoring(
             setStatusMessage('⚠️ Erro ao capturar referência');
           }
         }
-      }, 1000);
+      }, 1000); // Aguardar 1 segundo para estabilizar
       
     } catch (e) {
       console.error('Erro ao iniciar câmera:', e);
       setStatus('error');
       setStatusMessage('❌ Erro ao acessar câmera');
     }
-  }, [selectedCamera, selectedResolution, resetOCR, cameraType]);
+  }, [selectedCamera, selectedResolution, resetOCR]);
   
+  // Parar monitoramento
   const stopMonitoring = useCallback(() => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
@@ -648,11 +579,13 @@ export function useContinuousMonitoring(
     setMotionPercent(0);
   }, []);
   
+  // Atualizar área virtual
   const updateVirtualArea = useCallback((area: VirtualArea) => {
     setVirtualArea(area);
-    saveVirtualAreaForCamera(area, cameraType);
-  }, [cameraType]);
+    saveVirtualArea(area);
+  }, []);
   
+  // Cleanup ao desmontar
   useEffect(() => {
     return () => {
       stopMonitoring();
@@ -675,11 +608,12 @@ export function useContinuousMonitoring(
     selectedCamera,
     setSelectedCamera,
     motionPercent,
+    // Novas propriedades
     processingInfo,
     selectedResolution,
     setSelectedResolution,
+    // Propriedades de referência
     hasReference,
     recaptureReference,
-    cameraType,
   };
 }

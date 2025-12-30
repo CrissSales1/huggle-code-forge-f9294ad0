@@ -1,7 +1,6 @@
 /**
  * Componente de monitoramento contínuo com webcam local
  * Exibe vídeo, área virtual poligonal, status e controles
- * Suporta tipo de câmera: entrada ou saída
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { 
@@ -17,11 +16,9 @@ import {
   RotateCcw,
   Check,
   Gauge,
-  Clock,
-  ArrowDown,
-  ArrowUp
+  Clock
 } from 'lucide-react';
-import { useContinuousMonitoring, MonitoringStatus, CameraType } from '../hooks/useContinuousMonitoring';
+import { useContinuousMonitoring, MonitoringStatus } from '../hooks/useContinuousMonitoring';
 import { 
   Point, 
   VirtualAreaPolygon, 
@@ -35,17 +32,11 @@ interface CameraMonitorProps {
   onDetection?: (placa: string, isMorador: boolean, casa?: string) => void;
   /** Modo compacto: esconde resultado interno e detecções recentes */
   compact?: boolean;
-  /** Tipo de câmera: entrada ou saída */
-  cameraType?: CameraType;
 }
 
 type EditMode = 'none' | 'creating' | 'adjusting';
 
-export default function CameraMonitor({ 
-  onDetection, 
-  compact = false,
-  cameraType = 'entrada'
-}: CameraMonitorProps) {
+export default function CameraMonitor({ onDetection, compact = false }: CameraMonitorProps) {
   const {
     status,
     statusMessage,
@@ -67,7 +58,7 @@ export default function CameraMonitor({
     setSelectedResolution,
     hasReference,
     recaptureReference,
-  } = useContinuousMonitoring({ cameraType });
+  } = useContinuousMonitoring();
   
   const [showSettings, setShowSettings] = useState(false);
   const [editMode, setEditMode] = useState<EditMode>('none');
@@ -75,23 +66,16 @@ export default function CameraMonitor({
   const [draggingPoint, setDraggingPoint] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   
-  // Cores baseadas no tipo de câmera
-  const isEntrada = cameraType === 'entrada';
-  const CameraIcon = isEntrada ? ArrowDown : ArrowUp;
-  const cameraLabel = isEntrada ? 'Entrada' : 'Saída';
-  
   // Toggle de visibilidade da área poligonal
   const [showPolygonOverlay, setShowPolygonOverlay] = useState<boolean>(() => {
-    const key = `portacerta_show_polygon_${cameraType}`;
-    const saved = localStorage.getItem(key);
+    const saved = localStorage.getItem('portacerta_show_polygon');
     return saved !== null ? JSON.parse(saved) : true;
   });
   
   const togglePolygonVisibility = () => {
     setShowPolygonOverlay(prev => {
       const newValue = !prev;
-      const key = `portacerta_show_polygon_${cameraType}`;
-      localStorage.setItem(key, JSON.stringify(newValue));
+      localStorage.setItem('portacerta_show_polygon', JSON.stringify(newValue));
       return newValue;
     });
   };
@@ -106,7 +90,7 @@ export default function CameraMonitor({
   // Cores do status
   const getStatusColor = (s: MonitoringStatus) => {
     switch (s) {
-      case 'monitoring': return isEntrada ? 'text-green-600 bg-green-100' : 'text-orange-600 bg-orange-100';
+      case 'monitoring': return 'text-green-600 bg-green-100';
       case 'motion_detected': return 'text-yellow-600 bg-yellow-100';
       case 'processing': return 'text-blue-600 bg-blue-100';
       case 'error': return 'text-red-600 bg-red-100';
@@ -142,7 +126,7 @@ export default function CameraMonitor({
     const distance = Math.sqrt(
       Math.pow(pos.x - firstPoint.x, 2) + Math.pow(pos.y - firstPoint.y, 2)
     );
-    return distance < 0.03;
+    return distance < 0.03; // 3% de distância
   }, [tempPoints]);
   
   // Iniciar criação de polígono
@@ -185,6 +169,7 @@ export default function CameraMonitor({
     const pos = getRelativePosition(e);
     if (!pos) return;
     
+    // Se clicou próximo do primeiro ponto e tem 3+ pontos, fechar polígono
     if (isNearFirstPoint(pos)) {
       confirmPolygon();
       return;
@@ -218,6 +203,7 @@ export default function CameraMonitor({
   const handleMouseUp = useCallback(() => {
     if (draggingPoint !== null) {
       setDraggingPoint(null);
+      // Salvar ao soltar o ponto
       if (tempPoints.length >= 3) {
         const newArea: VirtualAreaPolygon = {
           type: 'polygon',
@@ -231,30 +217,20 @@ export default function CameraMonitor({
   // Pontos a renderizar
   const displayPoints = editMode !== 'none' ? tempPoints : getPolygonPoints(virtualArea);
   
-  // Classes de cor baseadas no tipo
-  const headerBgClass = isEntrada ? 'bg-blue-50' : 'bg-orange-50';
-  const iconColorClass = isEntrada ? 'text-blue-600' : 'text-orange-600';
-  const buttonBgClass = isEntrada ? 'bg-blue-600 hover:bg-blue-700' : 'bg-orange-600 hover:bg-orange-700';
-  const polygonStrokeColor = isEntrada ? '#22c55e' : '#f97316';
-  const polygonFillColor = isEntrada ? 'rgba(34, 197, 94, 0.15)' : 'rgba(249, 115, 22, 0.15)';
-  
   return (
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
       {/* Header */}
-      <div className={`flex items-center justify-between p-3 border-b border-gray-200 ${headerBgClass}`}>
+      <div className="flex items-center justify-between p-3 border-b border-gray-200 bg-gray-50">
         <div className="flex items-center gap-2">
-          <CameraIcon className={`w-5 h-5 ${iconColorClass}`} />
-          <h3 className="font-semibold text-gray-900">Câmera {cameraLabel}</h3>
-          <span className={`text-xs px-2 py-0.5 rounded-full ${isEntrada ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
-            {cameraLabel}
-          </span>
+          <Camera className="w-5 h-5 text-blue-600" />
+          <h3 className="font-semibold text-gray-900">Monitoramento Local</h3>
         </div>
         
         <div className="flex items-center gap-2">
           {/* Status Badge */}
           <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-sm ${getStatusColor(status)}`}>
             <StatusIcon />
-            <span className="hidden sm:inline">{statusMessage}</span>
+            <span>{statusMessage}</span>
           </div>
           
           {/* Settings Button */}
@@ -314,7 +290,7 @@ export default function CameraMonitor({
             <button
               onClick={togglePolygonVisibility}
               className={`relative w-11 h-6 rounded-full transition-colors ${
-                showPolygonOverlay ? (isEntrada ? 'bg-blue-600' : 'bg-orange-600') : 'bg-gray-300'
+                showPolygonOverlay ? 'bg-blue-600' : 'bg-gray-300'
               }`}
               title={showPolygonOverlay ? 'Clique para ocultar a área de detecção' : 'Clique para mostrar a área de detecção'}
             >
@@ -332,7 +308,7 @@ export default function CameraMonitor({
               <>
                 <button
                   onClick={startCreatingPolygon}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg ${isEntrada ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' : 'bg-orange-100 text-orange-700 hover:bg-orange-200'}`}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200"
                   disabled={!isActive}
                 >
                   Nova Área de Leitura
@@ -406,7 +382,7 @@ export default function CameraMonitor({
         {/* Canvas oculto para processamento */}
         <canvas ref={canvasRef} className="hidden" />
         
-        {/* Polygon Overlay SVG */}
+        {/* Polygon Overlay SVG - só mostra se toggle ativo ou em modo edição */}
         {isActive && displayPoints.length >= 2 && (showPolygonOverlay || editMode !== 'none') && (
           <svg 
             className="absolute inset-0 w-full h-full pointer-events-none"
@@ -421,20 +397,20 @@ export default function CameraMonitor({
                   ? 'rgba(251, 191, 36, 0.2)' 
                   : status === 'motion_detected' || status === 'processing'
                     ? 'rgba(234, 179, 8, 0.15)'
-                    : polygonFillColor
+                    : 'rgba(34, 197, 94, 0.15)'
                 }
                 stroke={editMode !== 'none' 
                   ? '#fbbf24' 
                   : status === 'motion_detected' || status === 'processing'
                     ? '#eab308'
-                    : polygonStrokeColor
+                    : '#22c55e'
                 }
                 strokeWidth="0.5"
                 vectorEffect="non-scaling-stroke"
               />
             )}
             
-            {/* Linhas durante criação */}
+            {/* Linhas durante criação (antes de fechar) */}
             {editMode === 'creating' && displayPoints.length >= 2 && displayPoints.length < 3 && (
               <polyline
                 points={displayPoints.map(p => `${p.x * 100},${p.y * 100}`).join(' ')}
@@ -449,6 +425,7 @@ export default function CameraMonitor({
             {/* Pontos editáveis */}
             {(editMode !== 'none' || showSettings) && displayPoints.map((p, i) => (
               <g key={i}>
+                {/* Área clicável maior */}
                 <circle
                   cx={p.x * 100}
                   cy={p.y * 100}
@@ -457,15 +434,17 @@ export default function CameraMonitor({
                   className={editMode === 'adjusting' ? 'cursor-move pointer-events-auto' : ''}
                   onMouseDown={(e) => handleMouseDown(e as unknown as React.MouseEvent, i)}
                 />
+                {/* Ponto visível */}
                 <circle
                   cx={p.x * 100}
                   cy={p.y * 100}
                   r={i === 0 && editMode === 'creating' ? 2.5 : 1.5}
-                  fill={i === 0 && editMode === 'creating' ? '#f59e0b' : polygonStrokeColor}
+                  fill={i === 0 && editMode === 'creating' ? '#f59e0b' : '#22c55e'}
                   stroke="white"
                   strokeWidth="0.5"
                   className={editMode === 'adjusting' ? 'pointer-events-none' : ''}
                 />
+                {/* Número do ponto */}
                 {editMode !== 'none' && (
                   <text
                     x={p.x * 100}
@@ -485,7 +464,7 @@ export default function CameraMonitor({
           </svg>
         )}
         
-        {/* Label da área */}
+        {/* Label da área - só mostra se toggle ativo */}
         {isActive && displayPoints.length >= 3 && editMode === 'none' && showPolygonOverlay && (
           <div 
             className="absolute text-xs text-white bg-black/50 px-2 py-0.5 rounded pointer-events-none"
@@ -494,141 +473,182 @@ export default function CameraMonitor({
               top: `${Math.min(...displayPoints.map(p => p.y)) * 100 - 6}%`,
             }}
           >
-            {cameraLabel} ({displayPoints.length} pontos)
+            Área de Leitura ({displayPoints.length} pontos)
           </div>
         )}
         
-        {/* Overlay de status quando parado */}
+        {/* Placeholder quando não está ativo */}
         {!isActive && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60">
-            <Camera className={`w-16 h-16 mb-4 ${iconColorClass}`} />
-            <p className="text-white text-lg font-medium mb-2">Câmera de {cameraLabel} Parada</p>
-            <p className="text-gray-400 text-sm mb-4">Clique em Iniciar para começar o monitoramento</p>
+          <div className="absolute inset-0 flex items-center justify-center bg-gray-800/90">
+            <div className="text-center text-white">
+              <Camera className="w-16 h-16 mx-auto mb-3 opacity-50" />
+              <p className="text-lg">Clique em Iniciar para começar</p>
+              <p className="text-sm text-gray-400 mt-1">
+                O sistema irá monitorar veículos automaticamente
+              </p>
+            </div>
           </div>
         )}
         
-        {/* Métricas em tempo real */}
-        {isActive && (
-          <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
-            {/* Movimento */}
-            <div className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs ${
-              motionPercent > 20 ? 'bg-yellow-500/80' : 'bg-black/50'
-            } text-white`}>
-              <Gauge className="w-3 h-3" />
-              <span>{motionPercent.toFixed(1)}%</span>
+        {/* Creating Mode Overlay */}
+        {editMode === 'creating' && tempPoints.length === 0 && (
+          <div className="absolute inset-0 bg-black/30 flex items-center justify-center pointer-events-none">
+            <p className="text-white text-lg bg-black/50 px-4 py-2 rounded-lg">
+              Clique para adicionar o primeiro ponto da área de leitura
+            </p>
+          </div>
+        )}
+        
+        {/* Motion/Reference Indicator */}
+        {isActive && editMode === 'none' && (
+          <div className="absolute bottom-2 left-2 flex items-center gap-2">
+            {/* Status da referência */}
+            <div className={`text-xs px-2 py-1 rounded ${
+              hasReference 
+                ? 'bg-green-600/80 text-white' 
+                : 'bg-orange-500/80 text-white'
+            }`}>
+              {hasReference ? '📸 Ref. OK' : '⏳ Capturando...'}
             </div>
             
-            {/* Stage de processamento */}
-            {processingInfo.stage !== 'idle' && (
-              <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-blue-500/80 text-white text-xs">
-                <Clock className="w-3 h-3" />
-                <span>{processingInfo.stageLabel}</span>
-                <span>({processingInfo.currentTimeMs}ms)</span>
-              </div>
-            )}
-            
-            {/* Última detecção */}
-            {processingInfo.lastOcrTimeMs > 0 && processingInfo.stage === 'idle' && (
-              <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-black/50 text-white text-xs">
-                <Clock className="w-3 h-3" />
-                <span>Último: {processingInfo.lastOcrTimeMs}ms</span>
-                <span className="text-gray-300">(média: {processingInfo.avgTimeMs}ms)</span>
+            {/* Indicador de detecção */}
+            {hasReference && (
+              <div className={`text-xs px-2 py-1 rounded ${
+                motionPercent >= 0.15 
+                  ? 'bg-yellow-500 text-black font-medium' 
+                  : motionPercent >= 0.05 
+                    ? 'bg-blue-500/80 text-white'
+                    : 'bg-black/70 text-gray-300'
+              }`}>
+                {motionPercent >= 0.15 
+                  ? `🚗 Veículo: ${Math.round(motionPercent * 100)}%`
+                  : motionPercent >= 0.05 
+                    ? `⚠️ Mudança: ${Math.round(motionPercent * 100)}%`
+                    : '✓ Área limpa'
+                }
               </div>
             )}
           </div>
         )}
       </div>
       
-      {/* Controles */}
-      <div className="p-3 border-t border-gray-200 bg-gray-50">
-        <div className="flex items-center justify-between gap-3">
-          {/* Botão principal */}
-          {!isActive ? (
-            <button
-              onClick={() => startMonitoring()}
-              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-white rounded-lg transition-colors ${buttonBgClass}`}
-            >
-              <Play className="w-5 h-5" />
-              <span>Iniciar {cameraLabel}</span>
-            </button>
-          ) : (
-            <button
-              onClick={stopMonitoring}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-            >
-              <Square className="w-5 h-5" />
-              <span>Parar</span>
-            </button>
-          )}
-        </div>
-      </div>
-      
-      {/* Resultado da última detecção (se não for compacto) */}
-      {!compact && lastDetection && (
-        <div className={`p-4 border-t ${lastDetection.isMorador ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              {lastDetection.isMorador ? (
-                <CheckCircle className="w-5 h-5 text-green-600" />
-              ) : (
-                <XCircle className="w-5 h-5 text-red-600" />
-              )}
-              <span className={`font-semibold ${lastDetection.isMorador ? 'text-green-800' : 'text-red-800'}`}>
-                {lastDetection.isMorador ? 'Morador Autorizado' : 'Veículo Desconhecido'}
-              </span>
-              <span className={`text-xs px-2 py-0.5 rounded-full ${isEntrada ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
-                {lastDetection.direcao === 'entrada' ? '⬇️ Entrada' : '⬆️ Saída'}
-              </span>
-            </div>
-            <span className="text-sm text-gray-500">
-              {new Date(lastDetection.timestamp).toLocaleTimeString('pt-BR')}
-            </span>
-          </div>
-          
+      {/* Processing Info Panel */}
+      {isActive && (
+        <div className="p-3 border-t border-gray-200 bg-gradient-to-r from-gray-50 to-blue-50">
           <div className="flex items-center gap-4">
-            <PlacaVeiculo placa={lastDetection.placa} size="md" />
-            {lastDetection.isMorador && lastDetection.casa && (
-              <div className="flex items-center gap-1.5 text-green-700">
-                <Home className="w-4 h-4" />
-                <span className="font-semibold">Casa {lastDetection.casa}</span>
-              </div>
-            )}
-            <div className="text-sm text-gray-500">
-              Confiança: {(lastDetection.confidence * 100).toFixed(0)}%
-              {lastDetection.usedFallback && (
-                <span className="ml-2 text-amber-600">(API)</span>
+            <div className="flex items-center gap-2">
+              <Gauge className="w-4 h-4 text-blue-600" />
+              <span className="text-sm font-medium text-gray-700">Processamento</span>
+            </div>
+            
+            {/* Etapa atual */}
+            <div className="flex items-center gap-2 px-2 py-1 bg-white rounded border border-gray-200">
+              {processingInfo.stage !== 'idle' && processingInfo.stage !== 'done' ? (
+                <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <div className={`w-2 h-2 rounded-full ${processingInfo.stage === 'done' ? 'bg-green-500' : 'bg-gray-300'}`} />
+              )}
+              <span className="text-xs text-gray-600">{processingInfo.stageLabel}</span>
+            </div>
+            
+            {/* Métricas de tempo */}
+            <div className="flex items-center gap-3 ml-auto text-xs">
+              {processingInfo.currentTimeMs > 0 && processingInfo.stage !== 'idle' && (
+                <span className="text-blue-600 font-medium">
+                  {(processingInfo.currentTimeMs / 1000).toFixed(1)}s
+                </span>
+              )}
+              {processingInfo.lastOcrTimeMs > 0 && (
+                <div className="flex items-center gap-1 text-gray-500">
+                  <Clock className="w-3 h-3" />
+                  <span>Última: {(processingInfo.lastOcrTimeMs / 1000).toFixed(2)}s</span>
+                </div>
+              )}
+              {processingInfo.avgTimeMs > 0 && (
+                <div className="text-gray-500">
+                  Média: {(processingInfo.avgTimeMs / 1000).toFixed(2)}s
+                </div>
               )}
             </div>
           </div>
         </div>
       )}
       
-      {/* Lista de detecções recentes (se não for compacto) */}
-      {!compact && recentDetections.length > 1 && (
+      {/* Controls */}
+      <div className="p-3 border-t border-gray-200 bg-gray-50">
+        <div className="flex items-center gap-2">
+          {!isActive ? (
+            <button
+              onClick={() => startMonitoring()}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              <Play className="w-4 h-4" />
+              Iniciar
+            </button>
+          ) : (
+            <button
+              onClick={stopMonitoring}
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+            >
+              <Square className="w-4 h-4" />
+              Parar
+            </button>
+          )}
+        </div>
+      </div>
+      
+      {/* Last Detection - only in non-compact mode */}
+      {!compact && lastDetection && (
         <div className="p-3 border-t border-gray-200">
-          <h4 className="text-sm font-medium text-gray-700 mb-2">Detecções Recentes</h4>
-          <div className="space-y-1.5 max-h-32 overflow-y-auto">
-            {recentDetections.slice(1, 6).map((det, idx) => (
-              <div 
+          <div className={`flex items-center gap-3 px-4 py-2 rounded-lg ${
+            lastDetection.isMorador 
+              ? 'bg-green-100 border border-green-300' 
+              : 'bg-red-100 border border-red-300'
+          }`}>
+            {lastDetection.isMorador ? (
+              <CheckCircle className="w-5 h-5 text-green-600" />
+            ) : (
+              <XCircle className="w-5 h-5 text-red-600" />
+            )}
+            <div>
+              <div className="flex items-center gap-2">
+                <PlacaVeiculo placa={lastDetection.placa} size="sm" />
+                {lastDetection.isMorador && lastDetection.casa && (
+                  <span className="flex items-center gap-1 text-sm font-semibold text-green-700">
+                    <Home className="w-4 h-4" />
+                    Casa {lastDetection.casa}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {new Date(lastDetection.timestamp).toLocaleTimeString('pt-BR')}
+                {lastDetection.usedFallback && ' • API externa'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Recent Detections - only in non-compact mode */}
+      {!compact && recentDetections.length > 0 && (
+        <div className="p-3 border-t border-gray-200">
+          <h4 className="text-sm font-medium text-gray-700 mb-2">
+            Detecções Recentes ({recentDetections.length})
+          </h4>
+          <div className="flex flex-wrap gap-2">
+            {recentDetections.slice(0, 5).map((det, idx) => (
+              <div
                 key={idx}
-                className={`flex items-center justify-between p-2 rounded text-sm ${
-                  det.isMorador ? 'bg-green-50' : 'bg-red-50'
+                className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs ${
+                  det.isMorador 
+                    ? 'bg-green-50 text-green-700 border border-green-200' 
+                    : 'bg-red-50 text-red-700 border border-red-200'
                 }`}
               >
-                <div className="flex items-center gap-2">
-                  <span className={`font-mono font-medium ${det.isMorador ? 'text-green-700' : 'text-red-700'}`}>
-                    {det.placa}
-                  </span>
-                  {det.isMorador && (
-                    <span className="text-green-600 text-xs">Casa {det.casa}</span>
-                  )}
-                  <span className={`text-xs px-1.5 py-0.5 rounded ${det.direcao === 'entrada' ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>
-                    {det.direcao === 'entrada' ? '⬇️' : '⬆️'}
-                  </span>
-                </div>
-                <span className="text-xs text-gray-400">
-                  {new Date(det.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                </span>
+                <span className="font-mono font-bold">{det.placa}</span>
+                {det.isMorador && det.casa && (
+                  <span className="text-green-600">• Casa {det.casa}</span>
+                )}
               </div>
             ))}
           </div>

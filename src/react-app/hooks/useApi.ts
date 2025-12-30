@@ -796,7 +796,6 @@ export function useLPRDetections() {
       placa: data.placa_detectada,
       confidence: data.confidence,
       timestamp: data.timestamp,
-      direcao: data.direcao || 'entrada',
       morador: data.is_morador ? { casa: data.casa_morador } : null,
     };
   };
