@@ -1,11 +1,13 @@
 /**
- * Hook para monitoramento contínuo com webcam local
+ * Hook para monitoramento contínuo com webcam local OU câmera IP via go2rtc
  * Detecta movimento em área virtual e dispara OCR híbrido
  * Suporta tipo de câmera: entrada ou saída
+ * Suporta fonte: webcam ou go2rtc (câmera IP via RTSP)
  */
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlateRecognition } from './usePlateRecognition';
+import { loadGo2rtcConfig, loadStreamMode } from './useGo2rtcStream';
 import { 
   MotionDetector, 
   VirtualArea, 
@@ -14,11 +16,13 @@ import {
   RESOLUTION_OPTIONS,
 } from '../utils/motionDetection';
 
-export type MonitoringStatus = 'idle' | 'starting' | 'monitoring' | 'motion_detected' | 'processing' | 'error';
+export type MonitoringStatus = 'idle' | 'starting' | 'connecting' | 'monitoring' | 'motion_detected' | 'processing' | 'error';
 
 export type ProcessingStage = 'idle' | 'capturing' | 'preprocessing' | 'ocr' | 'validating' | 'done';
 
 export type CameraType = 'entrada' | 'saida';
+
+export type StreamSourceMode = 'webcam' | 'go2rtc';
 
 interface Detection {
   placa: string;
@@ -64,6 +68,8 @@ interface UseContinuousMonitoringReturn {
   hasReference: boolean;
   recaptureReference: () => void;
   cameraType: CameraType;
+  streamMode: StreamSourceMode;
+  connectionMode: 'webrtc' | 'mse' | 'local' | 'none';
 }
 
 const COOLDOWN_MS = 30000; // 30 segundos entre detecções da mesma placa
@@ -162,6 +168,10 @@ export function useContinuousMonitoring(
   );
   const [hasReference, setHasReference] = useState(false);
   
+  // Novos estados para go2rtc
+  const [streamMode, setStreamMode] = useState<StreamSourceMode>(() => loadStreamMode(cameraType));
+  const [connectionMode, setConnectionMode] = useState<'webrtc' | 'mse' | 'local' | 'none'>('none');
+  
   const [processingInfo, setProcessingInfo] = useState<ProcessingInfo>({
     stage: 'idle',
     stageLabel: 'Aguardando',
@@ -179,10 +189,17 @@ export function useContinuousMonitoring(
   const motionDetectorRef = useRef<MotionDetector>(new MotionDetector());
   const frameIntervalRef = useRef<number | null>(null);
   const recentPlatesRef = useRef<Map<string, number>>(new Map());
+  const pcRef = useRef<RTCPeerConnection | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
   
   const { recognizeFromCanvas, reset: resetOCR, usedFallback } = usePlateRecognition();
   
-  // Carregar lista de câmeras e câmera salva
+  // Atualizar streamMode quando mudar configuração
+  useEffect(() => {
+    setStreamMode(loadStreamMode(cameraType));
+  }, [cameraType]);
+  
+  // Carregar lista de câmeras e câmera salva (apenas para webcam mode)
   useEffect(() => {
     async function loadCameras() {
       try {
@@ -554,29 +571,209 @@ export function useContinuousMonitoring(
     };
   }, [isActive, status, processFrame]);
   
-  const startMonitoring = useCallback(async (deviceId?: string) => {
+  // Limpar conexões WebRTC/MSE
+  const cleanupWebRTC = useCallback(() => {
+    if (pcRef.current) {
+      pcRef.current.close();
+      pcRef.current = null;
+    }
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+  }, []);
+  
+  // Conectar via WebRTC ao go2rtc
+  const connectWebRTC = useCallback(async (serverUrl: string, streamName: string): Promise<boolean> => {
     try {
-      setStatus('starting');
-      setStatusMessage('Iniciando câmera...');
+      console.log(`🔌 Conectando WebRTC: ${serverUrl}/api/webrtc?src=${streamName}`);
       
-      const resConfig = RESOLUTION_OPTIONS[selectedResolution];
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+      });
+      pcRef.current = pc;
       
-      const constraints: MediaStreamConstraints = {
-        video: {
-          deviceId: deviceId || selectedCamera ? { exact: deviceId || selectedCamera } : undefined,
-          width: { ideal: resConfig.width },
-          height: { ideal: resConfig.height },
+      // Handler para tracks recebidos
+      pc.ontrack = (event) => {
+        console.log('📹 Track recebido:', event.streams[0]);
+        if (videoRef.current && event.streams[0]) {
+          videoRef.current.srcObject = event.streams[0];
+          videoRef.current.play().catch(console.warn);
         }
       };
       
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      streamRef.current = stream;
+      // Handler para estado de conexão
+      pc.onconnectionstatechange = () => {
+        console.log('🔌 WebRTC state:', pc.connectionState);
+        if (pc.connectionState === 'connected') {
+          setConnectionMode('webrtc');
+          setStatus('monitoring');
+          setStatusMessage('📸 Capturando referência...');
+        } else if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+          setStatus('error');
+          setStatusMessage('❌ Conexão WebRTC perdida');
+        }
+      };
       
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+      // Adicionar transceiver para receber vídeo
+      pc.addTransceiver('video', { direction: 'recvonly' });
+      pc.addTransceiver('audio', { direction: 'recvonly' });
+      
+      // Criar oferta
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      
+      // Enviar oferta para go2rtc
+      const apiUrl = `${serverUrl}/api/webrtc?src=${encodeURIComponent(streamName)}`;
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/sdp' },
+        body: offer.sdp,
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
       }
       
+      const answerSdp = await response.text();
+      await pc.setRemoteDescription({
+        type: 'answer',
+        sdp: answerSdp,
+      });
+      
+      console.log('✅ WebRTC conectado!');
+      return true;
+    } catch (e) {
+      console.warn('❌ WebRTC falhou:', e);
+      return false;
+    }
+  }, []);
+  
+  // Conectar via MSE ao go2rtc (fallback)
+  const connectMSE = useCallback(async (serverUrl: string, streamName: string): Promise<boolean> => {
+    try {
+      console.log(`🔌 Tentando MSE: ${serverUrl}/api/ws?src=${streamName}`);
+      
+      if (!('MediaSource' in window)) {
+        throw new Error('MSE não suportado');
+      }
+      
+      const wsUrl = `${serverUrl.replace('http', 'ws')}/api/ws?src=${encodeURIComponent(streamName)}`;
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+      
+      const mediaSource = new MediaSource();
+      
+      if (videoRef.current) {
+        videoRef.current.src = URL.createObjectURL(mediaSource);
+      }
+      
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Timeout de conexão MSE'));
+        }, 10000);
+        
+        mediaSource.addEventListener('sourceopen', () => {
+          try {
+            const sourceBuffer = mediaSource.addSourceBuffer('video/mp4; codecs="avc1.640028"');
+            
+            ws.onmessage = async (event) => {
+              if (event.data instanceof Blob) {
+                const buffer = await event.data.arrayBuffer();
+                if (!sourceBuffer.updating && mediaSource.readyState === 'open') {
+                  sourceBuffer.appendBuffer(buffer);
+                }
+              }
+            };
+            
+            ws.onopen = () => {
+              clearTimeout(timeout);
+              console.log('✅ MSE conectado!');
+              setConnectionMode('mse');
+              setStatus('monitoring');
+              setStatusMessage('📸 Capturando referência...');
+              videoRef.current?.play().catch(console.warn);
+              resolve(true);
+            };
+            
+            ws.onerror = () => {
+              clearTimeout(timeout);
+              reject(new Error('Erro de conexão WebSocket'));
+            };
+          } catch (e) {
+            clearTimeout(timeout);
+            reject(e);
+          }
+        });
+      });
+    } catch (e) {
+      console.warn('❌ MSE falhou:', e);
+      return false;
+    }
+  }, []);
+  
+  // Iniciar monitoramento - agora suporta webcam e go2rtc
+  const startMonitoring = useCallback(async (deviceId?: string) => {
+    try {
+      // Verificar modo de stream atual
+      const currentMode = loadStreamMode(cameraType);
+      setStreamMode(currentMode);
+      
+      setStatus('starting');
+      setStatusMessage('Iniciando...');
+      
+      if (currentMode === 'go2rtc') {
+        // === MODO GO2RTC (CÂMERA IP) ===
+        const config = loadGo2rtcConfig(cameraType);
+        
+        if (!config) {
+          setStatus('error');
+          setStatusMessage('❌ go2rtc não configurado. Vá em Configurações > Câmeras');
+          return;
+        }
+        
+        setStatus('connecting');
+        setStatusMessage(`🔌 Conectando à ${cameraType === 'entrada' ? 'Entrada' : 'Saída'}...`);
+        
+        // Tentar WebRTC primeiro (menor latência)
+        const webrtcSuccess = await connectWebRTC(config.serverUrl, config.streamName);
+        
+        if (!webrtcSuccess) {
+          // Fallback para MSE
+          const mseSuccess = await connectMSE(config.serverUrl, config.streamName);
+          
+          if (!mseSuccess) {
+            setStatus('error');
+            setStatusMessage('❌ Falha ao conectar. Verifique go2rtc e túnel.');
+            return;
+          }
+        }
+      } else {
+        // === MODO WEBCAM (LOCAL) ===
+        const resConfig = RESOLUTION_OPTIONS[selectedResolution];
+        
+        const constraints: MediaStreamConstraints = {
+          video: {
+            deviceId: deviceId || selectedCamera ? { exact: deviceId || selectedCamera } : undefined,
+            width: { ideal: resConfig.width },
+            height: { ideal: resConfig.height },
+          }
+        };
+        
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        streamRef.current = stream;
+        
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+        }
+        
+        setConnectionMode('local');
+        setStatus('monitoring');
+        setStatusMessage('📸 Capturando referência...');
+      }
+      
+      // Setup comum para ambos os modos
       motionDetectorRef.current.fullReset();
       recentPlatesRef.current.clear();
       resetOCR();
@@ -592,9 +789,8 @@ export function useContinuousMonitoring(
       });
       
       setIsActive(true);
-      setStatus('monitoring');
-      setStatusMessage('📸 Capturando referência...');
       
+      // Capturar referência após vídeo iniciar
       setTimeout(() => {
         if (videoRef.current && canvasRef.current) {
           const currentArea = loadVirtualAreaForCamera(cameraType) || getDefaultVirtualArea();
@@ -616,23 +812,28 @@ export function useContinuousMonitoring(
             setStatusMessage('⚠️ Erro ao capturar referência');
           }
         }
-      }, 1000);
+      }, 1500); // Dar mais tempo para go2rtc carregar
       
     } catch (e) {
-      console.error('Erro ao iniciar câmera:', e);
+      console.error('Erro ao iniciar monitoramento:', e);
       setStatus('error');
-      setStatusMessage('❌ Erro ao acessar câmera');
+      setStatusMessage('❌ Erro ao iniciar câmera');
     }
-  }, [selectedCamera, selectedResolution, resetOCR, cameraType]);
+  }, [selectedCamera, selectedResolution, resetOCR, cameraType, connectWebRTC, connectMSE]);
   
   const stopMonitoring = useCallback(() => {
+    // Parar webcam stream
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
     }
     
+    // Limpar WebRTC/MSE
+    cleanupWebRTC();
+    
     if (videoRef.current) {
       videoRef.current.srcObject = null;
+      videoRef.current.src = '';
     }
     
     if (frameIntervalRef.current) {
@@ -646,7 +847,8 @@ export function useContinuousMonitoring(
     setStatus('idle');
     setStatusMessage('Parado');
     setMotionPercent(0);
-  }, []);
+    setConnectionMode('none');
+  }, [cleanupWebRTC]);
   
   const updateVirtualArea = useCallback((area: VirtualArea) => {
     setVirtualArea(area);
@@ -681,5 +883,7 @@ export function useContinuousMonitoring(
     hasReference,
     recaptureReference,
     cameraType,
+    streamMode,
+    connectionMode,
   };
 }
