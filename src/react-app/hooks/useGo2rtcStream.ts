@@ -25,13 +25,18 @@ interface UseGo2rtcStreamReturn {
 // Storage keys para configuração
 const STORAGE_KEY_PREFIX = 'portacerta_go2rtc_';
 
+// Função auxiliar para normalizar URL (remove barras finais)
+function normalizeUrl(url: string): string {
+  return url.replace(/\/+$/, '');
+}
+
 export function loadGo2rtcConfig(cameraType: 'entrada' | 'saida'): Go2rtcConfig | null {
   try {
     const serverUrl = localStorage.getItem(`${STORAGE_KEY_PREFIX}server_url`);
     const streamName = localStorage.getItem(`${STORAGE_KEY_PREFIX}stream_${cameraType}`);
     
     if (serverUrl && streamName) {
-      return { serverUrl, streamName };
+      return { serverUrl: normalizeUrl(serverUrl), streamName };
     }
   } catch (e) {
     console.warn('Erro ao carregar config go2rtc:', e);
@@ -41,7 +46,7 @@ export function loadGo2rtcConfig(cameraType: 'entrada' | 'saida'): Go2rtcConfig 
 
 export function saveGo2rtcConfig(serverUrl: string, streamEntrada: string, streamSaida: string): void {
   try {
-    localStorage.setItem(`${STORAGE_KEY_PREFIX}server_url`, serverUrl);
+    localStorage.setItem(`${STORAGE_KEY_PREFIX}server_url`, normalizeUrl(serverUrl));
     localStorage.setItem(`${STORAGE_KEY_PREFIX}stream_entrada`, streamEntrada);
     localStorage.setItem(`${STORAGE_KEY_PREFIX}stream_saida`, streamSaida);
   } catch (e) {
