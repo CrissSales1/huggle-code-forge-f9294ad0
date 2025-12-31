@@ -62,6 +62,7 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
     setSelectedResolution,
     hasReference,
     recaptureReference,
+    reconnectStream,
     // HLS
     sourceMode,
     setSourceMode,
@@ -76,6 +77,17 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
   const [tempPoints, setTempPoints] = useState<Point[]>([]);
   const [draggingPoint, setDraggingPoint] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  
+  // Reconectar stream quando componente monta (ao voltar para a página de monitoramento)
+  useEffect(() => {
+    if (isActive) {
+      // Pequeno delay para garantir que o elemento de vídeo está no DOM
+      const timer = setTimeout(() => {
+        reconnectStream();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isActive, reconnectStream]);
   
   // Toggle de visibilidade da área poligonal
   const [showPolygonOverlay, setShowPolygonOverlay] = useState<boolean>(() => {
