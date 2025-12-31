@@ -714,7 +714,9 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
               </div>
               <p className="text-xs text-gray-500 mt-0.5">
                 {new Date(lastDetection.timestamp).toLocaleTimeString('pt-BR')}
-                {lastDetection.usedFallback && ' • API externa'}
+                <span className="ml-1.5 text-gray-400">
+                  • {lastDetection.fonteDeteccao === 'api' ? 'API' : 'OCR'} ({Math.round(lastDetection.confidence * 100)}%)
+                </span>
               </p>
             </div>
           </div>

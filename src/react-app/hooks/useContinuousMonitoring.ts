@@ -54,6 +54,7 @@ interface Detection {
   casa?: string;
   confidence: number;
   usedFallback: boolean;
+  fonteDeteccao: 'local' | 'api';
 }
 
 export interface ProcessingInfo {
@@ -282,7 +283,8 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
     placa: string, 
     isMorador: boolean, 
     casa: string | undefined,
-    confidence: number
+    confidence: number,
+    fonteDeteccao: 'local' | 'api'
   ) => {
     try {
       const { error } = await supabase
@@ -293,10 +295,11 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
           is_morador: isMorador,
           casa_morador: casa || null,
           confidence: confidence,
+          fonte_deteccao: fonteDeteccao,
         });
       
       if (error) throw error;
-      console.log('✅ Detecção salva:', placa);
+      console.log('✅ Detecção salva:', placa, `(${fonteDeteccao})`);
     } catch (e) {
       console.error('Erro ao salvar detecção:', e);
     }
@@ -352,6 +355,7 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
         // Verificar se é morador
         const { isMorador, casa } = await checkIfMorador(placa);
         
+        const fonteDeteccao = usedFallback ? 'api' : 'local';
         const detection: Detection = {
           placa,
           timestamp: new Date().toISOString(),
@@ -359,13 +363,14 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
           casa,
           confidence: result.validation.confidence,
           usedFallback,
+          fonteDeteccao,
         };
         
         setLastDetection(detection);
         setRecentDetections(prev => [detection, ...prev.slice(0, 9)]);
         
         // Salvar no banco
-        await saveDetection(placa, isMorador, casa, result.validation.confidence);
+        await saveDetection(placa, isMorador, casa, result.validation.confidence, fonteDeteccao);
         
         finishProcessingTimer();
         
