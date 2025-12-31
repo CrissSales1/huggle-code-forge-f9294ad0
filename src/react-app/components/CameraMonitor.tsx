@@ -1,6 +1,7 @@
 /**
  * Componente de monitoramento contínuo com webcam local ou stream HLS (IPCamLive)
  * Exibe vídeo, área virtual poligonal, status e controles
+ * Agora usa o contexto global MonitoringContext para persistir estado entre páginas
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { 
@@ -21,7 +22,7 @@ import {
   WifiOff,
   Radio
 } from 'lucide-react';
-import { useContinuousMonitoring, MonitoringStatus } from '../hooks/useContinuousMonitoring';
+import { useMonitoring, MonitoringStatus } from '@/react-app/contexts/MonitoringContext';
 import { 
   Point, 
   VirtualAreaPolygon, 
@@ -68,7 +69,7 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
     setHlsUrl,
     hlsStatus,
     startMonitoringHLS,
-  } = useContinuousMonitoring();
+  } = useMonitoring();
   
   const [showSettings, setShowSettings] = useState(false);
   const [editMode, setEditMode] = useState<EditMode>('none');
@@ -252,6 +253,14 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
               {hlsStatus === 'connected' ? 'Conectado' :
                hlsStatus === 'connecting' ? 'Conectando...' :
                hlsStatus === 'error' ? 'Erro' : 'Desconectado'}
+            </span>
+          )}
+          
+          {/* Indicador de monitoramento ativo */}
+          {isActive && (
+            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700 animate-pulse">
+              <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+              Ativo
             </span>
           )}
         </div>
