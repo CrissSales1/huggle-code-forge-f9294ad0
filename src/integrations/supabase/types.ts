@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           created_at: string | null
           id: number
+          sensibilidade_movimento: string | null
           tempo_deduplicacao_segundos: number
           total_prismas_magneticos: number
           total_vagas_visitantes: number
@@ -26,6 +27,7 @@ export type Database = {
         Insert: {
           created_at?: string | null
           id?: number
+          sensibilidade_movimento?: string | null
           tempo_deduplicacao_segundos?: number
           total_prismas_magneticos?: number
           total_vagas_visitantes?: number
@@ -34,6 +36,7 @@ export type Database = {
         Update: {
           created_at?: string | null
           id?: number
+          sensibilidade_movimento?: string | null
           tempo_deduplicacao_segundos?: number
           total_prismas_magneticos?: number
           total_vagas_visitantes?: number
