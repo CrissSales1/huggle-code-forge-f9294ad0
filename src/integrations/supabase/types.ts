@@ -47,6 +47,7 @@ export type Database = {
           confidence: number | null
           created_at: string | null
           direcao: string | null
+          fonte_deteccao: string | null
           id: number
           is_morador: boolean | null
           placa_detectada: string
@@ -58,6 +59,7 @@ export type Database = {
           confidence?: number | null
           created_at?: string | null
           direcao?: string | null
+          fonte_deteccao?: string | null
           id?: number
           is_morador?: boolean | null
           placa_detectada: string
@@ -69,6 +71,7 @@ export type Database = {
           confidence?: number | null
           created_at?: string | null
           direcao?: string | null
+          fonte_deteccao?: string | null
           id?: number
           is_morador?: boolean | null
           placa_detectada?: string
