@@ -101,6 +101,7 @@ interface MonitoringContextType {
   stopMonitoring: () => void;
   updateVirtualArea: (area: VirtualArea) => void;
   recaptureReference: () => void;
+  reconnectStream: () => void;
 }
 
 const MonitoringContext = createContext<MonitoringContextType | null>(null);
@@ -716,6 +717,29 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     }
   }, [hlsUrl, stopMonitoring, resetOCR]);
   
+  // Reconectar stream quando elemento de vídeo muda (navegação entre páginas)
+  const reconnectStream = useCallback(() => {
+    const video = videoRef.current;
+    const stream = streamRef.current;
+    const hls = hlsRef.current;
+    
+    if (!video || !isActive) return;
+    
+    // Para webcam: reconectar MediaStream
+    if (sourceMode === 'webcam' && stream && !video.srcObject) {
+      console.log('🔄 Reconectando stream webcam ao elemento de vídeo...');
+      video.srcObject = stream;
+      video.play().catch(console.error);
+    }
+    
+    // Para HLS: reconectar instância HLS
+    if (sourceMode === 'hls' && hls && !video.src) {
+      console.log('🔄 Reconectando HLS ao elemento de vídeo...');
+      hls.attachMedia(video);
+      video.play().catch(console.error);
+    }
+  }, [isActive, sourceMode]);
+  
   const updateVirtualArea = useCallback((area: VirtualArea) => {
     setVirtualArea(area);
     saveVirtualArea(area);
@@ -748,6 +772,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     stopMonitoring,
     updateVirtualArea,
     recaptureReference,
+    reconnectStream,
   };
   
   return (
