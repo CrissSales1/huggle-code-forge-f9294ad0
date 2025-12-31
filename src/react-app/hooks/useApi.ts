@@ -797,6 +797,7 @@ export function useLPRDetections() {
       confidence: data.confidence,
       timestamp: data.timestamp,
       morador: data.is_morador ? { casa: data.casa_morador } : null,
+      fonteDeteccao: data.fonte_deteccao || 'local',
     };
   };
 

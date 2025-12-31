@@ -206,10 +206,14 @@ export default function Monitoramento() {
                       </div>
                     </div>
                     
-                    {/* Horário */}
+                    {/* Horário e fonte */}
                     <div className="text-center">
                       <span className="text-gray-600">
                         {new Date(latestDetection.timestamp).toLocaleTimeString('pt-BR')}
+                      </span>
+                      <span className="text-gray-400 text-xs ml-2">
+                        • {latestDetection.fonteDeteccao === 'api' ? 'API' : 'OCR'}
+                        {latestDetection.confidence && ` (${Math.round(latestDetection.confidence * 100)}%)`}
                       </span>
                     </div>
                   </div>
@@ -238,10 +242,14 @@ export default function Monitoramento() {
                       </div>
                     </div>
                     
-                    {/* Horário */}
+                    {/* Horário e fonte */}
                     <div className="text-center">
                       <span className="text-gray-600">
                         {new Date(latestDetection.timestamp).toLocaleTimeString('pt-BR')}
+                      </span>
+                      <span className="text-gray-400 text-xs ml-2">
+                        • {latestDetection.fonteDeteccao === 'api' ? 'API' : 'OCR'}
+                        {latestDetection.confidence && ` (${Math.round(latestDetection.confidence * 100)}%)`}
                       </span>
                     </div>
                   </div>
@@ -271,6 +279,7 @@ export default function Monitoramento() {
                           </span>
                           <span className="text-gray-400 text-[10px]">
                             {new Date(det.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                            {det.fonteDeteccao && ` • ${det.fonteDeteccao === 'api' ? 'API' : 'OCR'}`}
                           </span>
                         </div>
                         {det.morador && (
