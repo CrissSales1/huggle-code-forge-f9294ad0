@@ -18,6 +18,8 @@ import {
   RESOLUTION_OPTIONS,
   loadCameraResolution,
   saveCameraResolution,
+  loadMotionSensitivity,
+  getSensitivityConfig,
 } from '../utils/motionDetection';
 
 export type SourceMode = 'webcam' | 'hls';
@@ -137,7 +139,7 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const hlsRef = useRef<Hls | null>(null);
-  const motionDetectorRef = useRef<MotionDetector>(new MotionDetector());
+  const motionDetectorRef = useRef<MotionDetector>(new MotionDetector(getSensitivityConfig(loadMotionSensitivity())));
   const frameIntervalRef = useRef<number | null>(null);
   const recentPlatesRef = useRef<Map<string, number>>(new Map());
   
@@ -163,6 +165,20 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
       }
     }
     loadCameras();
+  }, []);
+  
+  // Carregar sensibilidade de movimento do localStorage e aplicar ao detector
+  useEffect(() => {
+    const handleSensitivityChange = () => {
+      const sensitivity = loadMotionSensitivity();
+      const config = getSensitivityConfig(sensitivity);
+      motionDetectorRef.current.updateConfig(config);
+      console.log('🎚️ Sensibilidade atualizada:', sensitivity);
+    };
+    
+    // Escutar mudanças no localStorage
+    window.addEventListener('storage', handleSensitivityChange);
+    return () => window.removeEventListener('storage', handleSensitivityChange);
   }, []);
   
   // Função para salvar câmera selecionada

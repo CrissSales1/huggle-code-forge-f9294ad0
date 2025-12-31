@@ -33,9 +33,40 @@ export interface MotionDetectionConfig {
   stabilizationMs: number;
 }
 
+// === Presets de Sensibilidade ===
+export type MotionSensitivity = 'baixa' | 'media' | 'alta';
+
+export interface SensitivityPreset {
+  label: string;
+  description: string;
+  threshold: number;
+  minPixelDifference: number;
+}
+
+export const SENSITIVITY_PRESETS: Record<MotionSensitivity, SensitivityPreset> = {
+  alta: {
+    label: 'Alta',
+    description: 'Detecta veículos mais facilmente',
+    threshold: 0.08,        // 8% de mudança
+    minPixelDifference: 25, // Muito sensível
+  },
+  media: {
+    label: 'Média',
+    description: 'Equilíbrio entre sensibilidade e precisão',
+    threshold: 0.15,        // 15% de mudança
+    minPixelDifference: 35, // Moderado
+  },
+  baixa: {
+    label: 'Baixa',
+    description: 'Só detecta veículos bem visíveis',
+    threshold: 0.25,        // 25% de mudança
+    minPixelDifference: 50, // Menos sensível
+  },
+};
+
 const DEFAULT_CONFIG: MotionDetectionConfig = {
-  threshold: 0.20,        // 20% de mudança para considerar movimento (era 10%)
-  minPixelDifference: 45, // Menos sensível a ruído (era 30)
+  threshold: SENSITIVITY_PRESETS.media.threshold,
+  minPixelDifference: SENSITIVITY_PRESETS.media.minPixelDifference,
   stabilizationMs: 500,
 };
 
@@ -45,6 +76,37 @@ const MIN_CONSECUTIVE_MOTION_FRAMES = 2;
 const STORAGE_KEY = 'portacerta_virtual_area';
 const CAMERA_STORAGE_KEY = 'portacerta_selected_camera';
 const RESOLUTION_STORAGE_KEY = 'portacerta_camera_resolution';
+const SENSITIVITY_STORAGE_KEY = 'portacerta_motion_sensitivity';
+
+// === Funções de persistência de sensibilidade ===
+
+export function loadMotionSensitivity(): MotionSensitivity {
+  try {
+    const saved = localStorage.getItem(SENSITIVITY_STORAGE_KEY);
+    if (saved && (saved === 'baixa' || saved === 'media' || saved === 'alta')) {
+      return saved;
+    }
+  } catch (e) {
+    console.warn('Erro ao carregar sensibilidade:', e);
+  }
+  return 'media'; // Padrão
+}
+
+export function saveMotionSensitivity(sensitivity: MotionSensitivity): void {
+  try {
+    localStorage.setItem(SENSITIVITY_STORAGE_KEY, sensitivity);
+  } catch (e) {
+    console.warn('Erro ao salvar sensibilidade:', e);
+  }
+}
+
+export function getSensitivityConfig(sensitivity: MotionSensitivity): Partial<MotionDetectionConfig> {
+  const preset = SENSITIVITY_PRESETS[sensitivity];
+  return {
+    threshold: preset.threshold,
+    minPixelDifference: preset.minPixelDifference,
+  };
+}
 
 // === Opções de resolução da câmera ===
 export type CameraResolution = 'low' | 'medium' | 'high';

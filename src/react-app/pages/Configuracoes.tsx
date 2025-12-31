@@ -1,9 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
-import { Save, Trash2, AlertTriangle, Settings as SettingsIcon, Hash, Car, CheckCircle, Upload, Download, Database, Loader2, FileJson, HardDrive, Lock, ShieldCheck } from 'lucide-react';
+import { Save, Trash2, AlertTriangle, Settings as SettingsIcon, Hash, Car, CheckCircle, Upload, Download, Database, Loader2, FileJson, HardDrive, Lock, ShieldCheck, Gauge } from 'lucide-react';
 import { useConfiguracoes } from '@/react-app/hooks/useApi';
 import StatsCard from '@/react-app/components/StatsCard';
 import { supabase } from '@/integrations/supabase/client';
 import { normalizarNumeroCasa } from '@/react-app/utils/formatters';
+import { 
+  MotionSensitivity, 
+  SENSITIVITY_PRESETS, 
+  loadMotionSensitivity, 
+  saveMotionSensitivity 
+} from '@/react-app/utils/motionDetection';
 
 interface BackupData {
   metadata: {
@@ -26,6 +32,7 @@ export default function Configuracoes() {
   const [totalVagas, setTotalVagas] = useState(configuracoes?.total_vagas_visitantes || 10);
   const [totalPrismas, setTotalPrismas] = useState(configuracoes?.total_prismas_magneticos || 20);
   const [tempoDeduplicacao, setTempoDeduplicacao] = useState(configuracoes?.tempo_deduplicacao_segundos || 30);
+  const [sensibilidade, setSensibilidade] = useState<MotionSensitivity>(loadMotionSensitivity());
   // Estados para proteção da exclusão
   const [exclusaoDesbloqueada, setExclusaoDesbloqueada] = useState(false);
   const [senhaExclusao, setSenhaExclusao] = useState('');
@@ -490,6 +497,52 @@ export default function Configuracoes() {
               />
               <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1">
                 Ignora placas repetidas neste intervalo (LPR)
+              </p>
+            </div>
+
+            {/* Sensibilidade de Movimento */}
+            <div className="col-span-1 sm:col-span-2">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2 sm:mb-3">
+                <div className="flex items-center space-x-1.5">
+                  <Gauge className="w-3.5 h-3.5 text-orange-500" />
+                  <span>Sensibilidade de Movimento</span>
+                </div>
+              </label>
+              <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                {(['baixa', 'media', 'alta'] as MotionSensitivity[]).map((nivel) => {
+                  const preset = SENSITIVITY_PRESETS[nivel];
+                  const isSelected = sensibilidade === nivel;
+                  return (
+                    <button
+                      key={nivel}
+                      type="button"
+                      onClick={() => {
+                        setSensibilidade(nivel);
+                        saveMotionSensitivity(nivel);
+                      }}
+                      className={`flex flex-col items-center p-2 sm:p-3 rounded-lg border-2 transition-all ${
+                        isSelected
+                          ? 'border-orange-500 bg-orange-50 text-orange-700'
+                          : 'border-gray-200 hover:border-orange-300 hover:bg-orange-50/50 text-gray-600'
+                      }`}
+                    >
+                      <span className={`text-xs sm:text-sm font-medium ${isSelected ? 'text-orange-700' : 'text-gray-800'}`}>
+                        {preset.label}
+                      </span>
+                      <span className={`text-[10px] sm:text-xs mt-0.5 text-center ${isSelected ? 'text-orange-600' : 'text-gray-500'}`}>
+                        {preset.description}
+                      </span>
+                      {nivel === 'media' && (
+                        <span className="text-[9px] sm:text-[10px] mt-1 px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded-full">
+                          Recomendado
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] sm:text-xs text-gray-500 mt-2">
+                Se veículos não são detectados, aumente a sensibilidade. Se há muitos falsos positivos, diminua.
               </p>
             </div>
           </div>
