@@ -41,57 +41,7 @@ interface CameraMonitorProps {
 
 type EditMode = 'none' | 'creating' | 'adjusting';
 
-// Componente para posicionar o vídeo global neste container
-function VideoPortal() {
-  const [mounted, setMounted] = useState(false);
-  
-  useEffect(() => {
-    // Injetar estilos para posicionar o container global de vídeo
-    const styleId = 'camera-monitor-video-style';
-    let style = document.getElementById(styleId) as HTMLStyleElement;
-    
-    if (!style) {
-      style = document.createElement('style');
-      style.id = styleId;
-      document.head.appendChild(style);
-    }
-    
-    style.textContent = `
-      #global-video-container {
-        position: absolute !important;
-        top: 0 !important;
-        left: 0 !important;
-        width: 100% !important;
-        height: 100% !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        pointer-events: auto !important;
-      }
-      #global-video-container video {
-        width: 100% !important;
-        height: 100% !important;
-        object-fit: contain !important;
-      }
-    `;
-    
-    setMounted(true);
-    
-    return () => {
-      // Limpar estilos ao desmontar
-      style.textContent = '';
-    };
-  }, []);
-  
-  if (!mounted) {
-    return (
-      <div className="w-full h-full flex items-center justify-center bg-gray-800">
-        <Camera className="w-8 h-8 text-gray-600 animate-pulse" />
-      </div>
-    );
-  }
-  
-  return null;
-}
+// Removido VideoPortal - agora renderizamos o vídeo diretamente no container
 
 export default function CameraMonitor({ onDetection, compact = false }: CameraMonitorProps) {
   const {
@@ -121,6 +71,9 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
     setHlsUrl,
     hlsStatus,
     startMonitoringHLS,
+    // Refs do vídeo
+    videoRef,
+    canvasRef,
   } = useMonitoring();
   
   const [showSettings, setShowSettings] = useState(false);
@@ -527,8 +480,14 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
       >
-        {/* Portal para o vídeo global do BackgroundVideo */}
-        <VideoPortal />
+        {/* Vídeo renderizado diretamente */}
+        <video
+          ref={videoRef}
+          className="absolute inset-0 w-full h-full object-contain"
+          playsInline
+          muted
+        />
+        <canvas ref={canvasRef} className="hidden" />
         
         {/* Polygon Overlay SVG - só mostra se toggle ativo ou em modo edição */}
         {isActive && displayPoints.length >= 2 && (showPolygonOverlay || editMode !== 'none') && (
