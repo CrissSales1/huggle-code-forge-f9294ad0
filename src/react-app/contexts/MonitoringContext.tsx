@@ -6,6 +6,7 @@ import React, { createContext, useContext, useState, useCallback, useRef, useEff
 import Hls from 'hls.js';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlateRecognition } from '@/react-app/hooks/usePlateRecognition';
+import logger from '@/react-app/utils/logger';
 import { 
   MotionDetector, 
   VirtualArea, 
@@ -170,7 +171,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
           setSelectedCameraState(cameras[0].deviceId);
         }
       } catch (e) {
-        console.warn('Erro ao listar câmeras:', e);
+        logger.warn('Erro ao listar câmeras:', e);
       }
     }
     loadCameras();
@@ -286,7 +287,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       }
       return { isMorador: false };
     } catch (e) {
-      console.error('Erro ao verificar morador:', e);
+      logger.error('Erro ao verificar morador:', e);
       return { isMorador: false };
     }
   }, []);
@@ -311,9 +312,9 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         });
       
       if (error) throw error;
-      console.log('✅ Detecção salva:', placa, `(${fonteDeteccao})`);
+      logger.log('✅ Detecção salva:', placa, `(${fonteDeteccao})`);
     } catch (e) {
-      console.error('Erro ao salvar detecção:', e);
+      logger.error('Erro ao salvar detecção:', e);
     }
   }, []);
   
@@ -343,7 +344,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         const placa = result.validation.formatted;
         
         if (isPlateRecent(placa)) {
-          console.log(`⏳ Placa ${placa} detectada recentemente, ignorando...`);
+          logger.log(`⏳ Placa ${placa} detectada recentemente, ignorando...`);
           finishProcessingTimer();
           setStatus('monitoring');
           setStatusMessage('🟢 Monitorando...');
@@ -570,7 +571,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       }, 1000);
       
     } catch (e) {
-      console.error('Erro ao iniciar câmera:', e);
+      logger.error('Erro ao iniciar câmera:', e);
       setStatus('error');
       setStatusMessage('❌ Erro ao acessar câmera');
     }
@@ -655,7 +656,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         });
         
         hls.on(Hls.Events.ERROR, (_event, data) => {
-          console.error('❌ HLS Error:', data);
+          logger.error('❌ HLS Error:', data);
           if (data.fatal) {
             setHlsStatus('error');
             setStatus('error');
@@ -710,7 +711,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       }
       
     } catch (e) {
-      console.error('Erro ao iniciar HLS:', e);
+      logger.error('Erro ao iniciar HLS:', e);
       setStatus('error');
       setHlsStatus('error');
       setStatusMessage(`❌ ${e instanceof Error ? e.message : 'Erro ao conectar'}`);
@@ -726,17 +727,23 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     if (!video || !isActive) return;
     
     // Para webcam: reconectar MediaStream
-    if (sourceMode === 'webcam' && stream && !video.srcObject) {
-      console.log('🔄 Reconectando stream webcam ao elemento de vídeo...');
-      video.srcObject = stream;
-      video.play().catch(console.error);
+    if (sourceMode === 'webcam' && stream) {
+      // Verificar se o stream não está conectado ou se é diferente
+      if (video.srcObject !== stream) {
+        logger.log('🔄 Reconectando stream webcam ao elemento de vídeo...');
+        video.srcObject = stream;
+        video.play().catch(e => logger.warn('Erro ao reproduzir vídeo:', e));
+      }
     }
     
-    // Para HLS: reconectar instância HLS
-    if (sourceMode === 'hls' && hls && !video.src) {
-      console.log('🔄 Reconectando HLS ao elemento de vídeo...');
-      hls.attachMedia(video);
-      video.play().catch(console.error);
+    // Para HLS: verificar se precisa reconectar
+    if (sourceMode === 'hls' && hls) {
+      // Verificar se o HLS não está attached ao vídeo atual
+      if (hls.media !== video) {
+        logger.log('🔄 Reconectando HLS ao elemento de vídeo...');
+        hls.attachMedia(video);
+        video.play().catch(e => logger.warn('Erro ao reproduzir vídeo HLS:', e));
+      }
     }
   }, [isActive, sourceMode]);
   

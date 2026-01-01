@@ -2,6 +2,7 @@
  * Componente de monitoramento contínuo com webcam local ou stream HLS (IPCamLive)
  * Exibe vídeo, área virtual poligonal, status e controles
  * Agora usa o contexto global MonitoringContext para persistir estado entre páginas
+ * O elemento de vídeo é compartilhado via BackgroundVideo para evitar perda de stream
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { 
@@ -40,6 +41,58 @@ interface CameraMonitorProps {
 
 type EditMode = 'none' | 'creating' | 'adjusting';
 
+// Componente para posicionar o vídeo global neste container
+function VideoPortal() {
+  const [mounted, setMounted] = useState(false);
+  
+  useEffect(() => {
+    // Injetar estilos para posicionar o container global de vídeo
+    const styleId = 'camera-monitor-video-style';
+    let style = document.getElementById(styleId) as HTMLStyleElement;
+    
+    if (!style) {
+      style = document.createElement('style');
+      style.id = styleId;
+      document.head.appendChild(style);
+    }
+    
+    style.textContent = `
+      #global-video-container {
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+      }
+      #global-video-container video {
+        width: 100% !important;
+        height: 100% !important;
+        object-fit: contain !important;
+      }
+    `;
+    
+    setMounted(true);
+    
+    return () => {
+      // Limpar estilos ao desmontar
+      style.textContent = '';
+    };
+  }, []);
+  
+  if (!mounted) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-gray-800">
+        <Camera className="w-8 h-8 text-gray-600 animate-pulse" />
+      </div>
+    );
+  }
+  
+  return null;
+}
+
 export default function CameraMonitor({ onDetection, compact = false }: CameraMonitorProps) {
   const {
     status,
@@ -48,8 +101,6 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
     virtualArea,
     lastDetection,
     recentDetections,
-    videoRef,
-    canvasRef,
     startMonitoring,
     stopMonitoring,
     updateVirtualArea,
@@ -476,15 +527,8 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
       >
-        <video
-          ref={videoRef}
-          className="w-full h-full object-contain"
-          playsInline
-          muted
-        />
-        
-        {/* Canvas oculto para processamento */}
-        <canvas ref={canvasRef} className="hidden" />
+        {/* Portal para o vídeo global do BackgroundVideo */}
+        <VideoPortal />
         
         {/* Polygon Overlay SVG - só mostra se toggle ativo ou em modo edição */}
         {isActive && displayPoints.length >= 2 && (showPolygonOverlay || editMode !== 'none') && (

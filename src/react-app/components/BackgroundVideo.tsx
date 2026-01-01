@@ -1,26 +1,27 @@
 /**
- * Container de vídeo em segundo plano
- * Mantém o vídeo rodando mesmo quando não está visível na página
+ * Container de vídeo global para monitoramento
+ * SEMPRE renderiza o elemento de vídeo para evitar perda de stream
+ * Ajusta visibilidade baseado na rota atual
  */
 import { useLocation } from 'react-router';
 import { useMonitoring } from '@/react-app/contexts/MonitoringContext';
 
 export default function BackgroundVideo() {
-  const { videoRef, canvasRef, isActive } = useMonitoring();
+  const { videoRef, canvasRef } = useMonitoring();
   const location = useLocation();
   
-  // Se está na página de monitoramento, não renderizar aqui (será mostrado no CameraMonitor)
+  // Verificar se está na página de monitoramento
   const isOnMonitoringPage = location.pathname === '/monitoramento';
   
-  // Renderizar invisível quando ativo e fora da página de monitoramento
-  if (!isActive || isOnMonitoringPage) {
-    return null;
-  }
+  // SEMPRE renderizar o vídeo, mas ajustar visibilidade e posição
+  // Quando na página de monitoramento, o CameraMonitor vai posicionar este container
+  // Quando fora, fica oculto mas continua processando
   
   return (
     <div 
-      className="fixed pointer-events-none"
-      style={{ 
+      id="global-video-container"
+      className={`${isOnMonitoringPage ? '' : 'fixed pointer-events-none'}`}
+      style={isOnMonitoringPage ? {} : { 
         position: 'fixed',
         top: '-9999px',
         left: '-9999px',
@@ -29,11 +30,11 @@ export default function BackgroundVideo() {
         visibility: 'hidden',
         opacity: 0,
       }}
-      aria-hidden="true"
+      aria-hidden={!isOnMonitoringPage}
     >
       <video
         ref={videoRef}
-        className="w-full h-full"
+        className={`w-full h-full ${isOnMonitoringPage ? 'object-contain' : ''}`}
         playsInline
         muted
       />

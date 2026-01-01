@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { NavLink } from 'react-router';
 import { useDateTime } from '@/react-app/hooks/useDateTime';
 import { useAuth } from '@/react-app/hooks/useAuth';
+import { useMonitoring } from '@/react-app/contexts/MonitoringContext';
 import { Clock, Calendar, LogOut, Home, UserPlus, Search, Settings, BarChart3, Video, Menu, X } from 'lucide-react';
 
 const navigationItems = [
@@ -17,6 +18,7 @@ export default function Header() {
   const [menuAberto, setMenuAberto] = useState(false);
   const { formattedDate, formattedTime } = useDateTime();
   const { logout } = useAuth();
+  const { isActive: isMonitoringActive } = useMonitoring();
 
   const fecharMenu = () => setMenuAberto(false);
 
@@ -41,6 +43,14 @@ export default function Header() {
           
           {/* Controles do Desktop */}
           <div className="hidden lg:flex items-center gap-3">
+            {/* Indicador de Monitoramento Ativo */}
+            {isMonitoringActive && (
+              <div className="flex items-center gap-1.5 bg-green-500 bg-opacity-90 rounded-full px-3 py-1.5 animate-pulse">
+                <span className="w-2 h-2 bg-white rounded-full" />
+                <span className="text-xs font-medium text-white">Monitorando</span>
+              </div>
+            )}
+            
             <div className="flex items-center space-x-2 bg-white bg-opacity-10 rounded-lg px-3 py-1.5 backdrop-blur-sm">
               <Calendar className="w-4 h-4 text-blue-200" />
               <span className="text-xs font-medium capitalize">{formattedDate}</span>
@@ -63,6 +73,14 @@ export default function Header() {
 
           {/* Controles Mobile */}
           <div className="flex lg:hidden items-center gap-2">
+            {/* Indicador de Monitoramento Ativo - Mobile */}
+            {isMonitoringActive && (
+              <div className="flex items-center gap-1 bg-green-500 bg-opacity-90 rounded-full px-2 py-1 animate-pulse">
+                <span className="w-1.5 h-1.5 bg-white rounded-full" />
+                <span className="text-[10px] font-medium text-white">Ativo</span>
+              </div>
+            )}
+            
             <div className="flex items-center space-x-1.5 bg-white bg-opacity-10 rounded-lg px-2 py-1 backdrop-blur-sm">
               <Clock className="w-3.5 h-3.5 text-blue-200" />
               <span className="text-sm font-mono font-bold">{formattedTime}</span>
