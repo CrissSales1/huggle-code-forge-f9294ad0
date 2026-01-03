@@ -353,7 +353,7 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
       updateProcessingStage('validating', 'Validando placa...');
       
       if (result.success && result.validation.isValid) {
-        const placa = result.validation.formatted;
+        const placa = result.validation.corrected; // Sem hífen, para consistência no banco
         
         // Verificar deduplicação
         if (isPlateRecent(placa)) {
