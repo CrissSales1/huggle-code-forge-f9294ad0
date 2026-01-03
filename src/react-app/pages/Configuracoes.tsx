@@ -340,7 +340,7 @@ export default function Configuracoes() {
         const batchSize = 50;
         for (let i = 0; i < tabelas.lpr_deteccoes.length; i += batchSize) {
           const batch = tabelas.lpr_deteccoes.slice(i, i + batchSize).map((d: any) => ({
-            placa_detectada: d.placa_detectada,
+            placa_detectada: d.placa_detectada?.replace(/[-\s]/g, '').toUpperCase() || '',
             timestamp: d.timestamp,
             confidence: d.confidence,
             is_morador: d.is_morador,
