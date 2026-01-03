@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, Save, Car } from 'lucide-react';
 import { normalizarNumeroCasa } from '@/react-app/utils/formatters';
 import { supabase } from '@/integrations/supabase/client';
+import { generateVariations, cleanPlateString } from '@/react-app/utils/plateValidator';
 
 interface EditarVeiculoMoradorModalProps {
   isOpen: boolean;
@@ -39,15 +40,41 @@ export default function EditarVeiculoMoradorModal({ isOpen, onClose, onSuccess, 
     setError(null);
 
     try {
+      const placaNormalizada = cleanPlateString(placa);
+      const casaNormalizada = normalizarNumeroCasa(casa);
+      
       const { error: updateError } = await supabase
         .from('veiculos_moradores')
         .update({
-          placa_veiculo: placa.toUpperCase(),
-          casa: normalizarNumeroCasa(casa),
+          placa_veiculo: placaNormalizada,
+          casa: casaNormalizada,
         })
         .eq('id', veiculo.id);
 
       if (updateError) throw updateError;
+
+      // Atualizar detecções anteriores - busca exata
+      await supabase
+        .from('lpr_deteccoes')
+        .update({ 
+          is_morador: true, 
+          casa_morador: casaNormalizada 
+        })
+        .eq('placa_detectada', placaNormalizada);
+
+      // Atualizar detecções com variações (fuzzy match)
+      const variacoes = generateVariations(placaNormalizada);
+      for (const variacao of variacoes) {
+        if (variacao !== placaNormalizada) {
+          await supabase
+            .from('lpr_deteccoes')
+            .update({ 
+              is_morador: true, 
+              casa_morador: casaNormalizada 
+            })
+            .eq('placa_detectada', variacao);
+        }
+      }
 
       setPlaca('');
       setCasa('');

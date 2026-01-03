@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { X, Save, Car } from 'lucide-react';
 import { normalizarNumeroCasa } from '@/react-app/utils/formatters';
 import { supabase } from '@/integrations/supabase/client';
+import { generateVariations, cleanPlateString } from '@/react-app/utils/plateValidator';
 
 interface CadastroMoradorModalProps {
   isOpen: boolean;
@@ -27,7 +28,7 @@ export default function CadastroMoradorModal({ isOpen, onClose, onSuccess }: Cad
     setError(null);
 
     try {
-      const placaNormalizada = placa.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const placaNormalizada = cleanPlateString(placa);
       const casaNormalizada = normalizarNumeroCasa(casa);
       
       // 1. Inserir veículo
@@ -40,7 +41,7 @@ export default function CadastroMoradorModal({ isOpen, onClose, onSuccess }: Cad
 
       if (insertError) throw insertError;
 
-      // 2. Atualizar detecções anteriores desta placa para marcar como morador
+      // 2. Atualizar detecções anteriores - busca exata
       await supabase
         .from('lpr_deteccoes')
         .update({ 
@@ -48,6 +49,20 @@ export default function CadastroMoradorModal({ isOpen, onClose, onSuccess }: Cad
           casa_morador: casaNormalizada 
         })
         .eq('placa_detectada', placaNormalizada);
+
+      // 3. Atualizar detecções com variações (fuzzy match)
+      const variacoes = generateVariations(placaNormalizada);
+      for (const variacao of variacoes) {
+        if (variacao !== placaNormalizada) {
+          await supabase
+            .from('lpr_deteccoes')
+            .update({ 
+              is_morador: true, 
+              casa_morador: casaNormalizada 
+            })
+            .eq('placa_detectada', variacao);
+        }
+      }
 
       setPlaca('');
       setCasa('');

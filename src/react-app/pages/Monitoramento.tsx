@@ -405,12 +405,27 @@ export default function Monitoramento() {
           </div>}
       </div>
 
-      <CadastroMoradorModal isOpen={showCadastroModal} onClose={() => setShowCadastroModal(false)} onSuccess={carregarVeiculos} />
+      <CadastroMoradorModal 
+        isOpen={showCadastroModal} 
+        onClose={() => setShowCadastroModal(false)} 
+        onSuccess={() => {
+          carregarVeiculos();
+          refetch();
+        }} 
+      />
 
-      <EditarVeiculoMoradorModal isOpen={showEditarModal} onClose={() => {
-      setShowEditarModal(false);
-      setVeiculoSelecionado(null);
-    }} onSuccess={carregarVeiculos} veiculo={veiculoSelecionado} />
+      <EditarVeiculoMoradorModal 
+        isOpen={showEditarModal} 
+        onClose={() => {
+          setShowEditarModal(false);
+          setVeiculoSelecionado(null);
+        }} 
+        onSuccess={() => {
+          carregarVeiculos();
+          refetch();
+        }} 
+        veiculo={veiculoSelecionado} 
+      />
     </div>
   );
 }
