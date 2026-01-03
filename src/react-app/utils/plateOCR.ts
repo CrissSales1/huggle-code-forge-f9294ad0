@@ -151,17 +151,35 @@ export async function recognizePlate(canvas: HTMLCanvasElement): Promise<OCRResu
 }
 
 /**
- * Versão rápida do OCR (menos pré-processamento)
+ * Versão rápida do OCR (menos pré-processamento + imagem reduzida)
+ * OTIMIZADO: Reduz imagem para max 400x150 para OCR mais rápido
  */
+const OCR_MAX_WIDTH = 400;
+const OCR_MAX_HEIGHT = 150;
+
 export async function recognizePlateFast(canvas: HTMLCanvasElement): Promise<OCRResult> {
   const startTime = performance.now();
   
   try {
     const tesseractWorker = await initWorker();
     
-    // Usar canvas reutilizável
-    const { canvas: processedCanvas, ctx } = getProcessingCanvas(canvas.width, canvas.height);
-    ctx.drawImage(canvas, 0, 0);
+    // Redimensionar imagem para tamanho otimizado para placas
+    let targetWidth = canvas.width;
+    let targetHeight = canvas.height;
+    
+    if (canvas.width > OCR_MAX_WIDTH || canvas.height > OCR_MAX_HEIGHT) {
+      const scaleW = OCR_MAX_WIDTH / canvas.width;
+      const scaleH = OCR_MAX_HEIGHT / canvas.height;
+      const scale = Math.min(scaleW, scaleH);
+      targetWidth = Math.round(canvas.width * scale);
+      targetHeight = Math.round(canvas.height * scale);
+    }
+    
+    // Usar canvas reutilizável com tamanho otimizado
+    const { canvas: processedCanvas, ctx } = getProcessingCanvas(targetWidth, targetHeight);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(canvas, 0, 0, targetWidth, targetHeight);
     
     // Pré-processamento leve (mais rápido)
     const processedImage = preprocessLight(processedCanvas);

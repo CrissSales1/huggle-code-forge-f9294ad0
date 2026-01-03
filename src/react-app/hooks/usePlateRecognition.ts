@@ -1,14 +1,26 @@
 /**
  * Hook para reconhecimento de placas usando OCR local gratuito
- * Com fallback para Plate Recognizer API quando confiança < 75%
- * OTIMIZADO: Usa recognizePlateFast (pré-processamento leve)
+ * Com fallback para Plate Recognizer API quando confiança < 90%
+ * OTIMIZADO: Prioriza OCR local para economizar custos
  */
 import { useState, useCallback, useRef } from 'react';
 import { recognizePlateFast, terminateOCR, type OCRResult } from '../utils/plateOCR';
 import { validateAndCorrectPlate } from '../utils/plateValidator';
 
-const CONFIDENCE_THRESHOLD = 0.75; // 75% - abaixo disso usa fallback
+// Threshold alto (90%) para minimizar uso da API paga
+const CONFIDENCE_THRESHOLD = 0.90;
 const PLATE_RECOGNIZER_URL = 'https://kbgftpiyzfmabrncpnas.supabase.co/functions/v1/detect-plate';
+
+// Configuração para desativar fallback (economia máxima)
+const FALLBACK_ENABLED_KEY = 'portacerta_fallback_enabled';
+
+export function loadFallbackEnabled(): boolean {
+  return localStorage.getItem(FALLBACK_ENABLED_KEY) !== 'false';
+}
+
+export function saveFallbackEnabled(enabled: boolean): void {
+  localStorage.setItem(FALLBACK_ENABLED_KEY, enabled ? 'true' : 'false');
+}
 
 interface UsePlateRecognitionReturn {
   isProcessing: boolean;
@@ -145,6 +157,24 @@ export function usePlateRecognition(): UsePlateRecognitionReturn {
         setLastResult(localResult);
         setStatusMessage(`✅ Placa: ${localResult.validation.formatted} (${Math.round(localConfidence * 100)}% - OCR local)`);
         console.log(`✅ Usando OCR local: ${localResult.validation.formatted}`);
+        return localResult;
+      }
+      
+      // Verificar se fallback está habilitado
+      const fallbackEnabled = loadFallbackEnabled();
+      
+      if (!fallbackEnabled) {
+        // Modo econômico: usar resultado local mesmo com baixa confiança
+        if (localResult.success || localResult.rawText) {
+          setLastResult(localResult);
+          const msg = localResult.success 
+            ? `⚠️ Placa: ${localResult.validation.formatted} (${Math.round(localConfidence * 100)}% - modo econômico)`
+            : `⚠️ Texto detectado: "${localResult.rawText}" - Verificar manualmente`;
+          setStatusMessage(msg);
+          console.log(`💰 Modo econômico: usando OCR local (${Math.round(localConfidence * 100)}%)`);
+          return localResult;
+        }
+        setStatusMessage('❌ Nenhuma placa detectada (modo econômico)');
         return localResult;
       }
       
