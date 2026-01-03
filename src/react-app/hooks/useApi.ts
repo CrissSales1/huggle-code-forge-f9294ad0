@@ -838,21 +838,34 @@ export function useLPRDetections() {
     // Carregar dados iniciais
     fetchInitialData();
 
-    // Configurar Realtime - escuta novas inserções instantaneamente
+    // Configurar Realtime - escuta INSERT e UPDATE
     const channel = supabase
       .channel('lpr-deteccoes-realtime')
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: '*',
           schema: 'public',
           table: 'lpr_deteccoes'
         },
         (payload) => {
-          console.log('Nova detecção recebida via Realtime:', payload.new);
-          const novaDeteccao = mapDetectionData(payload.new);
-          setLatestDetection(novaDeteccao);
-          setDetectionHistory(prev => [novaDeteccao, ...prev.slice(0, 9)]);
+          if (payload.eventType === 'INSERT') {
+            console.log('Nova detecção recebida via Realtime:', payload.new);
+            const novaDeteccao = mapDetectionData(payload.new);
+            setLatestDetection(novaDeteccao);
+            setDetectionHistory(prev => [novaDeteccao, ...prev.slice(0, 9)]);
+          } else if (payload.eventType === 'UPDATE') {
+            console.log('Detecção atualizada via Realtime:', payload.new);
+            const atualizada = mapDetectionData(payload.new);
+            // Atualizar o item no histórico
+            setDetectionHistory(prev => 
+              prev.map(det => det?.id === atualizada?.id ? atualizada : det)
+            );
+            // Se for a última detecção, atualizar também
+            setLatestDetection((current: any) => 
+              current?.id === atualizada?.id ? atualizada : current
+            );
+          }
         }
       )
       .subscribe((status) => {

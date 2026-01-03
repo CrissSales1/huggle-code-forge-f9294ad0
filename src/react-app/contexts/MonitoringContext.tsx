@@ -272,19 +272,43 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     recentPlatesRef.current.set(placa, Date.now());
   }, []);
   
-  const checkIfMorador = useCallback(async (placa: string): Promise<{ isMorador: boolean; casa?: string }> => {
+  const checkIfMorador = useCallback(async (placa: string): Promise<{ isMorador: boolean; casa?: string; placaCadastrada?: string }> => {
     try {
-      const { data, error } = await supabase
+      const placaLimpa = placa.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      
+      // 1. Primeiro: busca exata (mais rápido)
+      const { data: exactMatch, error } = await supabase
         .from('veiculos_moradores')
-        .select('casa')
-        .eq('placa_veiculo', placa.toUpperCase().replace(/[^A-Z0-9]/g, ''))
+        .select('casa, placa_veiculo')
+        .eq('placa_veiculo', placaLimpa)
         .maybeSingle();
       
       if (error) throw error;
       
-      if (data) {
-        return { isMorador: true, casa: data.casa };
+      if (exactMatch) {
+        return { isMorador: true, casa: exactMatch.casa, placaCadastrada: exactMatch.placa_veiculo };
       }
+      
+      // 2. Segundo: busca com variações (fuzzy matching para OCR)
+      const { generateVariations } = await import('@/react-app/utils/plateValidator');
+      const variacoes = generateVariations(placaLimpa);
+      
+      if (variacoes.length > 1) {
+        const { data: fuzzyMatch, error: fuzzyError } = await supabase
+          .from('veiculos_moradores')
+          .select('casa, placa_veiculo')
+          .in('placa_veiculo', variacoes)
+          .limit(1)
+          .maybeSingle();
+        
+        if (fuzzyError) throw fuzzyError;
+        
+        if (fuzzyMatch) {
+          logger.log(`🔄 Match fuzzy: ${placaLimpa} → ${fuzzyMatch.placa_veiculo}`);
+          return { isMorador: true, casa: fuzzyMatch.casa, placaCadastrada: fuzzyMatch.placa_veiculo };
+        }
+      }
+      
       return { isMorador: false };
     } catch (e) {
       logger.error('Erro ao verificar morador:', e);

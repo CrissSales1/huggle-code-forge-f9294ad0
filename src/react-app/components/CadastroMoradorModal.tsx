@@ -27,14 +27,27 @@ export default function CadastroMoradorModal({ isOpen, onClose, onSuccess }: Cad
     setError(null);
 
     try {
+      const placaNormalizada = placa.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const casaNormalizada = normalizarNumeroCasa(casa);
+      
+      // 1. Inserir veículo
       const { error: insertError } = await supabase
         .from('veiculos_moradores')
         .insert({
-          placa_veiculo: placa.toUpperCase(),
-          casa: normalizarNumeroCasa(casa),
+          placa_veiculo: placaNormalizada,
+          casa: casaNormalizada,
         });
 
       if (insertError) throw insertError;
+
+      // 2. Atualizar detecções anteriores desta placa para marcar como morador
+      await supabase
+        .from('lpr_deteccoes')
+        .update({ 
+          is_morador: true, 
+          casa_morador: casaNormalizada 
+        })
+        .eq('placa_detectada', placaNormalizada);
 
       setPlaca('');
       setCasa('');

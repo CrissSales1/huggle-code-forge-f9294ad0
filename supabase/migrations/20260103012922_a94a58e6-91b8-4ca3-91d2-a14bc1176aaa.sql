@@ -1,0 +1,1 @@
+ALTER TABLE lpr_deteccoes REPLICA IDENTITY FULL;
