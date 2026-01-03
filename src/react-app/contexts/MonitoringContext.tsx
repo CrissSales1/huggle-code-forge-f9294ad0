@@ -365,7 +365,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       updateProcessingStage('validating', 'Validando placa...');
       
       if (result.success && result.validation.isValid) {
-        const placa = result.validation.formatted;
+        const placa = result.validation.corrected; // Sem hífen, para consistência no banco
         
         if (isPlateRecent(placa)) {
           logger.log(`⏳ Placa ${placa} detectada recentemente, ignorando...`);
