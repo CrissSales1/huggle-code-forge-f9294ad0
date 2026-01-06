@@ -103,6 +103,7 @@ interface MonitoringContextType {
   updateVirtualArea: (area: VirtualArea) => void;
   recaptureReference: () => void;
   reconnectStream: () => void;
+  manualCapture: () => Promise<boolean>;
 }
 
 const MonitoringContext = createContext<MonitoringContextType | null>(null);
@@ -465,6 +466,40 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     }
   }, [isActive, captureReferenceFrame]);
   
+  // Leitura manual instantânea - reutiliza processFrameForOCR que já tem toda a lógica
+  const manualCapture = useCallback(async (): Promise<boolean> => {
+    if (!isActive) {
+      setStatusMessage('⚠️ Monitoramento não está ativo');
+      return false;
+    }
+    
+    if (!hasReference) {
+      setStatusMessage('⚠️ Aguarde a referência ser capturada');
+      return false;
+    }
+    
+    setStatusMessage('📷 Leitura manual em progresso...');
+    
+    // Chama processFrameForOCR que já inclui:
+    // - OCR da imagem
+    // - Validação da placa
+    // - isPlateRecent() → Deduplicação
+    // - checkIfMorador() → Verificação morador
+    // - saveDetection() → Salvar no banco
+    // - Atualização das detecções recentes
+    const result = await processFrameForOCR();
+    
+    // Restaurar status após processamento
+    if (isActiveRef.current) {
+      setStatus('monitoring');
+      if (!result) {
+        setStatusMessage('🟢 Monitorando...');
+      }
+    }
+    
+    return result;
+  }, [isActive, hasReference, processFrameForOCR]);
+  
   const processFrame = useCallback(async () => {
     if (!videoRef.current || !canvasRef.current) return;
     if (status !== 'monitoring' && status !== 'motion_detected') return;
@@ -804,6 +839,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     updateVirtualArea,
     recaptureReference,
     reconnectStream,
+    manualCapture,
   };
   
   return (

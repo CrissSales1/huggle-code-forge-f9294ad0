@@ -21,7 +21,8 @@ import {
   Clock,
   Wifi,
   WifiOff,
-  Radio
+  Radio,
+  ScanLine
 } from 'lucide-react';
 import { useMonitoring, MonitoringStatus } from '@/react-app/contexts/MonitoringContext';
 import { 
@@ -71,6 +72,8 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
     setHlsUrl,
     hlsStatus,
     startMonitoringHLS,
+    // Leitura manual
+    manualCapture,
     // Refs do vídeo
     videoRef,
     canvasRef,
@@ -80,6 +83,7 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
   const [editMode, setEditMode] = useState<EditMode>('none');
   const [tempPoints, setTempPoints] = useState<Point[]>([]);
   const [draggingPoint, setDraggingPoint] = useState<number | null>(null);
+  const [isCapturing, setIsCapturing] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   
   // Reconectar stream quando componente monta (ao voltar para a página de monitoramento)
@@ -698,13 +702,41 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
               {sourceMode === 'hls' ? 'Conectar Stream' : 'Iniciar'}
             </button>
           ) : (
-            <button
-              onClick={stopMonitoring}
-              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-            >
-              <Square className="w-4 h-4" />
-              Parar
-            </button>
+            <>
+              <button
+                onClick={stopMonitoring}
+                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              >
+                <Square className="w-4 h-4" />
+                Parar
+              </button>
+              
+              {/* Botão de Leitura Manual */}
+              <button
+                onClick={async () => {
+                  if (isCapturing) return;
+                  setIsCapturing(true);
+                  try {
+                    await manualCapture();
+                  } finally {
+                    setIsCapturing(false);
+                  }
+                }}
+                disabled={isCapturing || !hasReference}
+                className={`flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors ${
+                  isCapturing || !hasReference ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+                title="Forçar leitura imediata da placa"
+              >
+                {isCapturing ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <ScanLine className="w-4 h-4" />
+                )}
+                <span className="hidden sm:inline">Leitura Manual</span>
+                <span className="sm:hidden">Ler</span>
+              </button>
+            </>
           )}
           
           {sourceMode === 'hls' && !hlsUrl && !isActive && (
