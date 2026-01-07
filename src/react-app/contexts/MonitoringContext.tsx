@@ -52,6 +52,8 @@ export interface Detection {
   placa: string;
   timestamp: string;
   isMorador: boolean;
+  isVisitante?: boolean;
+  nomeVisitante?: string;
   casa?: string;
   confidence: number;
   usedFallback: boolean;
@@ -317,12 +319,69 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     }
   }, []);
   
+  // Verificar se é visitante ativo
+  const checkIfVisitanteAtivo = useCallback(async (placa: string): Promise<{ 
+    isVisitante: boolean; 
+    nome?: string;
+    casa?: string;
+    placaCadastrada?: string;
+  }> => {
+    try {
+      const placaLimpa = placa.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      
+      // Buscar visitantes ativos
+      const { data: visitantes, error } = await supabase
+        .from('visitantes')
+        .select('nome, casa_visitada, placa_veiculo')
+        .eq('is_ativo', true);
+      
+      if (error) throw error;
+      
+      // Busca exata primeiro
+      const exactMatch = visitantes?.find(v => 
+        v.placa_veiculo?.toUpperCase().replace(/[^A-Z0-9]/g, '') === placaLimpa
+      );
+      
+      if (exactMatch) {
+        return { 
+          isVisitante: true, 
+          nome: exactMatch.nome,
+          casa: exactMatch.casa_visitada,
+          placaCadastrada: exactMatch.placa_veiculo
+        };
+      }
+      
+      // Fuzzy matching para erros de OCR
+      const { generateVariations } = await import('@/react-app/utils/plateValidator');
+      const variacoes = generateVariations(placaLimpa);
+      
+      for (const visitante of visitantes || []) {
+        const placaVisitante = visitante.placa_veiculo?.toUpperCase().replace(/[^A-Z0-9]/g, '') || '';
+        if (variacoes.includes(placaVisitante)) {
+          return { 
+            isVisitante: true, 
+            nome: visitante.nome,
+            casa: visitante.casa_visitada,
+            placaCadastrada: visitante.placa_veiculo
+          };
+        }
+      }
+      
+      return { isVisitante: false };
+    } catch (e) {
+      logger.error('Erro ao verificar visitante:', e);
+      return { isVisitante: false };
+    }
+  }, []);
+
   const saveDetection = useCallback(async (
     placa: string, 
     isMorador: boolean, 
     casa: string | undefined,
     confidence: number,
-    fonteDeteccao: 'local' | 'api'
+    fonteDeteccao: 'local' | 'api',
+    isVisitante?: boolean,
+    nomeVisitante?: string
   ) => {
     try {
       const { error } = await supabase
@@ -334,10 +393,12 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
           casa_morador: casa || null,
           confidence: confidence,
           fonte_deteccao: fonteDeteccao,
+          is_visitante: isVisitante || false,
+          nome_visitante: nomeVisitante || null,
         });
       
       if (error) throw error;
-      logger.log('✅ Detecção salva:', placa, `(${fonteDeteccao})`);
+      logger.log('✅ Detecção salva:', placa, `(${fonteDeteccao})`, isVisitante ? `Visitante: ${nomeVisitante}` : '');
     } catch (e) {
       logger.error('Erro ao salvar detecção:', e);
     }
@@ -379,14 +440,31 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         
         markPlateDetected(placa);
         
+        // 1. Verificar se é morador
         const { isMorador, casa } = await checkIfMorador(placa);
+        
+        // 2. Se não for morador, verificar se é visitante ativo
+        let isVisitante = false;
+        let nomeVisitante: string | undefined;
+        let casaFinal = casa;
+        
+        if (!isMorador) {
+          const visitanteResult = await checkIfVisitanteAtivo(placa);
+          if (visitanteResult.isVisitante) {
+            isVisitante = true;
+            nomeVisitante = visitanteResult.nome;
+            casaFinal = visitanteResult.casa;
+          }
+        }
         
         const fonteDeteccao = usedFallback ? 'api' : 'local';
         const detection: Detection = {
           placa,
           timestamp: new Date().toISOString(),
           isMorador,
-          casa,
+          isVisitante,
+          nomeVisitante,
+          casa: casaFinal,
           confidence: result.validation.confidence,
           usedFallback,
           fonteDeteccao,
@@ -395,13 +473,15 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         setLastDetection(detection);
         setRecentDetections(prev => [detection, ...prev.slice(0, 9)]);
         
-        await saveDetection(placa, isMorador, casa, result.validation.confidence, fonteDeteccao);
+        await saveDetection(placa, isMorador, casaFinal, result.validation.confidence, fonteDeteccao, isVisitante, nomeVisitante);
         
         finishProcessingTimer();
         motionDetectorRef.current.markOcrSuccess();
         
         if (isMorador) {
           setStatusMessage(`✅ Morador: ${placa} - Casa ${casa}`);
+        } else if (isVisitante) {
+          setStatusMessage(`🧑 Visitante: ${nomeVisitante} - Casa ${casaFinal}`);
         } else {
           setStatusMessage(`⚠️ Não cadastrado: ${placa}`);
         }
