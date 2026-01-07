@@ -53,6 +53,8 @@ export type Database = {
           fonte_deteccao: string | null
           id: number
           is_morador: boolean | null
+          is_visitante: boolean | null
+          nome_visitante: string | null
           placa_detectada: string
           timestamp: string
           updated_at: string | null
@@ -65,6 +67,8 @@ export type Database = {
           fonte_deteccao?: string | null
           id?: number
           is_morador?: boolean | null
+          is_visitante?: boolean | null
+          nome_visitante?: string | null
           placa_detectada: string
           timestamp: string
           updated_at?: string | null
@@ -77,6 +81,8 @@ export type Database = {
           fonte_deteccao?: string | null
           id?: number
           is_morador?: boolean | null
+          is_visitante?: boolean | null
+          nome_visitante?: string | null
           placa_detectada?: string
           timestamp?: string
           updated_at?: string | null

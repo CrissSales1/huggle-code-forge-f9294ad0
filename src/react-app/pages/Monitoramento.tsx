@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Camera, CheckCircle, XCircle, Home, Edit2, Trash2, Car, Activity, HelpCircle, RotateCcw, Search, X } from 'lucide-react';
+import { Plus, Camera, CheckCircle, XCircle, Home, Edit2, Trash2, Car, Activity, HelpCircle, RotateCcw, Search, X, User } from 'lucide-react';
 import { useLPRDetections } from '@/react-app/hooks/useApi';
 import { supabase } from '@/integrations/supabase/client';
 import CadastroMoradorModal from '@/react-app/components/CadastroMoradorModal';
@@ -162,9 +162,11 @@ export default function Monitoramento() {
                 <span className={`text-xs px-2 py-1 rounded-full ${
                   latestDetection.morador 
                     ? 'bg-green-100 text-green-700' 
+                    : latestDetection.visitante
+                    ? 'bg-amber-100 text-amber-700'
                     : 'bg-red-100 text-red-700'
                 }`}>
-                  {latestDetection.morador ? 'Autorizado' : 'Desconhecido'}
+                  {latestDetection.morador ? 'Autorizado' : latestDetection.visitante ? 'Visitante' : 'Desconhecido'}
                 </span>
               )}
             </div>
@@ -203,6 +205,46 @@ export default function Monitoramento() {
                         <span className="text-3xl sm:text-4xl font-bold text-green-700">
                           Casa {latestDetection.morador.casa}
                         </span>
+                      </div>
+                    </div>
+                    
+                    {/* Horário e fonte */}
+                    <div className="text-center">
+                      <span className="text-gray-600">
+                        {new Date(latestDetection.timestamp).toLocaleTimeString('pt-BR')}
+                      </span>
+                      <span className="text-gray-400 text-xs ml-2">
+                        • {latestDetection.fonteDeteccao === 'api' ? 'API' : 'OCR'}
+                        {latestDetection.confidence && ` (${Math.round(latestDetection.confidence * 100)}%)`}
+                      </span>
+                    </div>
+                  </div>
+                ) : latestDetection.visitante ? (
+                  /* VISITANTE ATIVO - Card grande e amarelo */
+                  <div className="bg-gradient-to-br from-amber-100 via-yellow-50 to-orange-100 border-4 border-amber-500 rounded-2xl p-5 sm:p-6 shadow-lg animate-fade-in">
+                    {/* Badge de status */}
+                    <div className="flex items-center justify-center mb-4">
+                      <div className="bg-amber-600 text-white px-5 py-1.5 rounded-full font-bold text-base sm:text-lg flex items-center gap-2 shadow-md">
+                        <User className="w-5 h-5 sm:w-6 sm:h-6" />
+                        <span>VISITANTE ATIVO</span>
+                      </div>
+                    </div>
+                    
+                    {/* Placa centralizada */}
+                    <div className="flex justify-center mb-4">
+                      <PlacaVeiculo placa={latestDetection.placa} size="lg" />
+                    </div>
+                    
+                    {/* Casa do visitante e nome */}
+                    <div className="flex flex-col items-center gap-2 mb-3">
+                      <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border-2 border-amber-300 shadow-sm">
+                        <Home className="w-5 h-5 text-blue-600" />
+                        <span className="text-2xl sm:text-3xl font-bold text-amber-700">
+                          Casa {latestDetection.visitante.casa}
+                        </span>
+                      </div>
+                      <div className="text-lg font-semibold text-amber-800">
+                        {latestDetection.visitante.nome}
                       </div>
                     </div>
                     
@@ -270,11 +312,13 @@ export default function Monitoramento() {
                         className={`p-2 rounded-lg border text-xs ${
                           det.morador 
                             ? 'bg-green-50 border-green-200' 
+                            : det.visitante
+                            ? 'bg-amber-50 border-amber-200'
                             : 'bg-red-50 border-red-200'
                         }`}
                       >
                         <div className="flex items-center justify-between gap-1 mb-0.5">
-                          <span className={`font-mono font-bold ${det.morador ? 'text-green-800' : 'text-red-800'}`}>
+                          <span className={`font-mono font-bold ${det.morador ? 'text-green-800' : det.visitante ? 'text-amber-800' : 'text-red-800'}`}>
                             {det.placa}
                           </span>
                           <span className="text-gray-400 text-[10px]">
@@ -288,7 +332,13 @@ export default function Monitoramento() {
                             <span className="font-semibold">Casa {det.morador.casa}</span>
                           </div>
                         )}
-                        {!det.morador && (
+                        {det.visitante && (
+                          <div className="flex items-center gap-1 text-amber-700">
+                            <User className="w-3 h-3" />
+                            <span className="font-semibold">{det.visitante.nome} • Casa {det.visitante.casa}</span>
+                          </div>
+                        )}
+                        {!det.morador && !det.visitante && (
                           <span className="text-red-600 text-[10px]">Não cadastrado</span>
                         )}
                       </div>
