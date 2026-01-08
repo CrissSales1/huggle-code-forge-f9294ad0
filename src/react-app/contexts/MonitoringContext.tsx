@@ -1,11 +1,14 @@
 /**
  * Contexto global para monitoramento contínuo
  * Mantém o estado de monitoramento mesmo quando navega entre páginas
+ * Usa Web Worker para processamento pesado (OCR, detecção) em background
  */
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import Hls from 'hls.js';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlateRecognition } from '@/react-app/hooks/usePlateRecognition';
+import { usePlateWorker } from '@/react-app/hooks/usePlateWorker';
+import { usePerformanceMetrics, PerformanceMetrics } from '@/react-app/hooks/usePerformanceMetrics';
 import logger from '@/react-app/utils/logger';
 import { 
   MotionDetector, 
@@ -84,6 +87,10 @@ interface MonitoringContextType {
   debugModeEnabled: boolean;
   setDebugModeEnabled: (enabled: boolean) => void;
   
+  // Performance
+  performanceMetrics: PerformanceMetrics;
+  workerReady: boolean;
+  
   // Câmera
   availableCameras: MediaDeviceInfo[];
   selectedCamera: string;
@@ -155,6 +162,34 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   const frameIntervalRef = useRef<number | null>(null);
   const recentPlatesRef = useRef<Map<string, number>>(new Map());
   const isActiveRef = useRef(false);
+  
+  // Hooks para processamento em background e métricas de performance
+  const { 
+    isReady: workerReady, 
+    isProcessing: workerProcessing,
+    error: workerError,
+  } = usePlateWorker();
+  
+  const {
+    metrics: performanceMetrics,
+    recordFrameStart,
+    recordFrameEnd,
+    recordOcrTime,
+    setWorkerStatus,
+  } = usePerformanceMetrics();
+  
+  // Sincronizar status do worker com métricas
+  useEffect(() => {
+    if (workerError) {
+      setWorkerStatus('error');
+    } else if (workerProcessing) {
+      setWorkerStatus('processing');
+    } else if (workerReady) {
+      setWorkerStatus('ready');
+    } else {
+      setWorkerStatus('initializing');
+    }
+  }, [workerReady, workerProcessing, workerError, setWorkerStatus]);
   
   const { recognizeFromCanvas, reset: resetOCR, usedFallback, debugImage } = usePlateRecognition();
   
@@ -704,11 +739,17 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     if (status !== 'monitoring' && status !== 'motion_detected') return;
     if (!motionDetectorRef.current.hasReference()) return;
     
+    // Marcar início do frame para métricas
+    recordFrameStart();
+    
     const result = motionDetectorRef.current.processFrame(
       videoRef.current,
       canvasRef.current,
       virtualArea
     );
+    
+    // Marcar fim do frame
+    recordFrameEnd();
     
     setMotionPercent(result.motionPercent);
     
@@ -740,7 +781,9 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     }
     
     if (result.shouldAttemptOCR) {
+      const ocrStart = performance.now();
       const success = await processFrameForOCR();
+      recordOcrTime(performance.now() - ocrStart);
       
       setTimeout(() => {
         if (isActiveRef.current) {
@@ -749,7 +792,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         }
       }, 2000);
     }
-  }, [status, virtualArea, processFrameForOCR, captureReferenceFrame, processingInfo.stage, processingInfo.stageLabel]);
+  }, [status, virtualArea, processFrameForOCR, captureReferenceFrame, processingInfo.stage, processingInfo.stageLabel, recordFrameStart, recordFrameEnd, recordOcrTime]);
   
   // Loop de frames
   useEffect(() => {
@@ -1023,6 +1066,10 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     debugImage,
     debugModeEnabled,
     setDebugModeEnabled: setDebugModeEnabledWithPersist,
+    // Performance
+    performanceMetrics,
+    workerReady,
+    // Câmera
     availableCameras,
     selectedCamera,
     setSelectedCamera,
