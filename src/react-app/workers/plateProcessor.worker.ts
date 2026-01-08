@@ -61,12 +61,20 @@ let tesseractWorker: Tesseract.Worker | null = null;
 // ============ DETECÇÃO DE PLACAS (sem DOM) ============
 
 const PLATE_ASPECT_RATIO_IDEAL = 3.0;
+const PLATE_ASPECT_RATIO_MIN = 2.5;
+const PLATE_ASPECT_RATIO_MAX = 4.0;
 const MIN_PLATE_WIDTH_RATIO = 0.08;
 const MAX_PLATE_WIDTH_RATIO = 0.5;
 const MIN_PLATE_HEIGHT_RATIO = 0.03;
 const MAX_PLATE_HEIGHT_RATIO = 0.2;
 const EDGE_THRESHOLD = 30;
-const MIN_EDGE_DENSITY = 0.15;
+
+// Parâmetros refinados para reduzir falsos positivos
+const MIN_EDGE_DENSITY = 0.20;       // Aumentado de 0.15 - placas têm mais bordas
+const MIN_CONTRAST_SCORE = 0.4;      // Mínimo de contraste interno
+const MAX_SATURATION = 0.50;         // Máximo de saturação (evita faixas amarelas)
+const MIN_Y_RATIO = 0.30;            // Ignora 30% superior (céu, prédios)
+const MAX_Y_RATIO = 0.92;            // Ignora extremo inferior (chão próximo)
 
 function toGrayscale(data: Uint8ClampedArray): Uint8ClampedArray {
   const grayscale = new Uint8ClampedArray(data.length / 4);
@@ -123,6 +131,117 @@ function calculateEdgeDensity(
   return edgeCount / totalPixels;
 }
 
+/**
+ * Calcula a saturação média de uma região (para filtrar faixas amarelas)
+ * Retorna valor entre 0 (sem saturação) e 1 (totalmente saturado)
+ */
+function calculateRegionSaturation(
+  data: Uint8ClampedArray,
+  imageWidth: number,
+  x: number, y: number,
+  width: number, height: number
+): number {
+  let totalSaturation = 0;
+  let pixelCount = 0;
+  
+  for (let dy = 0; dy < height; dy += 2) { // Sample every 2 pixels for speed
+    for (let dx = 0; dx < width; dx += 2) {
+      const idx = ((y + dy) * imageWidth + (x + dx)) * 4;
+      const r = data[idx];
+      const g = data[idx + 1];
+      const b = data[idx + 2];
+      
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      
+      // Saturação HSL
+      const l = (max + min) / 2;
+      let s = 0;
+      if (max !== min) {
+        s = l > 127 
+          ? (max - min) / (510 - max - min) 
+          : (max - min) / (max + min);
+      }
+      
+      totalSaturation += s;
+      pixelCount++;
+    }
+  }
+  
+  return pixelCount > 0 ? totalSaturation / pixelCount : 0;
+}
+
+/**
+ * Calcula contraste interno de uma região (placas têm alto contraste texto/fundo)
+ * Retorna valor entre 0 (sem contraste) e 1 (alto contraste)
+ */
+function calculateInternalContrast(
+  grayscale: Uint8ClampedArray,
+  imageWidth: number,
+  x: number, y: number,
+  width: number, height: number
+): number {
+  // Construir histograma simplificado (4 bins)
+  const bins = [0, 0, 0, 0];
+  let pixelCount = 0;
+  
+  for (let dy = 0; dy < height; dy++) {
+    for (let dx = 0; dx < width; dx++) {
+      const idx = (y + dy) * imageWidth + (x + dx);
+      const value = grayscale[idx];
+      const bin = Math.min(3, Math.floor(value / 64));
+      bins[bin]++;
+      pixelCount++;
+    }
+  }
+  
+  if (pixelCount === 0) return 0;
+  
+  // Normalizar
+  const normalized = bins.map(b => b / pixelCount);
+  
+  // Verificar se há distribuição bimodal (picos em extremos = bom contraste)
+  const darkPixels = normalized[0] + normalized[1];
+  const lightPixels = normalized[2] + normalized[3];
+  
+  // Bom contraste: muitos pixels claros E escuros, poucos no meio
+  const contrastScore = Math.min(darkPixels, lightPixels) * 2;
+  
+  return Math.min(1, contrastScore);
+}
+
+/**
+ * Verifica se a região tem bordas verticais internas (caracteres)
+ */
+function hasInternalVerticalEdges(
+  edges: Uint8ClampedArray,
+  imageWidth: number,
+  x: number, y: number,
+  width: number, height: number
+): boolean {
+  // Dividir região em 7 colunas (uma por caractere potencial)
+  const colWidth = Math.floor(width / 7);
+  let columnsWithEdges = 0;
+  
+  for (let col = 0; col < 7; col++) {
+    const colX = x + col * colWidth;
+    let edgeCount = 0;
+    
+    for (let dy = 0; dy < height; dy++) {
+      for (let dx = 0; dx < colWidth; dx++) {
+        const idx = (y + dy) * imageWidth + (colX + dx);
+        if (edges[idx] > 0) edgeCount++;
+      }
+    }
+    
+    const colDensity = edgeCount / (colWidth * height);
+    if (colDensity > 0.1) columnsWithEdges++;
+  }
+  
+  // Placa real deve ter bordas em múltiplas colunas (caracteres)
+  return columnsWithEdges >= 4;
+}
+
 function findBestPlateRegion(
   imageData: ImageData,
   width: number,
@@ -171,37 +290,58 @@ function findBestPlateRegion(
   const stepX = Math.round(windowWidth / 3);
   const stepY = Math.round(windowHeight / 3);
   
+  // Limites verticais baseados em MIN_Y_RATIO e MAX_Y_RATIO
+  const minY = Math.round(processHeight * MIN_Y_RATIO);
+  const maxY = Math.round(processHeight * MAX_Y_RATIO) - windowHeight;
+  
   let bestRegion: BoundingBox | null = null;
   let bestScore = 0;
   
-  for (let y = 0; y < processHeight - windowHeight; y += stepY) {
+  for (let y = minY; y < maxY; y += stepY) {
     for (let x = 0; x < processWidth - windowWidth; x += stepX) {
-      const density = calculateEdgeDensity(edges, processWidth, x, y, windowWidth, windowHeight);
+      // 1. Verificar proporção
+      const aspectRatio = windowWidth / windowHeight;
+      if (aspectRatio < PLATE_ASPECT_RATIO_MIN || aspectRatio > PLATE_ASPECT_RATIO_MAX) {
+        continue;
+      }
       
-      if (density >= MIN_EDGE_DENSITY) {
-        const relativeWidth = windowWidth / processWidth;
-        const relativeHeight = windowHeight / processHeight;
-        
-        if (relativeWidth >= MIN_PLATE_WIDTH_RATIO && 
-            relativeWidth <= MAX_PLATE_WIDTH_RATIO &&
-            relativeHeight >= MIN_PLATE_HEIGHT_RATIO &&
-            relativeHeight <= MAX_PLATE_HEIGHT_RATIO) {
-          
-          const aspectRatio = windowWidth / windowHeight;
-          const aspectScore = 1 - Math.abs(aspectRatio - PLATE_ASPECT_RATIO_IDEAL) / PLATE_ASPECT_RATIO_IDEAL;
-          const score = density * aspectScore;
-          
-          if (score > bestScore) {
-            bestScore = score;
-            bestRegion = {
-              x: Math.round(x / scale),
-              y: Math.round(y / scale),
-              width: Math.round(windowWidth / scale),
-              height: Math.round(windowHeight / scale),
-              confidence: score,
-            };
-          }
-        }
+      // 2. Verificar tamanho relativo
+      const relativeWidth = windowWidth / processWidth;
+      const relativeHeight = windowHeight / processHeight;
+      if (relativeWidth < MIN_PLATE_WIDTH_RATIO || relativeWidth > MAX_PLATE_WIDTH_RATIO ||
+          relativeHeight < MIN_PLATE_HEIGHT_RATIO || relativeHeight > MAX_PLATE_HEIGHT_RATIO) {
+        continue;
+      }
+      
+      // 3. Calcular densidade de bordas
+      const density = calculateEdgeDensity(edges, processWidth, x, y, windowWidth, windowHeight);
+      if (density < MIN_EDGE_DENSITY) continue;
+      
+      // 4. Verificar saturação (filtrar faixas amarelas)
+      const saturation = calculateRegionSaturation(processData, processWidth, x, y, windowWidth, windowHeight);
+      if (saturation > MAX_SATURATION) continue;
+      
+      // 5. Verificar contraste interno
+      const contrast = calculateInternalContrast(grayscale, processWidth, x, y, windowWidth, windowHeight);
+      if (contrast < MIN_CONTRAST_SCORE) continue;
+      
+      // 6. Verificar bordas verticais internas (caracteres)
+      if (!hasInternalVerticalEdges(edges, processWidth, x, y, windowWidth, windowHeight)) continue;
+      
+      // Calcular score composto
+      const aspectScore = 1 - Math.abs(aspectRatio - PLATE_ASPECT_RATIO_IDEAL) / PLATE_ASPECT_RATIO_IDEAL;
+      const positionBonus = 1 - Math.abs((y / processHeight) - 0.6) * 0.5; // Preferir região central-baixa
+      const score = density * aspectScore * contrast * positionBonus * (1 - saturation * 0.5);
+      
+      if (score > bestScore) {
+        bestScore = score;
+        bestRegion = {
+          x: Math.round(x / scale),
+          y: Math.round(y / scale),
+          width: Math.round(windowWidth / scale),
+          height: Math.round(windowHeight / scale),
+          confidence: score,
+        };
       }
     }
   }
