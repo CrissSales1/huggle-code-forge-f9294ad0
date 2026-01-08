@@ -6,6 +6,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { recognizePlateFast, terminateOCR, type OCRResult } from '../utils/plateOCR';
 import { validateAndCorrectPlate } from '../utils/plateValidator';
+import { getPlateDetector } from '../utils/plateDetector';
 
 // Threshold reduzido para aceitar mais resultados do OCR local
 const CONFIDENCE_THRESHOLD = 0.60;
@@ -28,7 +29,8 @@ interface UsePlateRecognitionReturn {
   error: string | null;
   statusMessage: string;
   usedFallback: boolean;
-  recognizeFromCanvas: (canvas: HTMLCanvasElement) => Promise<OCRResult>;
+  debugImage: string | null; // Data URL da imagem de debug com região detectada
+  recognizeFromCanvas: (canvas: HTMLCanvasElement, enableDebug?: boolean) => Promise<OCRResult>;
   reset: () => void;
   cleanup: () => Promise<void>;
 }
@@ -127,16 +129,34 @@ export function usePlateRecognition(): UsePlateRecognitionReturn {
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState('');
   const [usedFallback, setUsedFallback] = useState(false);
+  const [debugImage, setDebugImage] = useState<string | null>(null);
   const attemptRef = useRef(0);
 
-  const recognizeFromCanvas = useCallback(async (canvas: HTMLCanvasElement): Promise<OCRResult> => {
+  const recognizeFromCanvas = useCallback(async (canvas: HTMLCanvasElement, enableDebug: boolean = false): Promise<OCRResult> => {
     attemptRef.current++;
     const currentAttempt = attemptRef.current;
     
     setIsProcessing(true);
     setError(null);
     setUsedFallback(false);
+    setDebugImage(null);
     setStatusMessage('Processando imagem...');
+    
+    // Gerar imagem de debug se solicitado
+    if (enableDebug) {
+      try {
+        const detector = getPlateDetector();
+        detector.setDebugMode(true);
+        const detectionResult = detector.detect(canvas);
+        detector.setDebugMode(false);
+        
+        if (detectionResult.debugCanvas) {
+          setDebugImage(detectionResult.debugCanvas.toDataURL('image/jpeg', 0.8));
+        }
+      } catch (e) {
+        console.warn('Erro ao gerar imagem de debug:', e);
+      }
+    }
     
     try {
       // Primeira tentativa: OCR local rápido (gratuito)
@@ -291,6 +311,7 @@ export function usePlateRecognition(): UsePlateRecognitionReturn {
     setError(null);
     setStatusMessage('');
     setUsedFallback(false);
+    setDebugImage(null);
     attemptRef.current++;
   }, []);
 
@@ -305,6 +326,7 @@ export function usePlateRecognition(): UsePlateRecognitionReturn {
     error,
     statusMessage,
     usedFallback,
+    debugImage,
     recognizeFromCanvas,
     reset,
     cleanup,
