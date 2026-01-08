@@ -546,39 +546,139 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     }
   }, [isActive, captureReferenceFrame]);
   
-  // Leitura manual instantânea - reutiliza processFrameForOCR que já tem toda a lógica
+  // Leitura manual instantânea - não depende do status atual
   const manualCapture = useCallback(async (): Promise<boolean> => {
-    if (!isActive) {
-      setStatusMessage('⚠️ Monitoramento não está ativo');
+    if (!videoRef.current || !canvasRef.current) {
+      setStatusMessage('⚠️ Câmera não disponível');
       return false;
     }
     
-    if (!hasReference) {
-      setStatusMessage('⚠️ Aguarde a referência ser capturada');
-      return false;
-    }
-    
+    setStatus('processing');
     setStatusMessage('📷 Leitura manual em progresso...');
+    startProcessingTimer();
     
-    // Chama processFrameForOCR que já inclui:
-    // - OCR da imagem
-    // - Validação da placa
-    // - isPlateRecent() → Deduplicação
-    // - checkIfMorador() → Verificação morador
-    // - saveDetection() → Salvar no banco
-    // - Atualização das detecções recentes
-    const result = await processFrameForOCR();
-    
-    // Restaurar status após processamento
-    if (isActiveRef.current) {
-      setStatus('monitoring');
-      if (!result) {
-        setStatusMessage('🟢 Monitorando...');
+    try {
+      updateProcessingStage('capturing', 'Capturando frame...');
+      
+      // Capturar a área diretamente do vídeo atual
+      const capturedCanvas = motionDetectorRef.current.captureArea(
+        videoRef.current,
+        virtualArea
+      );
+      
+      updateProcessingStage('ocr', 'Executando OCR...');
+      const result = await recognizeFromCanvas(capturedCanvas);
+      
+      updateProcessingStage('validating', 'Validando placa...');
+      
+      if (result.success && result.validation.isValid) {
+        const placa = result.validation.corrected;
+        
+        if (isPlateRecent(placa)) {
+          console.log(`⏳ Placa ${placa} detectada recentemente, ignorando...`);
+          finishProcessingTimer();
+          setStatus(isActive ? 'monitoring' : 'idle');
+          setStatusMessage(isActive ? '🟢 Monitorando...' : 'Parado');
+          return true;
+        }
+        
+        markPlateDetected(placa);
+        
+        // Verificar se é morador
+        const { isMorador, casa } = await checkIfMorador(placa);
+        
+        // Se não for morador, verificar se é visitante ativo
+        let isVisitante = false;
+        let nomeVisitante: string | undefined;
+        let casaFinal = casa;
+        
+        if (!isMorador) {
+          const visitanteResult = await checkIfVisitanteAtivo(placa);
+          if (visitanteResult.isVisitante) {
+            isVisitante = true;
+            nomeVisitante = visitanteResult.nome;
+            casaFinal = visitanteResult.casa;
+          }
+        }
+        
+        const fonteDeteccao = usedFallback ? 'api' : 'local';
+        const detection: Detection = {
+          placa,
+          timestamp: new Date().toISOString(),
+          isMorador,
+          isVisitante,
+          nomeVisitante,
+          casa: casaFinal,
+          confidence: result.validation.confidence,
+          usedFallback,
+          fonteDeteccao,
+        };
+        
+        setLastDetection(detection);
+        setRecentDetections(prev => [detection, ...prev.slice(0, 9)]);
+        
+        await saveDetection(placa, isMorador, casaFinal, result.validation.confidence, fonteDeteccao, isVisitante, nomeVisitante);
+        
+        finishProcessingTimer();
+        
+        if (isMorador) {
+          setStatusMessage(`✅ Morador: ${placa} - Casa ${casa}`);
+        } else if (isVisitante) {
+          setStatusMessage(`🧑 Visitante: ${nomeVisitante} - Casa ${casaFinal}`);
+        } else {
+          setStatusMessage(`⚠️ Não cadastrado: ${placa}`);
+        }
+        
+        // Restaurar status após 2 segundos
+        setTimeout(() => {
+          if (isActiveRef.current) {
+            setStatus('monitoring');
+          }
+        }, 2000);
+        
+        return true;
+      } else {
+        finishProcessingTimer();
+        setStatusMessage(`❌ Placa não reconhecida${result.rawText ? ` (texto: ${result.rawText})` : ''}`);
+        
+        // Restaurar status
+        setTimeout(() => {
+          if (isActiveRef.current) {
+            setStatus('monitoring');
+            setStatusMessage('🟢 Monitorando...');
+          } else {
+            setStatus('idle');
+            setStatusMessage('Parado');
+          }
+        }, 2000);
+        
+        return false;
       }
+    } catch (e) {
+      console.error('Erro na leitura manual:', e);
+      finishProcessingTimer();
+      setStatusMessage('❌ Erro no processamento');
+      
+      // Restaurar status
+      setStatus(isActive ? 'monitoring' : 'idle');
+      
+      return false;
     }
-    
-    return result;
-  }, [isActive, hasReference, processFrameForOCR]);
+  }, [
+    status, 
+    isActive,
+    virtualArea, 
+    recognizeFromCanvas, 
+    isPlateRecent, 
+    markPlateDetected, 
+    checkIfMorador, 
+    checkIfVisitanteAtivo,
+    saveDetection, 
+    usedFallback,
+    startProcessingTimer,
+    updateProcessingStage,
+    finishProcessingTimer,
+  ]);
   
   const processFrame = useCallback(async () => {
     if (!videoRef.current || !canvasRef.current) return;

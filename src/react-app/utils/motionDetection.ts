@@ -34,7 +34,7 @@ export interface MotionDetectionConfig {
 }
 
 // === Presets de Sensibilidade ===
-export type MotionSensitivity = 'baixa' | 'media' | 'alta';
+export type MotionSensitivity = 'baixa' | 'media' | 'alta' | 'custom';
 
 export interface SensitivityPreset {
   label: string;
@@ -43,7 +43,7 @@ export interface SensitivityPreset {
   minPixelDifference: number;
 }
 
-export const SENSITIVITY_PRESETS: Record<MotionSensitivity, SensitivityPreset> = {
+export const SENSITIVITY_PRESETS: Record<Exclude<MotionSensitivity, 'custom'>, SensitivityPreset> = {
   alta: {
     label: 'Alta',
     description: 'Detecta veículos mais facilmente',
@@ -77,14 +77,20 @@ const STORAGE_KEY = 'portacerta_virtual_area';
 const CAMERA_STORAGE_KEY = 'portacerta_selected_camera';
 const RESOLUTION_STORAGE_KEY = 'portacerta_camera_resolution';
 const SENSITIVITY_STORAGE_KEY = 'portacerta_motion_sensitivity';
+const CUSTOM_SENSITIVITY_KEY = 'portacerta_custom_sensitivity';
 
 // === Funções de persistência de sensibilidade ===
+
+export interface CustomSensitivity {
+  threshold: number; // 0.05 a 0.40 (5% a 40%)
+  minPixelDifference: number; // 15 a 60
+}
 
 export function loadMotionSensitivity(): MotionSensitivity {
   try {
     const saved = localStorage.getItem(SENSITIVITY_STORAGE_KEY);
-    if (saved && (saved === 'baixa' || saved === 'media' || saved === 'alta')) {
-      return saved;
+    if (saved && (saved === 'baixa' || saved === 'media' || saved === 'alta' || saved === 'custom')) {
+      return saved as MotionSensitivity;
     }
   } catch (e) {
     console.warn('Erro ao carregar sensibilidade:', e);
@@ -100,7 +106,34 @@ export function saveMotionSensitivity(sensitivity: MotionSensitivity): void {
   }
 }
 
+export function loadCustomSensitivity(): CustomSensitivity {
+  try {
+    const saved = localStorage.getItem(CUSTOM_SENSITIVITY_KEY);
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (e) {
+    console.warn('Erro ao carregar sensibilidade customizada:', e);
+  }
+  return { threshold: 0.15, minPixelDifference: 35 }; // Padrão = média
+}
+
+export function saveCustomSensitivity(config: CustomSensitivity): void {
+  try {
+    localStorage.setItem(CUSTOM_SENSITIVITY_KEY, JSON.stringify(config));
+  } catch (e) {
+    console.warn('Erro ao salvar sensibilidade customizada:', e);
+  }
+}
+
 export function getSensitivityConfig(sensitivity: MotionSensitivity): Partial<MotionDetectionConfig> {
+  if (sensitivity === 'custom') {
+    const custom = loadCustomSensitivity();
+    return {
+      threshold: custom.threshold,
+      minPixelDifference: custom.minPixelDifference,
+    };
+  }
   const preset = SENSITIVITY_PRESETS[sensitivity];
   return {
     threshold: preset.threshold,

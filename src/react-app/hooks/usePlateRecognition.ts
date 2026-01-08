@@ -7,8 +7,8 @@ import { useState, useCallback, useRef } from 'react';
 import { recognizePlateFast, terminateOCR, type OCRResult } from '../utils/plateOCR';
 import { validateAndCorrectPlate } from '../utils/plateValidator';
 
-// Threshold alto (90%) para minimizar uso da API paga
-const CONFIDENCE_THRESHOLD = 0.90;
+// Threshold reduzido para aceitar mais resultados do OCR local
+const CONFIDENCE_THRESHOLD = 0.60;
 const PLATE_RECOGNIZER_URL = 'https://kbgftpiyzfmabrncpnas.supabase.co/functions/v1/detect-plate';
 
 // Configuração para desativar fallback (economia máxima)
@@ -150,9 +150,19 @@ export function usePlateRecognition(): UsePlateRecognitionReturn {
       }
       
       const localConfidence = localResult.success ? localResult.validation.confidence : 0;
+      
+      // Debug log para diagnóstico
+      console.log('🔍 OCR Debug:', {
+        rawText: localResult.rawText,
+        confidence: Math.round(localConfidence * 100) + '%',
+        isValid: localResult.validation?.isValid,
+        corrected: localResult.validation?.corrected,
+        format: localResult.validation?.format,
+      });
+      
       console.log(`📊 OCR local: confiança ${Math.round(localConfidence * 100)}% (limite: ${CONFIDENCE_THRESHOLD * 100}%)`);
       
-      // Se confiança >= 75%, usar resultado local
+      // Se confiança >= threshold, usar resultado local
       if (localResult.success && localConfidence >= CONFIDENCE_THRESHOLD) {
         setLastResult(localResult);
         setStatusMessage(`✅ Placa: ${localResult.validation.formatted} (${Math.round(localConfidence * 100)}% - OCR local)`);
@@ -164,8 +174,28 @@ export function usePlateRecognition(): UsePlateRecognitionReturn {
       const fallbackEnabled = loadFallbackEnabled();
       
       if (!fallbackEnabled) {
-        // Modo econômico: usar resultado local mesmo com baixa confiança
-        if (localResult.success || localResult.rawText) {
+        // Modo econômico: tentar usar resultado local mesmo com baixa confiança
+        // Se temos um texto com 7 caracteres alfanuméricos, pode ser uma placa
+        const rawClean = localResult.rawText?.replace(/[^A-Z0-9]/gi, '') || '';
+        const couldBePlate = rawClean.length === 7;
+        
+        if (localResult.success || couldBePlate) {
+          // Se tem 7 caracteres, tentar validar/corrigir novamente
+          if (couldBePlate && !localResult.success) {
+            const revalidated = validateAndCorrectPlate(rawClean);
+            if (revalidated.isValid) {
+              const correctedResult = {
+                ...localResult,
+                success: true,
+                validation: revalidated,
+              };
+              setLastResult(correctedResult);
+              setStatusMessage(`⚠️ Placa: ${revalidated.formatted} (${Math.round(revalidated.confidence * 100)}% - modo econômico)`);
+              console.log(`💰 Modo econômico - placa corrigida: ${revalidated.formatted}`);
+              return correctedResult;
+            }
+          }
+          
           setLastResult(localResult);
           const msg = localResult.success 
             ? `⚠️ Placa: ${localResult.validation.formatted} (${Math.round(localConfidence * 100)}% - modo econômico)`

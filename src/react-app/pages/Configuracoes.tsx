@@ -8,7 +8,10 @@ import {
   MotionSensitivity, 
   SENSITIVITY_PRESETS, 
   loadMotionSensitivity, 
-  saveMotionSensitivity 
+  saveMotionSensitivity,
+  loadCustomSensitivity,
+  saveCustomSensitivity,
+  type CustomSensitivity,
 } from '@/react-app/utils/motionDetection';
 import { loadFallbackEnabled, saveFallbackEnabled } from '@/react-app/hooks/usePlateRecognition';
 
@@ -34,6 +37,7 @@ export default function Configuracoes() {
   const [totalPrismas, setTotalPrismas] = useState(configuracoes?.total_prismas_magneticos || 20);
   const [tempoDeduplicacao, setTempoDeduplicacao] = useState(configuracoes?.tempo_deduplicacao_segundos || 30);
   const [sensibilidade, setSensibilidade] = useState<MotionSensitivity>(loadMotionSensitivity());
+  const [customSensitivity, setCustomSensitivity] = useState<CustomSensitivity>(loadCustomSensitivity());
   const [usarApenasOCRLocal, setUsarApenasOCRLocal] = useState(!loadFallbackEnabled());
   // Estados para proteção da exclusão
   const [exclusaoDesbloqueada, setExclusaoDesbloqueada] = useState(false);
@@ -510,8 +514,10 @@ export default function Configuracoes() {
                   <span>Sensibilidade de Movimento</span>
                 </div>
               </label>
-              <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                {(['baixa', 'media', 'alta'] as MotionSensitivity[]).map((nivel) => {
+              
+              {/* Botões de preset + custom */}
+              <div className="grid grid-cols-4 gap-2 sm:gap-3 mb-4">
+                {(['baixa', 'media', 'alta'] as const).map((nivel) => {
                   const preset = SENSITIVITY_PRESETS[nivel];
                   const isSelected = sensibilidade === nivel;
                   return (
@@ -531,20 +537,90 @@ export default function Configuracoes() {
                       <span className={`text-xs sm:text-sm font-medium ${isSelected ? 'text-orange-700' : 'text-gray-800'}`}>
                         {preset.label}
                       </span>
-                      <span className={`text-[10px] sm:text-xs mt-0.5 text-center ${isSelected ? 'text-orange-600' : 'text-gray-500'}`}>
-                        {preset.description}
+                      <span className={`text-[10px] sm:text-xs mt-0.5 text-center hidden sm:block ${isSelected ? 'text-orange-600' : 'text-gray-500'}`}>
+                        {Math.round(preset.threshold * 100)}%
                       </span>
-                      {nivel === 'media' && (
-                        <span className="text-[9px] sm:text-[10px] mt-1 px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded-full">
-                          Recomendado
-                        </span>
-                      )}
                     </button>
                   );
                 })}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSensibilidade('custom');
+                    saveMotionSensitivity('custom');
+                  }}
+                  className={`flex flex-col items-center p-2 sm:p-3 rounded-lg border-2 transition-all ${
+                    sensibilidade === 'custom'
+                      ? 'border-purple-500 bg-purple-50 text-purple-700'
+                      : 'border-gray-200 hover:border-purple-300 hover:bg-purple-50/50 text-gray-600'
+                  }`}
+                >
+                  <span className={`text-xs sm:text-sm font-medium ${sensibilidade === 'custom' ? 'text-purple-700' : 'text-gray-800'}`}>
+                    Custom
+                  </span>
+                  <span className={`text-[10px] sm:text-xs mt-0.5 text-center hidden sm:block ${sensibilidade === 'custom' ? 'text-purple-600' : 'text-gray-500'}`}>
+                    {Math.round(customSensitivity.threshold * 100)}%
+                  </span>
+                </button>
               </div>
+              
+              {/* Slider para modo custom */}
+              {sensibilidade === 'custom' && (
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 sm:p-4 space-y-4">
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-xs sm:text-sm font-medium text-purple-700">Threshold de Mudança</span>
+                      <span className="text-sm font-bold text-purple-800">{Math.round(customSensitivity.threshold * 100)}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="5"
+                      max="40"
+                      value={Math.round(customSensitivity.threshold * 100)}
+                      onChange={(e) => {
+                        const newThreshold = parseInt(e.target.value) / 100;
+                        const newConfig = { ...customSensitivity, threshold: newThreshold };
+                        setCustomSensitivity(newConfig);
+                        saveCustomSensitivity(newConfig);
+                      }}
+                      className="w-full h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+                    />
+                    <div className="flex justify-between text-[10px] text-purple-600 mt-1">
+                      <span>5% (muito sensível)</span>
+                      <span>40% (pouco sensível)</span>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-xs sm:text-sm font-medium text-purple-700">Diferença Mínima de Pixel</span>
+                      <span className="text-sm font-bold text-purple-800">{customSensitivity.minPixelDifference}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="15"
+                      max="60"
+                      value={customSensitivity.minPixelDifference}
+                      onChange={(e) => {
+                        const newMinPixel = parseInt(e.target.value);
+                        const newConfig = { ...customSensitivity, minPixelDifference: newMinPixel };
+                        setCustomSensitivity(newConfig);
+                        saveCustomSensitivity(newConfig);
+                      }}
+                      className="w-full h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+                    />
+                    <div className="flex justify-between text-[10px] text-purple-600 mt-1">
+                      <span>15 (sensível)</span>
+                      <span>60 (robusto)</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               <p className="text-[10px] sm:text-xs text-gray-500 mt-2">
-                Se veículos não são detectados, aumente a sensibilidade. Se há muitos falsos positivos, diminua.
+                {sensibilidade === 'custom' 
+                  ? 'Ajuste fino: menor threshold = mais sensível, menor diferença de pixel = mais sensível.'
+                  : 'Se veículos não são detectados, aumente a sensibilidade. Se há muitos falsos positivos, diminua.'}
               </p>
             </div>
 
