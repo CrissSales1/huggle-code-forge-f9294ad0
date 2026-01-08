@@ -1,10 +1,11 @@
 /**
  * Serviço de OCR otimizado para placas usando Tesseract.js
- * OTIMIZADO: Usa OEM=0 (Legacy, mais rápido) e canvas reutilizável
+ * OTIMIZADO: Usa detecção de região + OEM=0 (Legacy, mais rápido)
  */
 import Tesseract from 'tesseract.js';
 import { preprocessForOCR, preprocessLight } from './imagePreprocessing';
 import { validateAndCorrectPlate, type PlateValidationResult } from './plateValidator';
+import { detectAndCropPlate } from './plateDetector';
 
 let worker: Tesseract.Worker | null = null;
 let isInitializing = false;
@@ -151,11 +152,11 @@ export async function recognizePlate(canvas: HTMLCanvasElement): Promise<OCRResu
 }
 
 /**
- * Versão rápida do OCR (menos pré-processamento + imagem reduzida)
- * OTIMIZADO: Reduz imagem para max 400x150 para OCR mais rápido
+ * Versão rápida do OCR com detecção de região
+ * OTIMIZADO: Primeiro detecta a placa, depois faz OCR apenas na região
  */
-const OCR_MAX_WIDTH = 400;
-const OCR_MAX_HEIGHT = 150;
+const OCR_MAX_WIDTH = 600;
+const OCR_MAX_HEIGHT = 200;
 
 export async function recognizePlateFast(canvas: HTMLCanvasElement): Promise<OCRResult> {
   const startTime = performance.now();
@@ -163,33 +164,57 @@ export async function recognizePlateFast(canvas: HTMLCanvasElement): Promise<OCR
   try {
     const tesseractWorker = await initWorker();
     
-    // Redimensionar imagem para tamanho otimizado para placas
-    let targetWidth = canvas.width;
-    let targetHeight = canvas.height;
+    // 1. DETECTAR: Encontrar região da placa no frame
+    const detection = detectAndCropPlate(canvas);
     
-    if (canvas.width > OCR_MAX_WIDTH || canvas.height > OCR_MAX_HEIGHT) {
-      const scaleW = OCR_MAX_WIDTH / canvas.width;
-      const scaleH = OCR_MAX_HEIGHT / canvas.height;
-      const scale = Math.min(scaleW, scaleH);
-      targetWidth = Math.round(canvas.width * scale);
-      targetHeight = Math.round(canvas.height * scale);
+    let sourceCanvas = canvas;
+    let detectionUsed = false;
+    
+    if (detection.success && detection.croppedCanvas) {
+      console.log(`🎯 Placa detectada com ${Math.round(detection.confidence * 100)}% confiança`);
+      sourceCanvas = detection.croppedCanvas;
+      detectionUsed = true;
+    } else {
+      console.log('⚠️ Nenhuma placa detectada, usando frame inteiro');
     }
     
-    // Usar canvas reutilizável com tamanho otimizado
+    // 2. REDIMENSIONAR: Ajustar tamanho para OCR
+    let targetWidth = sourceCanvas.width;
+    let targetHeight = sourceCanvas.height;
+    
+    if (sourceCanvas.width > OCR_MAX_WIDTH || sourceCanvas.height > OCR_MAX_HEIGHT) {
+      const scaleW = OCR_MAX_WIDTH / sourceCanvas.width;
+      const scaleH = OCR_MAX_HEIGHT / sourceCanvas.height;
+      const scale = Math.min(scaleW, scaleH);
+      targetWidth = Math.round(sourceCanvas.width * scale);
+      targetHeight = Math.round(sourceCanvas.height * scale);
+    } else if (detectionUsed && sourceCanvas.width < 300) {
+      // Se a região detectada é muito pequena, aumentar para melhor OCR
+      const scale = 300 / sourceCanvas.width;
+      targetWidth = Math.round(sourceCanvas.width * scale);
+      targetHeight = Math.round(sourceCanvas.height * scale);
+    }
+    
+    // 3. PRÉ-PROCESSAR: Usar canvas reutilizável
     const { canvas: processedCanvas, ctx } = getProcessingCanvas(targetWidth, targetHeight);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(canvas, 0, 0, targetWidth, targetHeight);
+    ctx.drawImage(sourceCanvas, 0, 0, targetWidth, targetHeight);
     
-    // Pré-processamento leve (mais rápido)
-    const processedImage = preprocessLight(processedCanvas);
+    // Pré-processamento (mais agressivo se usou detecção)
+    const processedImage = detectionUsed 
+      ? preprocessForOCR(processedCanvas)  // Pipeline completo para região isolada
+      : preprocessLight(processedCanvas);   // Leve para frame inteiro
     
-    // OCR
+    // 4. OCR
     const result = await tesseractWorker.recognize(processedImage);
     const rawText = result.data.text.trim();
     const ocrConfidence = result.data.confidence / 100;
     const validation = validateAndCorrectPlate(rawText);
     const processingTimeMs = performance.now() - startTime;
+    
+    // Log detalhado
+    console.log(`📝 OCR: "${rawText}" | Tesseract: ${Math.round(ocrConfidence * 100)}% | Detecção: ${detectionUsed ? 'Sim' : 'Não'}`);
     
     return {
       success: validation.isValid,
