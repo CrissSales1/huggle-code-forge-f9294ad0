@@ -66,6 +66,7 @@ export interface ProcessingInfo {
   currentTimeMs: number;
   lastOcrTimeMs: number;
   avgTimeMs: number;
+  debugImage?: string; // Data URL da imagem de debug com região detectada
 }
 
 interface MonitoringContextType {
@@ -79,6 +80,9 @@ interface MonitoringContextType {
   motionPercent: number;
   processingInfo: ProcessingInfo;
   hasReference: boolean;
+  debugImage: string | null; // Imagem de debug com região da placa detectada
+  debugModeEnabled: boolean;
+  setDebugModeEnabled: (enabled: boolean) => void;
   
   // Câmera
   availableCameras: MediaDeviceInfo[];
@@ -152,7 +156,22 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   const recentPlatesRef = useRef<Map<string, number>>(new Map());
   const isActiveRef = useRef(false);
   
-  const { recognizeFromCanvas, reset: resetOCR, usedFallback } = usePlateRecognition();
+  const { recognizeFromCanvas, reset: resetOCR, usedFallback, debugImage } = usePlateRecognition();
+  
+  // Estado para modo debug
+  const [debugModeEnabled, setDebugModeEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('portacerta_debug_mode') === 'true';
+    } catch { return false; }
+  });
+  
+  // Persistir modo debug
+  const setDebugModeEnabledWithPersist = useCallback((enabled: boolean) => {
+    setDebugModeEnabled(enabled);
+    try {
+      localStorage.setItem('portacerta_debug_mode', enabled ? 'true' : 'false');
+    } catch { }
+  }, []);
   
   // Manter ref sincronizada com estado
   useEffect(() => {
@@ -422,7 +441,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       
       updateProcessingStage('preprocessing', 'Pré-processando...');
       updateProcessingStage('ocr', 'Executando OCR...');
-      const result = await recognizeFromCanvas(capturedCanvas);
+      const result = await recognizeFromCanvas(capturedCanvas, debugModeEnabled);
       
       updateProcessingStage('validating', 'Validando placa...');
       
@@ -567,7 +586,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       );
       
       updateProcessingStage('ocr', 'Executando OCR...');
-      const result = await recognizeFromCanvas(capturedCanvas);
+      const result = await recognizeFromCanvas(capturedCanvas, debugModeEnabled);
       
       updateProcessingStage('validating', 'Validando placa...');
       
@@ -1001,6 +1020,9 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     motionPercent,
     processingInfo,
     hasReference,
+    debugImage,
+    debugModeEnabled,
+    setDebugModeEnabled: setDebugModeEnabledWithPersist,
     availableCameras,
     selectedCamera,
     setSelectedCamera,

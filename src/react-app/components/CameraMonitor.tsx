@@ -77,6 +77,10 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
     // Refs do vídeo
     videoRef,
     canvasRef,
+    // Debug
+    debugImage,
+    debugModeEnabled,
+    setDebugModeEnabled,
   } = useMonitoring();
   
   const [showSettings, setShowSettings] = useState(false);
@@ -415,6 +419,25 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
             </span>
           </div>
           
+          {/* Toggle de Debug - Mostrar região da placa */}
+          <div className="flex items-center gap-3">
+            <label className="text-sm font-medium text-gray-700 min-w-[70px]">Debug OCR:</label>
+            <button
+              onClick={() => setDebugModeEnabled(!debugModeEnabled)}
+              className={`relative w-11 h-6 rounded-full transition-colors ${
+                debugModeEnabled ? 'bg-purple-600' : 'bg-gray-300'
+              }`}
+              title={debugModeEnabled ? 'Clique para desativar visualização de debug' : 'Clique para ver região da placa detectada'}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                debugModeEnabled ? 'translate-x-5' : 'translate-x-0'
+              }`} />
+            </button>
+            <span className="text-xs text-gray-500">
+              {debugModeEnabled ? '🔍 Mostrando região detectada' : 'Desativado'}
+            </span>
+          </div>
+          
           <div className="flex items-center gap-2 flex-wrap">
             {editMode === 'none' ? (
               <>
@@ -682,6 +705,25 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
               )}
             </div>
           </div>
+          
+          {/* Debug Image - Região da placa detectada */}
+          {debugModeEnabled && debugImage && (
+            <div className="mt-3 pt-3 border-t border-gray-200">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-medium text-purple-700">🔍 Última detecção (região da placa)</span>
+              </div>
+              <div className="relative bg-gray-900 rounded-lg overflow-hidden">
+                <img 
+                  src={debugImage} 
+                  alt="Região detectada da placa" 
+                  className="w-full h-auto max-h-32 object-contain"
+                />
+                <div className="absolute bottom-1 right-1 bg-black/70 text-white text-xs px-2 py-0.5 rounded">
+                  Verde = Melhor região detectada
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
       
