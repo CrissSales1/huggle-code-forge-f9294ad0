@@ -69,6 +69,10 @@ export default defineConfig(({ mode }) => ({
   build: {
     chunkSizeWarningLimit: 5000,
   },
+  // Web Worker configuration
+  worker: {
+    format: 'es',
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
