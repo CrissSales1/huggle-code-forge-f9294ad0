@@ -1,6 +1,7 @@
 /**
  * Hook para gerenciar o Web Worker de processamento de placas
  * Fornece interface simples para processar frames em background
+ * FASE 1: Interface principal para OCR - substitui usePlateRecognition
  */
 import { useState, useCallback, useRef, useEffect } from 'react';
 
@@ -13,12 +14,14 @@ interface PlateValidationResult {
   confidence: number;
 }
 
-interface OCRResult {
+export interface OCRResult {
   success: boolean;
   rawText: string;
   validation: PlateValidationResult;
   ocrConfidence: number;
   processingTimeMs: number;
+  usedFallback?: boolean;
+  debugImage?: string; // Base64 da imagem com bounding box
 }
 
 interface MotionDetectionConfig {
@@ -30,6 +33,13 @@ interface MotionDetectionConfig {
 interface ProcessingProgress {
   stage: string;
   progress: number;
+}
+
+export interface ProcessPlateOptions {
+  enableDebug?: boolean;
+  enableFallback?: boolean;
+  fallbackApiUrl?: string;
+  fallbackApiToken?: string;
 }
 
 type WorkerResponse = 
@@ -44,9 +54,26 @@ interface UsePlateWorkerReturn {
   isProcessing: boolean;
   progress: ProcessingProgress | null;
   error: string | null;
-  processPlate: (canvas: HTMLCanvasElement) => Promise<OCRResult | null>;
+  processPlate: (canvas: HTMLCanvasElement, options?: ProcessPlateOptions) => Promise<OCRResult | null>;
   detectMotion: (currentData: Uint8ClampedArray, referenceData: Uint8ClampedArray, config: MotionDetectionConfig) => Promise<number>;
   terminate: () => void;
+}
+
+// Configurações de fallback do localStorage
+const FALLBACK_ENABLED_KEY = 'portacerta_fallback_enabled';
+const FALLBACK_API_URL_KEY = 'portacerta_fallback_url';
+const FALLBACK_API_TOKEN_KEY = 'portacerta_fallback_token';
+
+function loadFallbackConfig(): { enabled: boolean; apiUrl: string; apiToken: string } {
+  try {
+    return {
+      enabled: localStorage.getItem(FALLBACK_ENABLED_KEY) === 'true',
+      apiUrl: localStorage.getItem(FALLBACK_API_URL_KEY) || '',
+      apiToken: localStorage.getItem(FALLBACK_API_TOKEN_KEY) || '',
+    };
+  } catch {
+    return { enabled: false, apiUrl: '', apiToken: '' };
+  }
 }
 
 export function usePlateWorker(): UsePlateWorkerReturn {
@@ -138,7 +165,10 @@ export function usePlateWorker(): UsePlateWorkerReturn {
   }, []);
   
   // Processar placa usando o worker
-  const processPlate = useCallback(async (canvas: HTMLCanvasElement): Promise<OCRResult | null> => {
+  const processPlate = useCallback(async (
+    canvas: HTMLCanvasElement,
+    options?: ProcessPlateOptions
+  ): Promise<OCRResult | null> => {
     if (!workerRef.current || !isReady) {
       console.warn('Worker não está pronto');
       return null;
@@ -164,6 +194,15 @@ export function usePlateWorker(): UsePlateWorkerReturn {
       
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       
+      // Carregar configurações de fallback do localStorage se não especificadas
+      const fallbackConfig = loadFallbackConfig();
+      const finalOptions: ProcessPlateOptions = {
+        enableDebug: options?.enableDebug ?? false,
+        enableFallback: options?.enableFallback ?? fallbackConfig.enabled,
+        fallbackApiUrl: options?.fallbackApiUrl ?? fallbackConfig.apiUrl,
+        fallbackApiToken: options?.fallbackApiToken ?? fallbackConfig.apiToken,
+      };
+      
       // Usar Transferable para zero-copy
       workerRef.current!.postMessage(
         {
@@ -172,6 +211,7 @@ export function usePlateWorker(): UsePlateWorkerReturn {
             imageData,
             width: canvas.width,
             height: canvas.height,
+            options: finalOptions,
           },
         },
         [imageData.data.buffer]
