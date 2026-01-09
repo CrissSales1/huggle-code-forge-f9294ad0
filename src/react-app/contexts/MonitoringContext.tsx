@@ -171,6 +171,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     error: workerError,
     modelLoaded,
     modelLoading,
+    modelFailed,
     processPlate: processPlateWorker,
     loadYoloModel,
   } = usePlateWorker();
@@ -196,13 +197,13 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     }
   }, [workerReady, workerProcessing, workerError, setWorkerStatus]);
   
-  // Carregar modelo YOLO quando monitoramento iniciar
+  // Carregar modelo YOLO quando monitoramento iniciar (apenas uma vez)
   useEffect(() => {
-    if (isActive && workerReady && !modelLoaded && !modelLoading) {
+    if (isActive && workerReady && !modelLoaded && !modelLoading && !modelFailed) {
       console.log('🧠 Tentando carregar modelo YOLO...');
       loadYoloModel();
     }
-  }, [isActive, workerReady, modelLoaded, modelLoading, loadYoloModel]);
+  }, [isActive, workerReady, modelLoaded, modelLoading, modelFailed, loadYoloModel]);
   
   const [_usedFallback, setUsedFallback] = useState(false);
   const [debugImage, setDebugImage] = useState<string | null>(null);
