@@ -702,6 +702,17 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
               <span className="text-xs text-gray-600">{processingInfo.stageLabel}</span>
             </div>
             
+            {/* Texto OCR para diagnóstico */}
+            {processingInfo.rawText && (
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-yellow-50 border border-yellow-200 rounded text-xs">
+                <span className="text-yellow-700 font-medium">OCR:</span>
+                <span className="font-mono text-yellow-800">"{processingInfo.rawText}"</span>
+                {processingInfo.ocrConfidence !== undefined && (
+                  <span className="text-yellow-600">({Math.round(processingInfo.ocrConfidence * 100)}%)</span>
+                )}
+              </div>
+            )}
+            
             {/* Métricas de tempo */}
             <div className="flex items-center gap-3 ml-auto text-xs">
               {processingInfo.currentTimeMs > 0 && processingInfo.stage !== 'idle' && (
