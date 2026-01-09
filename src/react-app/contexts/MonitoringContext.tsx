@@ -89,6 +89,8 @@ interface MonitoringContextType {
   // Performance
   performanceMetrics: PerformanceMetrics;
   workerReady: boolean;
+  modelLoaded: boolean;
+  modelLoading: boolean;
   
   // Câmera
   availableCameras: MediaDeviceInfo[];
@@ -167,7 +169,10 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     isReady: workerReady, 
     isProcessing: workerProcessing,
     error: workerError,
+    modelLoaded,
+    modelLoading,
     processPlate: processPlateWorker,
+    loadYoloModel,
   } = usePlateWorker();
   
   const {
@@ -190,6 +195,14 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       setWorkerStatus('initializing');
     }
   }, [workerReady, workerProcessing, workerError, setWorkerStatus]);
+  
+  // Carregar modelo YOLO quando monitoramento iniciar
+  useEffect(() => {
+    if (isActive && workerReady && !modelLoaded && !modelLoading) {
+      console.log('🧠 Tentando carregar modelo YOLO...');
+      loadYoloModel();
+    }
+  }, [isActive, workerReady, modelLoaded, modelLoading, loadYoloModel]);
   
   const [_usedFallback, setUsedFallback] = useState(false);
   const [debugImage, setDebugImage] = useState<string | null>(null);
@@ -1099,6 +1112,8 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     // Performance
     performanceMetrics,
     workerReady,
+    modelLoaded,
+    modelLoading,
     // Câmera
     availableCameras,
     selectedCamera,

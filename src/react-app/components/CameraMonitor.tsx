@@ -84,6 +84,8 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
     setDebugModeEnabled,
     // Performance
     performanceMetrics,
+    modelLoaded,
+    modelLoading,
   } = useMonitoring();
   
   const [showSettings, setShowSettings] = useState(false);
@@ -671,7 +673,12 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
         {/* Performance Indicator - Top Right */}
         {isActive && editMode === 'none' && (
           <div className="absolute top-2 right-2">
-            <PerformanceIndicator metrics={performanceMetrics} compact />
+            <PerformanceIndicator 
+              metrics={performanceMetrics} 
+              compact 
+              modelLoaded={modelLoaded}
+              modelLoading={modelLoading}
+            />
           </div>
         )}
       </div>

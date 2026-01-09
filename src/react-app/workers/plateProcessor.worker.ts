@@ -4,6 +4,7 @@
  * Evita bloqueio da UI durante processamento pesado
  * 
  * FASE 1: Processamento completo no worker incluindo fallback API e debug images
+ * FASE 2: Integração com TensorFlow.js + YOLOv8 para detecção de placas
  */
 
 import Tesseract from 'tesseract.js';
@@ -34,6 +35,7 @@ interface OCRResult {
   ocrConfidence: number;
   processingTimeMs: number;
   usedFallback?: boolean;
+  usedYolo?: boolean;
   debugImage?: string;
 }
 
@@ -54,12 +56,14 @@ interface ProcessPlateOptions {
 
 type WorkerMessage = 
   | { type: 'INIT' }
+  | { type: 'LOAD_YOLO_MODEL' }
   | { type: 'PROCESS_PLATE'; payload: { imageData: ImageData; width: number; height: number; options?: ProcessPlateOptions } }
   | { type: 'DETECT_MOTION'; payload: { currentData: Uint8ClampedArray; referenceData: Uint8ClampedArray; config: MotionDetectionConfig } }
   | { type: 'TERMINATE' };
 
 type WorkerResponse = 
   | { type: 'READY' }
+  | { type: 'MODEL_LOADED'; payload: { success: boolean } }
   | { type: 'PLATE_RESULT'; payload: OCRResult }
   | { type: 'MOTION_RESULT'; payload: { motionPercent: number } }
   | { type: 'ERROR'; payload: { message: string } }
@@ -69,7 +73,190 @@ type WorkerResponse =
 
 let tesseractWorker: Tesseract.Worker | null = null;
 
-// ============ CONSTANTES DE DETECÇÃO ============
+// Estado do modelo YOLO (TensorFlow.js)
+let yoloModel: any = null;
+let modelLoading = false;
+let modelReady = false;
+let tf: any = null;
+
+// Declarar importScripts para TypeScript (função global de Web Workers)
+declare function importScripts(...urls: string[]): void;
+
+// Constantes YOLO
+const YOLO_INPUT_SIZE = 640;
+const YOLO_CONFIDENCE_THRESHOLD = 0.5;
+
+// ============ FUNÇÕES YOLO (TensorFlow.js) ============
+
+async function checkModelExists(): Promise<boolean> {
+  try {
+    const response = await fetch('/models/yolov8n-plates/model.json', { method: 'HEAD' });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function loadYoloModel(): Promise<boolean> {
+  if (modelReady) return true;
+  if (modelLoading) return false;
+  
+  modelLoading = true;
+  
+  try {
+    // Verificar se os arquivos do modelo existem
+    const modelExists = await checkModelExists();
+    if (!modelExists) {
+      console.log('ℹ️ Modelo YOLO não disponível, usando detecção heurística');
+      modelLoading = false;
+      return false;
+    }
+    
+    self.postMessage({ type: 'PROGRESS', payload: { 
+      stage: 'Carregando TensorFlow.js...', 
+      progress: 0 
+    }});
+    
+    // Importar TensorFlow.js dinamicamente
+    importScripts('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js');
+    tf = (self as any).tf;
+    
+    // Configurar backend WebGL para GPU (fallback para CPU se não disponível)
+    try {
+      await tf.setBackend('webgl');
+    } catch {
+      console.log('⚠️ WebGL não disponível, usando CPU');
+      await tf.setBackend('cpu');
+    }
+    await tf.ready();
+    
+    self.postMessage({ type: 'PROGRESS', payload: { 
+      stage: 'Baixando modelo YOLO...', 
+      progress: 0.3 
+    }});
+    
+    // Carregar modelo do diretório public
+    yoloModel = await tf.loadGraphModel('/models/yolov8n-plates/model.json');
+    
+    self.postMessage({ type: 'PROGRESS', payload: { 
+      stage: 'Preparando modelo...', 
+      progress: 0.8 
+    }});
+    
+    // Warmup - primeira inferência é mais lenta
+    const warmupTensor = tf.zeros([1, YOLO_INPUT_SIZE, YOLO_INPUT_SIZE, 3]);
+    await yoloModel.predict(warmupTensor);
+    warmupTensor.dispose();
+    
+    modelReady = true;
+    modelLoading = false;
+    
+    self.postMessage({ type: 'PROGRESS', payload: { 
+      stage: 'Modelo YOLO pronto!', 
+      progress: 1 
+    }});
+    
+    console.log('✅ Modelo YOLO carregado com sucesso');
+    return true;
+  } catch (error) {
+    console.error('Erro ao carregar modelo YOLO:', error);
+    modelLoading = false;
+    return false;
+  }
+}
+
+async function detectPlateWithYOLO(
+  imageData: ImageData, 
+  width: number, 
+  height: number
+): Promise<BoundingBox | null> {
+  if (!modelReady || !yoloModel || !tf) return null;
+  
+  try {
+    // 1. Criar tensor a partir de ImageData
+    const imageTensor = tf.browser.fromPixels({
+      data: imageData.data,
+      width: width,
+      height: height,
+    });
+    
+    // 2. Redimensionar para 640x640 (entrada padrão YOLO)
+    const resized = tf.image.resizeBilinear(imageTensor, [YOLO_INPUT_SIZE, YOLO_INPUT_SIZE]);
+    
+    // 3. Normalizar para [0, 1]
+    const normalized = resized.div(255.0);
+    
+    // 4. Adicionar dimensão de batch
+    const batched = normalized.expandDims(0);
+    
+    // 5. Executar inferência
+    const predictions = await yoloModel.predict(batched);
+    
+    // 6. Processar saída do YOLOv8
+    // Output shape típico: [1, 5, 8400] ou [1, 8400, 5] dependendo do export
+    // onde 5 = 4 (box: cx, cy, w, h) + 1 (confidence para classe "plate")
+    const outputData = await predictions.array();
+    
+    // Determinar formato da saída
+    let detections: number[][] = [];
+    
+    if (Array.isArray(outputData[0]) && Array.isArray(outputData[0][0])) {
+      // Formato [1, num_classes+4, num_boxes] - transpor para [num_boxes, num_classes+4]
+      const data = outputData[0];
+      if (data.length < 8400) {
+        // Formato [1, 5, 8400]
+        const numBoxes = data[0].length;
+        for (let i = 0; i < numBoxes; i++) {
+          const box = data.map((row: number[]) => row[i]);
+          detections.push(box);
+        }
+      } else {
+        // Formato [1, 8400, 5]
+        detections = data;
+      }
+    }
+    
+    // 7. Encontrar melhor detecção
+    let bestBox: BoundingBox | null = null;
+    let bestConfidence = YOLO_CONFIDENCE_THRESHOLD;
+    
+    for (const detection of detections) {
+      // Formato esperado: [cx, cy, w, h, confidence]
+      if (detection.length < 5) continue;
+      
+      const [cx, cy, w, h, confidence] = detection;
+      
+      if (confidence > bestConfidence) {
+        // Converter de coords normalizadas (0-640) para pixels originais
+        const scaleX = width / YOLO_INPUT_SIZE;
+        const scaleY = height / YOLO_INPUT_SIZE;
+        
+        bestBox = {
+          x: Math.round((cx - w/2) * scaleX),
+          y: Math.round((cy - h/2) * scaleY),
+          width: Math.round(w * scaleX),
+          height: Math.round(h * scaleY),
+          confidence: confidence,
+        };
+        bestConfidence = confidence;
+      }
+    }
+    
+    // Cleanup tensors
+    imageTensor.dispose();
+    resized.dispose();
+    normalized.dispose();
+    batched.dispose();
+    if (predictions.dispose) predictions.dispose();
+    
+    return bestBox;
+  } catch (error) {
+    console.error('Erro na detecção YOLO:', error);
+    return null;
+  }
+}
+
+// ============ CONSTANTES DE DETECÇÃO (Heurística) ============
 
 const PLATE_ASPECT_RATIO_IDEAL = 3.0;
 const PLATE_ASPECT_RATIO_MIN = 2.5;
@@ -684,6 +871,7 @@ async function processPlate(
   options?: ProcessPlateOptions
 ): Promise<OCRResult> {
   const startTime = performance.now();
+  let usedYolo = false;
   
   try {
     if (!tesseractWorker) {
@@ -692,8 +880,21 @@ async function processPlate(
     
     self.postMessage({ type: 'PROGRESS', payload: { stage: 'Detectando placa...', progress: 0.1 } });
     
-    // 1. Detectar região da placa
-    const plateRegion = findBestPlateRegion(imageData, width, height);
+    // 1. Tentar detecção com YOLO primeiro (se modelo disponível)
+    let plateRegion: BoundingBox | null = null;
+    
+    if (modelReady) {
+      plateRegion = await detectPlateWithYOLO(imageData, width, height);
+      usedYolo = plateRegion !== null;
+      if (usedYolo) {
+        console.log(`🧠 YOLO detectou placa com ${Math.round((plateRegion?.confidence || 0) * 100)}% confiança`);
+      }
+    }
+    
+    // 2. Fallback para heurística se YOLO não detectar
+    if (!plateRegion) {
+      plateRegion = findBestPlateRegion(imageData, width, height);
+    }
     
     let processData: Uint8ClampedArray;
     let processWidth: number;
@@ -792,6 +993,7 @@ async function processPlate(
       ocrConfidence,
       processingTimeMs,
       usedFallback: false,
+      usedYolo,
       debugImage,
     };
   } catch (error) {
@@ -810,6 +1012,7 @@ async function processPlate(
       ocrConfidence: 0,
       processingTimeMs: performance.now() - startTime,
       usedFallback: false,
+      usedYolo: false,
     };
   }
 }
@@ -825,6 +1028,12 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
         await initTesseract();
         self.postMessage({ type: 'READY' } as WorkerResponse);
         break;
+        
+      case 'LOAD_YOLO_MODEL': {
+        const success = await loadYoloModel();
+        self.postMessage({ type: 'MODEL_LOADED', payload: { success } } as WorkerResponse);
+        break;
+      }
         
       case 'PROCESS_PLATE': {
         const { imageData, width, height, options } = event.data.payload;
@@ -845,6 +1054,12 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
           await tesseractWorker.terminate();
           tesseractWorker = null;
         }
+        // Limpar modelo YOLO se carregado
+        if (yoloModel) {
+          yoloModel.dispose?.();
+          yoloModel = null;
+        }
+        modelReady = false;
         break;
     }
   } catch (error) {

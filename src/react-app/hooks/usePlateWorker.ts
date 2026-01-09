@@ -21,6 +21,7 @@ export interface OCRResult {
   ocrConfidence: number;
   processingTimeMs: number;
   usedFallback?: boolean;
+  usedYolo?: boolean; // Indica se usou detecção YOLO
   debugImage?: string; // Base64 da imagem com bounding box
 }
 
@@ -44,6 +45,7 @@ export interface ProcessPlateOptions {
 
 type WorkerResponse = 
   | { type: 'READY' }
+  | { type: 'MODEL_LOADED'; payload: { success: boolean } }
   | { type: 'PLATE_RESULT'; payload: OCRResult }
   | { type: 'MOTION_RESULT'; payload: { motionPercent: number } }
   | { type: 'ERROR'; payload: { message: string } }
@@ -54,8 +56,11 @@ interface UsePlateWorkerReturn {
   isProcessing: boolean;
   progress: ProcessingProgress | null;
   error: string | null;
+  modelLoaded: boolean;
+  modelLoading: boolean;
   processPlate: (canvas: HTMLCanvasElement, options?: ProcessPlateOptions) => Promise<OCRResult | null>;
   detectMotion: (currentData: Uint8ClampedArray, referenceData: Uint8ClampedArray, config: MotionDetectionConfig) => Promise<number>;
+  loadYoloModel: () => void;
   terminate: () => void;
 }
 
@@ -82,6 +87,8 @@ export function usePlateWorker(): UsePlateWorkerReturn {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState<ProcessingProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [modelLoaded, setModelLoaded] = useState(false);
+  const [modelLoading, setModelLoading] = useState(false);
   
   // Callbacks pendentes para resolver promises
   const pendingPlateResolve = useRef<((result: OCRResult | null) => void) | null>(null);
@@ -103,6 +110,14 @@ export function usePlateWorker(): UsePlateWorkerReturn {
             setIsReady(true);
             setError(null);
             console.log('✅ PlateProcessor Worker pronto');
+            break;
+            
+          case 'MODEL_LOADED':
+            setModelLoading(false);
+            setModelLoaded(event.data.payload.success);
+            if (event.data.payload.success) {
+              console.log('🧠 Modelo YOLO carregado no worker');
+            }
             break;
             
           case 'PLATE_RESULT':
@@ -250,6 +265,14 @@ export function usePlateWorker(): UsePlateWorkerReturn {
     });
   }, [isReady]);
   
+  // Carregar modelo YOLO
+  const loadYoloModel = useCallback(() => {
+    if (!workerRef.current || modelLoaded || modelLoading) return;
+    
+    setModelLoading(true);
+    workerRef.current.postMessage({ type: 'LOAD_YOLO_MODEL' });
+  }, [modelLoaded, modelLoading]);
+  
   // Terminar worker
   const terminate = useCallback(() => {
     if (workerRef.current) {
@@ -257,6 +280,7 @@ export function usePlateWorker(): UsePlateWorkerReturn {
       workerRef.current.terminate();
       workerRef.current = null;
       setIsReady(false);
+      setModelLoaded(false);
     }
   }, []);
   
@@ -265,8 +289,11 @@ export function usePlateWorker(): UsePlateWorkerReturn {
     isProcessing,
     progress,
     error,
+    modelLoaded,
+    modelLoading,
     processPlate,
     detectMotion,
+    loadYoloModel,
     terminate,
   };
 }

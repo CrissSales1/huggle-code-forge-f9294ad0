@@ -1,15 +1,22 @@
 /**
  * Componente visual para exibir métricas de performance em tempo real
  */
-import { Cpu, Gauge, Clock, Zap, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { Cpu, Gauge, Clock, Zap, CheckCircle, XCircle, Loader2, Brain } from 'lucide-react';
 import { PerformanceMetrics } from '../hooks/usePerformanceMetrics';
 
 interface PerformanceIndicatorProps {
   metrics: PerformanceMetrics;
   compact?: boolean;
+  modelLoaded?: boolean;
+  modelLoading?: boolean;
 }
 
-export default function PerformanceIndicator({ metrics, compact = false }: PerformanceIndicatorProps) {
+export default function PerformanceIndicator({ 
+  metrics, 
+  compact = false,
+  modelLoaded = false,
+  modelLoading = false,
+}: PerformanceIndicatorProps) {
   const { fps, frameTimeMs, ocrTimeMs, memoryMB, workerStatus } = metrics;
   
   // Determinar cor do FPS baseado na performance
@@ -33,6 +40,19 @@ export default function PerformanceIndicator({ metrics, compact = false }: Perfo
     }
   };
   
+  // Ícone e cor do status do modelo YOLO
+  const getModelStatusColor = () => {
+    if (modelLoaded) return 'text-green-400';
+    if (modelLoading) return 'text-yellow-400';
+    return 'text-gray-500';
+  };
+  
+  const getModelStatusText = () => {
+    if (modelLoaded) return 'YOLO ✓';
+    if (modelLoading) return 'YOLO...';
+    return 'YOLO ✗';
+  };
+  
   if (compact) {
     return (
       <div className="flex items-center gap-2 text-xs font-mono bg-gray-900/80 text-gray-300 px-2 py-1 rounded backdrop-blur-sm">
@@ -40,6 +60,10 @@ export default function PerformanceIndicator({ metrics, compact = false }: Perfo
         <span className="text-gray-500">|</span>
         <span>{frameTimeMs}ms</span>
         <WorkerStatusIcon />
+        <span className={getModelStatusColor()}>
+          <Brain className="w-3 h-3 inline mr-0.5" />
+          {modelLoaded ? '✓' : modelLoading ? '...' : '✗'}
+        </span>
       </div>
     );
   }
@@ -82,6 +106,12 @@ export default function PerformanceIndicator({ metrics, compact = false }: Perfo
       <div className="flex items-center gap-1.5">
         <WorkerStatusIcon />
         <span className="text-gray-500">Worker</span>
+      </div>
+      
+      {/* YOLO Model Status */}
+      <div className="flex items-center gap-1.5">
+        <Brain className={`w-3.5 h-3.5 ${getModelStatusColor()}`} />
+        <span className={getModelStatusColor()}>{getModelStatusText()}</span>
       </div>
     </div>
   );
