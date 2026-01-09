@@ -532,12 +532,32 @@ function findBestPlateRegion(
 
 // ============ PRÉ-PROCESSAMENTO DE IMAGEM ============
 
-function preprocessImageData(data: Uint8ClampedArray): Uint8ClampedArray {
+/**
+ * Pré-processa a imagem para OCR
+ * @param data - Dados da imagem RGBA
+ * @param useBinarization - Se true, aplica binarização Otsu. Se false, retorna grayscale com contraste
+ */
+function preprocessImageData(data: Uint8ClampedArray, useBinarization: boolean = true): Uint8ClampedArray {
   const result = new Uint8ClampedArray(data.length);
   
-  const factor = 1.5;
+  // Fator de contraste mais suave para não destruir detalhes
+  const factor = useBinarization ? 1.3 : 1.2;
   const intercept = 128 * (1 - factor);
   
+  // Se não usar binarização, retornar grayscale com contraste melhorado
+  if (!useBinarization) {
+    for (let i = 0; i < data.length; i += 4) {
+      const gray = Math.round(data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
+      const contrasted = Math.max(0, Math.min(255, gray * factor + intercept));
+      result[i] = contrasted;
+      result[i + 1] = contrasted;
+      result[i + 2] = contrasted;
+      result[i + 3] = 255;
+    }
+    return result;
+  }
+  
+  // Binarização com Otsu
   const histogram = new Array(256).fill(0);
   for (let i = 0; i < data.length; i += 4) {
     const gray = Math.round(data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
@@ -910,8 +930,8 @@ async function processPlate(
     let processHeight: number;
     
     if (plateRegion) {
-      // Recortar região da placa
-      const padding = 5;
+      // Recortar região da placa com padding maior para melhor OCR
+      const padding = 20; // Aumentado de 5 para 20 pixels
       const x = Math.max(0, plateRegion.x - padding);
       const y = Math.max(0, plateRegion.y - padding);
       const w = Math.min(width - x, plateRegion.width + padding * 2);
@@ -939,8 +959,11 @@ async function processPlate(
     
     self.postMessage({ type: 'PROGRESS', payload: { stage: 'Pré-processando...', progress: 0.3 } });
     
-    // 2. Pré-processar imagem
-    const preprocessed = preprocessImageData(processData);
+    // Log do tamanho da região para diagnóstico
+    console.log(`📏 Região para OCR: ${processWidth}x${processHeight}px`);
+    
+    // 2. Pré-processar imagem - tentar primeiro com binarização
+    let preprocessed = preprocessImageData(processData, true);
     
     // 3. Converter para formato que Tesseract aceita usando OffscreenCanvas
     const offscreen = new OffscreenCanvas(processWidth, processHeight);
@@ -957,15 +980,47 @@ async function processPlate(
     self.postMessage({ type: 'PROGRESS', payload: { stage: 'Executando OCR...', progress: 0.5 } });
     
     // 4. OCR usando OffscreenCanvas
-    const result = await tesseractWorker!.recognize(offscreen as unknown as Tesseract.ImageLike);
+    let result = await tesseractWorker!.recognize(offscreen as unknown as Tesseract.ImageLike);
     
-    const rawText = result.data.text.trim();
-    const ocrConfidence = result.data.confidence / 100;
+    let rawText = result.data.text.trim();
+    let ocrConfidence = result.data.confidence / 100;
+    
+    // Log detalhado para diagnóstico
+    console.log(`📝 OCR resultado: "${rawText}" (confiança: ${Math.round(ocrConfidence * 100)}%)`);
+    
+    // Validar primeira tentativa
+    let validation = validateAndCorrectPlate(rawText);
+    
+    // Se falhou, tentar sem binarização (grayscale com contraste)
+    if (!validation.isValid && ocrConfidence < 0.5) {
+      console.log('🔄 Tentando OCR sem binarização...');
+      
+      const preprocessedGray = preprocessImageData(processData, false);
+      const grayDataArray = new Uint8ClampedArray(processWidth * processHeight * 4);
+      for (let i = 0; i < preprocessedGray.length; i++) {
+        grayDataArray[i] = preprocessedGray[i];
+      }
+      const grayImageData = new ImageData(grayDataArray, processWidth, processHeight);
+      offCtx.putImageData(grayImageData, 0, 0);
+      
+      const result2 = await tesseractWorker!.recognize(offscreen as unknown as Tesseract.ImageLike);
+      const rawText2 = result2.data.text.trim();
+      const ocrConfidence2 = result2.data.confidence / 100;
+      
+      console.log(`📝 OCR sem binarização: "${rawText2}" (confiança: ${Math.round(ocrConfidence2 * 100)}%)`);
+      
+      const validation2 = validateAndCorrectPlate(rawText2);
+      
+      // Usar segundo resultado se for melhor
+      if (validation2.isValid || ocrConfidence2 > ocrConfidence) {
+        rawText = rawText2;
+        ocrConfidence = ocrConfidence2;
+        validation = validation2;
+        console.log('✅ Usando resultado sem binarização (melhor)');
+      }
+    }
     
     self.postMessage({ type: 'PROGRESS', payload: { stage: 'Validando...', progress: 0.9 } });
-    
-    // 5. Validar placa
-    const validation = validateAndCorrectPlate(rawText);
     
     const processingTimeMs = performance.now() - startTime;
     

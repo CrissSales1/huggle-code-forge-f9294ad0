@@ -69,6 +69,8 @@ export interface ProcessingInfo {
   lastOcrTimeMs: number;
   avgTimeMs: number;
   debugImage?: string; // Data URL da imagem de debug com região detectada
+  rawText?: string; // Texto bruto lido pelo OCR (para diagnóstico)
+  ocrConfidence?: number; // Confiança do OCR (0-1)
 }
 
 interface MonitoringContextType {
@@ -510,6 +512,13 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       if (result.debugImage) {
         setDebugImage(result.debugImage);
       }
+      
+      // Atualizar processingInfo com rawText para diagnóstico
+      setProcessingInfo(prev => ({
+        ...prev,
+        rawText: result.rawText || '',
+        ocrConfidence: result.ocrConfidence || 0,
+      }));
       
       updateProcessingStage('validating', 'Validando placa...');
       
