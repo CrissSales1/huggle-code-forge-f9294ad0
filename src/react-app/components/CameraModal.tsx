@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Camera, X, Eye, Zap, Edit3, Video, Settings, Target } from 'lucide-react';
-import { usePlateRecognition } from '../hooks/usePlateRecognition';
+import { usePlateWorker, OCRResult } from '../hooks/usePlateWorker';
 
 interface CameraModalProps {
   isOpen: boolean;
@@ -34,20 +34,21 @@ export default function CameraModal({ isOpen, onClose, onPlacaDetected }: Camera
   const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
   const [currentSelection, setCurrentSelection] = useState<ReadingArea | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [lastResult, setLastResult] = useState<OCRResult | null>(null);
+  const [statusMessage, setStatusMessage] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
-  // Hook de reconhecimento OCR local com fallback
+  // Hook de reconhecimento com YOLO + Tesseract via Worker
   const { 
+    isReady: workerReady,
     isProcessing, 
-    lastResult, 
     error: ocrError, 
-    statusMessage,
-    usedFallback,
-    recognizeFromCanvas, 
-    reset: resetOCR,
-    cleanup: cleanupOCR 
-  } = usePlateRecognition();
+    modelLoaded,
+    modelLoading,
+    processPlate,
+    loadYoloModel,
+  } = usePlateWorker();
 
   // Função para obter lista de câmeras disponíveis
   const getAvailableCameras = async (): Promise<CameraDevice[]> => {
@@ -183,14 +184,28 @@ export default function CameraModal({ isOpen, onClose, onPlacaDetected }: Camera
   };
 
 
-  // Função para capturar e reconhecer placa com OCR local (Tesseract.js)
+  // Carregar modelo YOLO quando modal abrir e worker estiver pronto
+  useEffect(() => {
+    if (isOpen && workerReady && !modelLoaded && !modelLoading) {
+      console.log('🧠 Carregando modelo YOLO para captura...');
+      loadYoloModel();
+    }
+  }, [isOpen, workerReady, modelLoaded, modelLoading, loadYoloModel]);
+
+  // Função para capturar e reconhecer placa com YOLO + Tesseract via Worker
   const captureAndRecognize = async () => {
     if (!videoRef.current || !canvasRef.current || !cameraReady) {
       setCameraError('Câmera não está pronta. Aguarde um momento.');
       return;
     }
 
-    resetOCR();
+    if (!workerReady) {
+      setCameraError('Sistema de reconhecimento ainda carregando...');
+      return;
+    }
+
+    setLastResult(null);
+    setStatusMessage('Capturando imagem...');
 
     try {
       const video = videoRef.current;
@@ -228,18 +243,30 @@ export default function CameraModal({ isOpen, onClose, onPlacaDetected }: Camera
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       }
       
-      // Usar OCR local gratuito (Tesseract.js)
-      console.log('🔍 Iniciando OCR local (Tesseract.js)...');
-      const result = await recognizeFromCanvas(canvas);
+      // Usar Worker com YOLO + Tesseract
+      setStatusMessage('🧠 Detectando placa com YOLO + OCR...');
+      console.log('🔍 Processando com Worker (YOLO + Tesseract)...');
       
-      if (result.success && result.validation.isValid) {
-        const placa = result.validation.formatted;
-        console.log(`✅ PLACA RECONHECIDA: ${placa} (${Math.round(result.validation.confidence * 100)}% confiança)`);
+      const result = await processPlate(canvas, { enableDebug: true });
+      
+      if (result) {
+        setLastResult(result);
         
-        setTimeout(() => {
-          onPlacaDetected(result.validation.corrected);
-          onClose();
-        }, 1500);
+        if (result.success && result.validation.isValid) {
+          const placa = result.validation.formatted;
+          const yoloUsed = result.usedYolo ? '(YOLO)' : '(heurístico)';
+          console.log(`✅ PLACA RECONHECIDA ${yoloUsed}: ${placa} (${Math.round(result.validation.confidence * 100)}% confiança)`);
+          setStatusMessage(`✅ Placa detectada: ${placa}`);
+          
+          setTimeout(() => {
+            onPlacaDetected(result.validation.corrected);
+            onClose();
+          }, 1500);
+        } else {
+          setStatusMessage('❌ Não foi possível reconhecer a placa');
+        }
+      } else {
+        setStatusMessage('❌ Erro no processamento');
       }
       
     } catch (err) {
@@ -338,7 +365,8 @@ export default function CameraModal({ isOpen, onClose, onPlacaDetected }: Camera
     } else {
       stopCamera();
       setCameraError(null);
-      resetOCR();
+      setLastResult(null);
+      setStatusMessage('');
       setShowCameraSelector(false);
       setShowAreaConfig(false);
       setReadingArea(null);
@@ -349,9 +377,8 @@ export default function CameraModal({ isOpen, onClose, onPlacaDetected }: Camera
 
     return () => {
       stopCamera();
-      cleanupOCR();
     };
-  }, [isOpen, resetOCR, cleanupOCR]);
+  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen && selectedCameraId && !stream) {
@@ -527,12 +554,20 @@ export default function CameraModal({ isOpen, onClose, onPlacaDetected }: Camera
               </div>
             )}
 
+            {/* Indicador de status do modelo YOLO */}
+            <div className="mb-2 flex items-center gap-2 text-xs text-gray-500">
+              {modelLoading && <span className="flex items-center gap-1">🧠 <span className="animate-pulse">Carregando YOLO...</span></span>}
+              {modelLoaded && <span className="text-green-600">🧠 YOLO ativo</span>}
+              {!modelLoaded && !modelLoading && workerReady && <span>📷 OCR local</span>}
+              {!workerReady && <span className="animate-pulse">⏳ Iniciando worker...</span>}
+            </div>
+
             {isProcessing && statusMessage && (
               <div className="mb-4 bg-blue-50 border border-blue-200 text-blue-700 px-3 py-3 sm:px-4 rounded-lg">
                 <div className="flex items-center space-x-3">
                   <div className="animate-spin rounded-full h-4 w-4 sm:h-5 sm:w-5 border-b-2 border-blue-600 flex-shrink-0"></div>
                   <div className="min-w-0">
-                    <div className="font-medium text-sm">Reconhecendo placa (OCR local)...</div>
+                    <div className="font-medium text-sm">Reconhecendo placa...</div>
                     <div className="text-xs sm:text-sm break-words">{statusMessage}</div>
                   </div>
                 </div>
@@ -549,7 +584,8 @@ export default function CameraModal({ isOpen, onClose, onPlacaDetected }: Camera
                     <div className="text-xs">
                       Confiança: {Math.round(lastResult.validation.confidence * 100)}% | 
                       Tempo: {lastResult.processingTimeMs.toFixed(0)}ms |
-                      {usedFallback ? ' 🌐 API externa' : ' 💻 OCR local'}
+                      {lastResult.usedYolo ? ' 🧠 YOLO' : ' 📷 Heurístico'} |
+                      {lastResult.usedFallback ? ' 🌐 API externa' : ' 💻 OCR local'}
                     </div>
                   </div>
                 </div>
