@@ -606,6 +606,49 @@ function preprocessImageData(data: Uint8ClampedArray, useBinarization: boolean =
   return result;
 }
 
+/**
+ * Pré-processamento específico para placas azuis Mercosul
+ * Detecta pixels azuis (fundo) e os converte para preto,
+ * enquanto preserva texto branco/claro
+ */
+function preprocessForBluePlate(data: Uint8ClampedArray): Uint8ClampedArray {
+  const result = new Uint8ClampedArray(data.length);
+  
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    
+    // Detectar se é azul (placa Mercosul) - azul dominante
+    const isBlue = b > r * 1.2 && b > g && b > 80;
+    
+    // Calcular luminância
+    const luminance = (r * 0.299 + g * 0.587 + b * 0.114);
+    
+    let value: number;
+    if (isBlue) {
+      // Fundo azul vira preto
+      value = 0;
+    } else if (luminance > 160) {
+      // Texto branco/claro vira branco puro
+      value = 255;
+    } else if (luminance > 100) {
+      // Zona intermediária - aumentar contraste
+      value = luminance > 130 ? 255 : 0;
+    } else {
+      // Escuro vira preto
+      value = 0;
+    }
+    
+    result[i] = value;
+    result[i + 1] = value;
+    result[i + 2] = value;
+    result[i + 3] = 255;
+  }
+  
+  return result;
+}
+
 // ============ VALIDAÇÃO DE PLACA ============
 
 const MERCOSUL_REGEX = /^[A-Z]{3}[0-9][A-Z][0-9]{2}$/;
@@ -626,6 +669,10 @@ const CHAR_SUBSTITUTIONS: Record<string, string[]> = {
   'B': ['8', '6'],
   'Q': ['0', 'O'],
   'D': ['0', 'O'],
+  'A': ['4'],
+  '4': ['A'],
+  'E': ['3'],
+  '3': ['E'],
 };
 
 function generateVariations(plate: string): string[] {
@@ -646,53 +693,151 @@ function generateVariations(plate: string): string[] {
   return Array.from(variations);
 }
 
+/**
+ * Extrai candidatos de 7 caracteres de texto OCR com ruído
+ * Quando OCR retorna texto com mais de 7 caracteres (ex: "I12 333EI"),
+ * tenta extrair a subsequência mais provável de placa válida
+ */
+function extractPlateCandidate(rawText: string): string {
+  const cleaned = rawText.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  
+  // Se já tem 7, retornar
+  if (cleaned.length === 7) return cleaned;
+  
+  // Se tem menos de 7, não há como formar placa
+  if (cleaned.length < 7) return cleaned;
+  
+  // Se tem mais de 7, tentar extrair os 7 mais prováveis
+  let candidate = cleaned;
+  
+  // Remover 'I' ou '1' das extremidades (comum em OCR de placas)
+  while (candidate.length > 7 && (candidate[0] === 'I' || candidate[0] === '1')) {
+    candidate = candidate.slice(1);
+  }
+  while (candidate.length > 7 && (candidate.slice(-1) === 'I' || candidate.slice(-1) === '1' || candidate.slice(-1) === 'E')) {
+    candidate = candidate.slice(0, -1);
+  }
+  
+  if (candidate.length === 7) {
+    // Verificar se é válido com esta extração
+    const tempValidation = validatePlateFormat(candidate);
+    if (tempValidation.isValid) return candidate;
+  }
+  
+  // Se ainda tem mais de 7, tentar todas as subsequências de 7 caracteres
+  if (candidate.length > 7) {
+    const candidates: string[] = [];
+    for (let i = 0; i <= candidate.length - 7; i++) {
+      candidates.push(candidate.slice(i, i + 7));
+    }
+    
+    // Também tentar com o cleaned original
+    for (let i = 0; i <= cleaned.length - 7; i++) {
+      candidates.push(cleaned.slice(i, i + 7));
+    }
+    
+    // Retornar a primeira que parecer válida
+    for (const c of candidates) {
+      const tempValidation = validatePlateFormat(c);
+      if (tempValidation.isValid) {
+        console.log(`🔍 Extraído candidato válido: "${c}" de "${cleaned}"`);
+        return c;
+      }
+    }
+    
+    // Se nenhuma é válida, tentar aplicar variações em cada candidato
+    for (const c of candidates) {
+      const variations = generateVariations(c);
+      for (const v of variations) {
+        const tempValidation = validatePlateFormat(v);
+        if (tempValidation.isValid) {
+          console.log(`🔍 Extraído candidato com variação: "${v}" de "${cleaned}"`);
+          return v;
+        }
+      }
+    }
+    
+    // Retornar os primeiros 7 caracteres como fallback
+    return candidate.slice(0, 7);
+  }
+  
+  return candidate;
+}
+
+/**
+ * Valida apenas o formato da placa (sem correções)
+ */
+function validatePlateFormat(plate: string): { isValid: boolean; format: 'mercosul' | 'antiga' | 'unknown' } {
+  if (plate.length !== 7) {
+    return { isValid: false, format: 'unknown' };
+  }
+  
+  if (MERCOSUL_REGEX.test(plate)) {
+    return { isValid: true, format: 'mercosul' };
+  }
+  
+  if (ANTIGA_REGEX.test(plate)) {
+    return { isValid: true, format: 'antiga' };
+  }
+  
+  return { isValid: false, format: 'unknown' };
+}
+
 function validateAndCorrectPlate(rawText: string): PlateValidationResult {
   const cleaned = rawText.toUpperCase().replace(/[^A-Z0-9]/g, '');
   
-  if (cleaned.length !== 7) {
+  // Usar extração inteligente de candidato
+  const candidate = extractPlateCandidate(rawText);
+  
+  console.log(`📝 OCR: "${rawText}" → limpo: "${cleaned}" (${cleaned.length} chars) → candidato: "${candidate}"`);
+  
+  if (candidate.length !== 7) {
     return {
       isValid: false,
       original: rawText,
-      corrected: cleaned,
-      formatted: cleaned,
+      corrected: candidate,
+      formatted: candidate,
       format: 'unknown',
       confidence: 0,
     };
   }
   
-  const variations = generateVariations(cleaned);
+  const variations = generateVariations(candidate);
   
   for (const variation of variations) {
     if (MERCOSUL_REGEX.test(variation)) {
       const formatted = variation.substring(0, 3) + '-' + variation.substring(3);
+      console.log(`✅ Validação: ${formatted} (Mercosul)`);
       return {
         isValid: true,
         original: rawText,
         corrected: variation,
         formatted,
         format: 'mercosul',
-        confidence: variation === cleaned ? 0.95 : 0.85,
+        confidence: variation === candidate ? 0.95 : 0.85,
       };
     }
     
     if (ANTIGA_REGEX.test(variation)) {
       const formatted = variation.substring(0, 3) + '-' + variation.substring(3);
+      console.log(`✅ Validação: ${formatted} (Antiga)`);
       return {
         isValid: true,
         original: rawText,
         corrected: variation,
         formatted,
         format: 'antiga',
-        confidence: variation === cleaned ? 0.95 : 0.85,
+        confidence: variation === candidate ? 0.95 : 0.85,
       };
     }
   }
   
+  console.log(`❌ Validação: INVÁLIDO - "${candidate}"`);
   return {
     isValid: false,
     original: rawText,
-    corrected: cleaned,
-    formatted: cleaned,
+    corrected: candidate,
+    formatted: candidate,
     format: 'unknown',
     confidence: 0.3,
   };
@@ -962,63 +1107,117 @@ async function processPlate(
     // Log do tamanho da região para diagnóstico
     console.log(`📏 Região para OCR: ${processWidth}x${processHeight}px`);
     
-    // 2. Pré-processar imagem - tentar primeiro com binarização
-    let preprocessed = preprocessImageData(processData, true);
-    
-    // 3. Converter para formato que Tesseract aceita usando OffscreenCanvas
-    const offscreen = new OffscreenCanvas(processWidth, processHeight);
-    const offCtx = offscreen.getContext('2d');
-    if (!offCtx) throw new Error('Falha ao criar OffscreenCanvas');
-    
-    const dataArray = new Uint8ClampedArray(processWidth * processHeight * 4);
-    for (let i = 0; i < preprocessed.length; i++) {
-      dataArray[i] = preprocessed[i];
-    }
-    const processedImageData = new ImageData(dataArray, processWidth, processHeight);
-    offCtx.putImageData(processedImageData, 0, 0);
-    
-    self.postMessage({ type: 'PROGRESS', payload: { stage: 'Executando OCR...', progress: 0.5 } });
-    
-    // 4. OCR usando OffscreenCanvas
-    let result = await tesseractWorker!.recognize(offscreen as unknown as Tesseract.ImageLike);
-    
-    let rawText = result.data.text.trim();
-    let ocrConfidence = result.data.confidence / 100;
-    
-    // Log detalhado para diagnóstico
-    console.log(`📝 OCR resultado: "${rawText}" (confiança: ${Math.round(ocrConfidence * 100)}%)`);
-    
-    // Validar primeira tentativa
-    let validation = validateAndCorrectPlate(rawText);
-    
-    // Se falhou, tentar sem binarização (grayscale com contraste)
-    if (!validation.isValid && ocrConfidence < 0.5) {
-      console.log('🔄 Tentando OCR sem binarização...');
-      
-      const preprocessedGray = preprocessImageData(processData, false);
-      const grayDataArray = new Uint8ClampedArray(processWidth * processHeight * 4);
-      for (let i = 0; i < preprocessedGray.length; i++) {
-        grayDataArray[i] = preprocessedGray[i];
+    // Helper para executar OCR com um preprocessamento específico
+    const runOCRWithPreprocess = async (
+      preprocessFn: (data: Uint8ClampedArray) => Uint8ClampedArray,
+      methodName: string
+    ): Promise<{ rawText: string; ocrConfidence: number; validation: PlateValidationResult }> => {
+      const preprocessed = preprocessFn(processData);
+      const dataArray = new Uint8ClampedArray(processWidth * processHeight * 4);
+      for (let i = 0; i < preprocessed.length; i++) {
+        dataArray[i] = preprocessed[i];
       }
-      const grayImageData = new ImageData(grayDataArray, processWidth, processHeight);
-      offCtx.putImageData(grayImageData, 0, 0);
+      const imgData = new ImageData(dataArray, processWidth, processHeight);
       
-      const result2 = await tesseractWorker!.recognize(offscreen as unknown as Tesseract.ImageLike);
-      const rawText2 = result2.data.text.trim();
-      const ocrConfidence2 = result2.data.confidence / 100;
+      const offscreen = new OffscreenCanvas(processWidth, processHeight);
+      const ctx = offscreen.getContext('2d');
+      if (!ctx) throw new Error('Falha ao criar OffscreenCanvas');
+      ctx.putImageData(imgData, 0, 0);
       
-      console.log(`📝 OCR sem binarização: "${rawText2}" (confiança: ${Math.round(ocrConfidence2 * 100)}%)`);
+      const result = await tesseractWorker!.recognize(offscreen as unknown as Tesseract.ImageLike);
+      const rawText = result.data.text.trim();
+      const ocrConfidence = result.data.confidence / 100;
+      const validation = validateAndCorrectPlate(rawText);
       
-      const validation2 = validateAndCorrectPlate(rawText2);
+      console.log(`📝 OCR [${methodName}]: "${rawText}" (confiança: ${Math.round(ocrConfidence * 100)}%)`);
       
-      // Usar segundo resultado se for melhor
-      if (validation2.isValid || ocrConfidence2 > ocrConfidence) {
-        rawText = rawText2;
-        ocrConfidence = ocrConfidence2;
-        validation = validation2;
-        console.log('✅ Usando resultado sem binarização (melhor)');
+      return { rawText, ocrConfidence, validation };
+    };
+    
+    self.postMessage({ type: 'PROGRESS', payload: { stage: 'Executando OCR...', progress: 0.4 } });
+    
+    // Array para armazenar resultados de todas as tentativas
+    interface OCRAttempt {
+      rawText: string;
+      ocrConfidence: number;
+      validation: PlateValidationResult;
+      method: string;
+    }
+    const attempts: OCRAttempt[] = [];
+    
+    // Tentativa 1: Binarização padrão
+    try {
+      const attempt1 = await runOCRWithPreprocess(
+        (data) => preprocessImageData(data, true),
+        'binarização'
+      );
+      attempts.push({ ...attempt1, method: 'binarização' });
+    } catch (e) {
+      console.error('Erro OCR binarização:', e);
+    }
+    
+    self.postMessage({ type: 'PROGRESS', payload: { stage: 'OCR alternativo...', progress: 0.55 } });
+    
+    // Tentativa 2: Grayscale com contraste (se primeira falhou ou baixa confiança)
+    const firstValid = attempts[0]?.validation?.isValid;
+    const firstConfidence = attempts[0]?.ocrConfidence || 0;
+    
+    if (!firstValid || firstConfidence < 0.6) {
+      try {
+        const attempt2 = await runOCRWithPreprocess(
+          (data) => preprocessImageData(data, false),
+          'grayscale'
+        );
+        attempts.push({ ...attempt2, method: 'grayscale' });
+      } catch (e) {
+        console.error('Erro OCR grayscale:', e);
       }
     }
+    
+    self.postMessage({ type: 'PROGRESS', payload: { stage: 'OCR placa azul...', progress: 0.7 } });
+    
+    // Tentativa 3: Específico para placa azul Mercosul (se ainda não encontrou válida)
+    const anyValid = attempts.some(a => a.validation.isValid);
+    if (!anyValid) {
+      try {
+        const attempt3 = await runOCRWithPreprocess(
+          (data) => preprocessForBluePlate(data),
+          'placa azul'
+        );
+        attempts.push({ ...attempt3, method: 'placa azul' });
+      } catch (e) {
+        console.error('Erro OCR placa azul:', e);
+      }
+    }
+    
+    // Escolher o melhor resultado
+    let bestAttempt: OCRAttempt | null = null;
+    
+    // Prioridade 1: resultado válido com maior confiança
+    const validAttempts = attempts.filter(a => a.validation.isValid);
+    if (validAttempts.length > 0) {
+      bestAttempt = validAttempts.reduce((best, current) => 
+        current.ocrConfidence > best.ocrConfidence ? current : best
+      );
+      console.log(`✅ Usando resultado [${bestAttempt.method}]: "${bestAttempt.validation.formatted}"`);
+    } else {
+      // Prioridade 2: maior confiança OCR entre inválidos
+      bestAttempt = attempts.reduce((best, current) => 
+        current.ocrConfidence > best.ocrConfidence ? current : best
+      , attempts[0]);
+      console.log(`⚠️ Nenhum válido, usando [${bestAttempt?.method}]: "${bestAttempt?.rawText}"`);
+    }
+    
+    const rawText = bestAttempt?.rawText || '';
+    const ocrConfidence = bestAttempt?.ocrConfidence || 0;
+    const validation = bestAttempt?.validation || {
+      isValid: false,
+      original: '',
+      corrected: '',
+      formatted: '',
+      format: 'unknown' as const,
+      confidence: 0,
+    };
     
     self.postMessage({ type: 'PROGRESS', payload: { stage: 'Validando...', progress: 0.9 } });
     
