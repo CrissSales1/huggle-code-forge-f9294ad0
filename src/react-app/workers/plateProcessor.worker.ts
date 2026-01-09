@@ -38,6 +38,7 @@ interface OCRResult {
   usedFallback?: boolean;
   usedYolo?: boolean;
   debugImage?: string;
+  plateRegion?: BoundingBox; // Região da placa detectada pelo YOLO/heurística
 }
 
 interface MotionDetectionConfig {
@@ -1258,6 +1259,7 @@ async function processPlate(
       usedFallback: false,
       usedYolo,
       debugImage,
+      plateRegion: plateRegion || undefined,
     };
   } catch (error) {
     console.error('Erro no processamento:', error);

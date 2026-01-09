@@ -23,6 +23,13 @@ export interface OCRResult {
   usedFallback?: boolean;
   usedYolo?: boolean; // Indica se usou detecção YOLO
   debugImage?: string; // Base64 da imagem com bounding box
+  plateRegion?: { // Região da placa detectada pelo YOLO/heurística
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    confidence: number;
+  };
 }
 
 interface MotionDetectionConfig {

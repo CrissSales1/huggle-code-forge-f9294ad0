@@ -71,6 +71,15 @@ export interface ProcessingInfo {
   debugImage?: string; // Data URL da imagem de debug com região detectada
   rawText?: string; // Texto bruto lido pelo OCR (para diagnóstico)
   ocrConfidence?: number; // Confiança do OCR (0-1)
+  // Bounding box da placa detectada (para overlay visual em tempo real)
+  plateRegion?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    confidence: number;
+  };
+  detectedPlate?: string; // Texto da placa formatada para exibir no overlay
 }
 
 interface MonitoringContextType {
@@ -513,12 +522,23 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         setDebugImage(result.debugImage);
       }
       
-      // Atualizar processingInfo com rawText para diagnóstico
+      // Atualizar processingInfo com rawText e plateRegion para diagnóstico e overlay visual
       setProcessingInfo(prev => ({
         ...prev,
         rawText: result.rawText || '',
         ocrConfidence: result.ocrConfidence || 0,
+        plateRegion: result.plateRegion,
+        detectedPlate: result.validation?.isValid ? result.validation.formatted : undefined,
       }));
+      
+      // Limpar plateRegion após 3 segundos para não poluir o overlay
+      setTimeout(() => {
+        setProcessingInfo(prev => ({
+          ...prev,
+          plateRegion: undefined,
+          detectedPlate: undefined,
+        }));
+      }, 3000);
       
       updateProcessingStage('validating', 'Validando placa...');
       
