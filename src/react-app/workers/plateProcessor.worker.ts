@@ -84,7 +84,8 @@ let modelFailed = false; // Marca falha permanente para evitar loop infinito
 
 // Constantes YOLO
 const YOLO_INPUT_SIZE = 640;
-const YOLO_CONFIDENCE_THRESHOLD = 0.5;
+const YOLO_CONFIDENCE_THRESHOLD = 0.7; // Aumentado para evitar falsos positivos
+const YOLO_MIN_RAW_CONFIDENCE = 1.0; // Mínimo valor raw para considerar detecção válida (sigmoid(1.0) = 73%)
 
 // ============ FUNÇÕES YOLO (TensorFlow.js) ============
 
@@ -226,15 +227,38 @@ async function detectPlateWithYOLO(
       }
     }
     
-    // 7. Encontrar melhor detecção
-    let bestBox: BoundingBox | null = null;
-    let bestConfidence = YOLO_CONFIDENCE_THRESHOLD;
+    // 7. Verificar se há detecções reais (YOLO retorna 0 quando não detecta)
+    let maxRawConfidence = -Infinity;
+    for (const detection of detections) {
+      if (detection.length >= 5) {
+        maxRawConfidence = Math.max(maxRawConfidence, detection[4]);
+      }
+    }
     
-    // Log para diagnóstico do formato de saída
+    // Log para diagnóstico
     if (detections.length > 0) {
       const sample = detections[0];
       console.log(`📊 Amostra de detecção raw: [${sample.slice(0, 5).map(v => v.toFixed(4)).join(', ')}]`);
+      console.log(`📊 Máx confiança raw: ${maxRawConfidence.toFixed(4)} (mínimo necessário: ${YOLO_MIN_RAW_CONFIDENCE})`);
     }
+    
+    // Se nenhuma detecção tem confiança raw suficiente, YOLO não detectou nada
+    if (maxRawConfidence < YOLO_MIN_RAW_CONFIDENCE) {
+      console.log(`⚠️ YOLO não detectou placa (max raw: ${maxRawConfidence.toFixed(3)}). Usando fallback heurístico.`);
+      
+      // Cleanup tensors antes de retornar
+      imageTensor.dispose();
+      resized.dispose();
+      normalized.dispose();
+      batched.dispose();
+      if (predictions.dispose) predictions.dispose();
+      
+      return null; // Sinaliza para usar fallback heurístico
+    }
+    
+    // 8. Encontrar melhor detecção
+    let bestBox: BoundingBox | null = null;
+    let bestConfidence = YOLO_CONFIDENCE_THRESHOLD;
     
     for (const detection of detections) {
       // Formato esperado: [cx, cy, w, h, confidence_logit]
@@ -242,11 +266,11 @@ async function detectPlateWithYOLO(
       
       let [cx, cy, w, h, confidenceRaw] = detection;
       
+      // Pular detecções com confiança muito baixa
+      if (confidenceRaw < YOLO_MIN_RAW_CONFIDENCE) continue;
+      
       // YOLOv8 retorna logits brutos - aplicar sigmoid para obter probabilidade
       const confidence = 1 / (1 + Math.exp(-confidenceRaw));
-      
-      // Filtro rápido para evitar logs excessivos
-      if (confidence < 0.01) continue;
       
       // Detectar se coordenadas são normalizadas (0-1) ou em pixels (0-640)
       const maxCoord = Math.max(cx, cy, w, h);
@@ -258,6 +282,13 @@ async function detectPlateWithYOLO(
         cy *= YOLO_INPUT_SIZE;
         w *= YOLO_INPUT_SIZE;
         h *= YOLO_INPUT_SIZE;
+      }
+      
+      // FILTRO ROI: Ignorar detecções no topo da imagem (timestamp da câmera)
+      const centerYRatio = cy / YOLO_INPUT_SIZE;
+      if (centerYRatio < 0.15) {
+        console.log(`⚠️ Detecção no topo da imagem (y=${(centerYRatio*100).toFixed(1)}%) - provavelmente timestamp`);
+        continue;
       }
       
       console.log(`📍 Detecção: cx=${cx.toFixed(1)}, cy=${cy.toFixed(1)}, w=${w.toFixed(1)}, h=${h.toFixed(1)}, raw=${confidenceRaw.toFixed(3)}, conf=${(confidence*100).toFixed(1)}%`);
