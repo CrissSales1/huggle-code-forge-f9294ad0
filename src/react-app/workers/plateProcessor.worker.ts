@@ -303,7 +303,7 @@ async function detectPlateWithYOLO(
       
       // FILTRO ROI: Ignorar detecções no topo da imagem (timestamp da câmera)
       const centerYRatio = cy / YOLO_INPUT_SIZE;
-      if (centerYRatio < 0.15) {
+      if (centerYRatio < 0.20) {
         console.log(`⚠️ Detecção no topo da imagem (y=${(centerYRatio*100).toFixed(1)}%) - provavelmente timestamp`);
         continue;
       }
@@ -320,11 +320,11 @@ async function detectPlateWithYOLO(
         const boxW = Math.round(w * scaleX);
         const boxH = Math.round(h * scaleY);
         
-        // Validar proporção típica de placa brasileira (2.5:1 a 4:1)
+        // Validar proporção típica de placa brasileira (2.0:1 a 5.0:1)
         const aspectRatio = boxW / boxH;
         console.log(`📦 Box: x=${boxX}, y=${boxY}, ${boxW}x${boxH}px, proporção=${aspectRatio.toFixed(2)}`);
         
-        if (aspectRatio < 1.5 || aspectRatio > 6.0) {
+        if (aspectRatio < 2.0 || aspectRatio > 5.0) {
           console.log(`⚠️ Proporção inválida: ${aspectRatio.toFixed(2)} - ignorando detecção`);
           continue;
         }
@@ -369,8 +369,10 @@ const EDGE_THRESHOLD = 30;
 const MIN_EDGE_DENSITY = 0.20;
 const MIN_CONTRAST_SCORE = 0.4;
 const MAX_SATURATION = 0.50;
-const MIN_Y_RATIO = 0.30;
-const MAX_Y_RATIO = 0.92;
+const MIN_Y_RATIO = 0.35; // Aumentado para ignorar topo da imagem
+const MAX_Y_RATIO = 0.85; // Reduzido para ignorar rodapé
+const MIN_X_RATIO = 0.20; // Foco no centro horizontal
+const MAX_X_RATIO = 0.80;
 
 // Threshold de confiança para fallback
 const FALLBACK_CONFIDENCE_THRESHOLD = 0.60;
@@ -570,12 +572,14 @@ function findBestPlateRegion(
   
   const minY = Math.round(processHeight * MIN_Y_RATIO);
   const maxY = Math.round(processHeight * MAX_Y_RATIO) - windowHeight;
+  const minX = Math.round(processWidth * MIN_X_RATIO);
+  const maxX = Math.round(processWidth * MAX_X_RATIO) - windowWidth;
   
   let bestRegion: BoundingBox | null = null;
   let bestScore = 0;
   
   for (let y = minY; y < maxY; y += stepY) {
-    for (let x = 0; x < processWidth - windowWidth; x += stepX) {
+    for (let x = minX; x < maxX; x += stepX) {
       const aspectRatio = windowWidth / windowHeight;
       if (aspectRatio < PLATE_ASPECT_RATIO_MIN || aspectRatio > PLATE_ASPECT_RATIO_MAX) {
         continue;
@@ -1194,7 +1198,42 @@ async function processPlate(
     self.postMessage({ type: 'PROGRESS', payload: { stage: 'Pré-processando...', progress: 0.3 } });
     
     // Log do tamanho da região para diagnóstico
+    if (plateRegion) {
+      console.log(`📍 Recortando região: x=${plateRegion.x}, y=${plateRegion.y}, ${plateRegion.width}x${plateRegion.height}px`);
+    }
     console.log(`📏 Região para OCR: ${processWidth}x${processHeight}px`);
+    
+    // Upscaling: garantir tamanho mínimo para OCR
+    const MIN_OCR_WIDTH = 300;
+    if (processWidth < MIN_OCR_WIDTH && processWidth > 0) {
+      const scale = MIN_OCR_WIDTH / processWidth;
+      const newWidth = Math.round(processWidth * scale);
+      const newHeight = Math.round(processHeight * scale);
+      
+      // Upscale bilinear
+      const upscaledData = new Uint8ClampedArray(newWidth * newHeight * 4);
+      const xRatio = processWidth / newWidth;
+      const yRatio = processHeight / newHeight;
+      
+      for (let y = 0; y < newHeight; y++) {
+        for (let x = 0; x < newWidth; x++) {
+          const srcX = Math.floor(x * xRatio);
+          const srcY = Math.floor(y * yRatio);
+          const srcIdx = (srcY * processWidth + srcX) * 4;
+          const dstIdx = (y * newWidth + x) * 4;
+          
+          upscaledData[dstIdx] = processData[srcIdx];
+          upscaledData[dstIdx + 1] = processData[srcIdx + 1];
+          upscaledData[dstIdx + 2] = processData[srcIdx + 2];
+          upscaledData[dstIdx + 3] = 255;
+        }
+      }
+      
+      processData = upscaledData;
+      processWidth = newWidth;
+      processHeight = newHeight;
+      console.log(`🔍 Upscaled para OCR: ${processWidth}x${processHeight}px`);
+    }
     
     // Helper para executar OCR com um preprocessamento específico
     const runOCRWithPreprocess = async (
