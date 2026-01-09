@@ -230,11 +230,23 @@ async function detectPlateWithYOLO(
     let bestBox: BoundingBox | null = null;
     let bestConfidence = YOLO_CONFIDENCE_THRESHOLD;
     
+    // Log para diagnóstico do formato de saída
+    if (detections.length > 0) {
+      const sample = detections[0];
+      console.log(`📊 Amostra de detecção raw: [${sample.slice(0, 5).map(v => v.toFixed(4)).join(', ')}]`);
+    }
+    
     for (const detection of detections) {
-      // Formato esperado: [cx, cy, w, h, confidence]
+      // Formato esperado: [cx, cy, w, h, confidence_logit]
       if (detection.length < 5) continue;
       
-      let [cx, cy, w, h, confidence] = detection;
+      let [cx, cy, w, h, confidenceRaw] = detection;
+      
+      // YOLOv8 retorna logits brutos - aplicar sigmoid para obter probabilidade
+      const confidence = 1 / (1 + Math.exp(-confidenceRaw));
+      
+      // Filtro rápido para evitar logs excessivos
+      if (confidence < 0.01) continue;
       
       // Detectar se coordenadas são normalizadas (0-1) ou em pixels (0-640)
       const maxCoord = Math.max(cx, cy, w, h);
@@ -246,10 +258,9 @@ async function detectPlateWithYOLO(
         cy *= YOLO_INPUT_SIZE;
         w *= YOLO_INPUT_SIZE;
         h *= YOLO_INPUT_SIZE;
-        console.log(`🔄 Coordenadas normalizadas detectadas, convertendo para pixels`);
       }
       
-      console.log(`📍 Detecção: cx=${cx.toFixed(1)}, cy=${cy.toFixed(1)}, w=${w.toFixed(1)}, h=${h.toFixed(1)}, conf=${(confidence*100).toFixed(1)}%`);
+      console.log(`📍 Detecção: cx=${cx.toFixed(1)}, cy=${cy.toFixed(1)}, w=${w.toFixed(1)}, h=${h.toFixed(1)}, raw=${confidenceRaw.toFixed(3)}, conf=${(confidence*100).toFixed(1)}%`);
       
       if (confidence > bestConfidence) {
         // Converter de coords em pixels (0-640) para tamanho original da imagem
