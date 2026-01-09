@@ -391,6 +391,10 @@ export class MotionDetector {
   private lastOcrAttemptTime: number = 0;
   private ocrSucceeded: boolean = false;
   
+  // Controle para evitar log excessivo de referência
+  private lastReferenceCaptureTime: number = 0;
+  private static readonly MIN_REFERENCE_LOG_INTERVAL = 5000; // 5 segundos entre logs
+  
   constructor(config: Partial<MotionDetectionConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
   }
@@ -415,6 +419,11 @@ export class MotionDetector {
       return false;
     }
     
+    const now = Date.now();
+    
+    // Evitar recaptura muito frequente (apenas atualiza silenciosamente)
+    const shouldLog = now - this.lastReferenceCaptureTime >= MotionDetector.MIN_REFERENCE_LOG_INTERVAL;
+    
     // Ajustar canvas para o tamanho do vídeo
     if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
       canvas.width = video.videoWidth;
@@ -434,10 +443,15 @@ export class MotionDetector {
     const height = Math.floor((bbox.maxY - bbox.minY) * video.videoHeight);
     
     this.referenceFrame = ctx.getImageData(x, y, Math.max(1, width), Math.max(1, height));
-    this.lastCleanTime = Date.now();
+    this.lastCleanTime = now;
     this.referenceUpdatePending = false;
     
-    console.log('📸 Referência capturada:', { width, height });
+    // Só loga se passou tempo suficiente desde o último log
+    if (shouldLog) {
+      this.lastReferenceCaptureTime = now;
+      console.log('📸 Referência capturada:', { width, height });
+    }
+    
     return true;
   }
   

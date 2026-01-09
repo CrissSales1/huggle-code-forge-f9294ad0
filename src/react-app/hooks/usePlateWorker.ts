@@ -23,6 +23,13 @@ export interface OCRResult {
   usedFallback?: boolean;
   usedYolo?: boolean; // Indica se usou detecção YOLO
   debugImage?: string; // Base64 da imagem com bounding box
+  plateRegion?: { // Região da placa detectada pelo YOLO/heurística
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    confidence: number;
+  };
 }
 
 interface MotionDetectionConfig {
@@ -45,7 +52,7 @@ export interface ProcessPlateOptions {
 
 type WorkerResponse = 
   | { type: 'READY' }
-  | { type: 'MODEL_LOADED'; payload: { success: boolean } }
+  | { type: 'MODEL_LOADED'; payload: { success: boolean; permanentFailure?: boolean; error?: string } }
   | { type: 'PLATE_RESULT'; payload: OCRResult }
   | { type: 'MOTION_RESULT'; payload: { motionPercent: number } }
   | { type: 'ERROR'; payload: { message: string } }
@@ -58,6 +65,7 @@ interface UsePlateWorkerReturn {
   error: string | null;
   modelLoaded: boolean;
   modelLoading: boolean;
+  modelFailed: boolean;
   processPlate: (canvas: HTMLCanvasElement, options?: ProcessPlateOptions) => Promise<OCRResult | null>;
   detectMotion: (currentData: Uint8ClampedArray, referenceData: Uint8ClampedArray, config: MotionDetectionConfig) => Promise<number>;
   loadYoloModel: () => void;
@@ -89,6 +97,7 @@ export function usePlateWorker(): UsePlateWorkerReturn {
   const [error, setError] = useState<string | null>(null);
   const [modelLoaded, setModelLoaded] = useState(false);
   const [modelLoading, setModelLoading] = useState(false);
+  const [modelFailed, setModelFailed] = useState(false);
   
   // Callbacks pendentes para resolver promises
   const pendingPlateResolve = useRef<((result: OCRResult | null) => void) | null>(null);
@@ -115,7 +124,10 @@ export function usePlateWorker(): UsePlateWorkerReturn {
           case 'MODEL_LOADED':
             setModelLoading(false);
             setModelLoaded(event.data.payload.success);
-            if (event.data.payload.success) {
+            if (event.data.payload.permanentFailure) {
+              setModelFailed(true);
+              console.log('⚠️ Modelo YOLO falhou permanentemente:', event.data.payload.error || 'erro desconhecido');
+            } else if (event.data.payload.success) {
               console.log('🧠 Modelo YOLO carregado no worker');
             }
             break;
@@ -291,6 +303,7 @@ export function usePlateWorker(): UsePlateWorkerReturn {
     error,
     modelLoaded,
     modelLoading,
+    modelFailed,
     processPlate,
     detectMotion,
     loadYoloModel,

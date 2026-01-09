@@ -93,6 +93,7 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
   const [tempPoints, setTempPoints] = useState<Point[]>([]);
   const [draggingPoint, setDraggingPoint] = useState<number | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [videoDimensions, setVideoDimensions] = useState({ width: 1280, height: 720 });
   const containerRef = useRef<HTMLDivElement>(null);
   
   // Reconectar stream quando componente monta (ao voltar para a página de monitoramento)
@@ -105,6 +106,27 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
       return () => clearTimeout(timer);
     }
   }, [isActive, reconnectStream]);
+  
+  // Rastrear dimensões do vídeo para overlay correto
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    
+    const updateDimensions = () => {
+      if (video.videoWidth && video.videoHeight) {
+        setVideoDimensions({
+          width: video.videoWidth,
+          height: video.videoHeight,
+        });
+      }
+    };
+    
+    video.addEventListener('loadedmetadata', updateDimensions);
+    // Caso já tenha carregado
+    updateDimensions();
+    
+    return () => video.removeEventListener('loadedmetadata', updateDimensions);
+  }, [videoRef]);
   
   // Toggle de visibilidade da área poligonal
   const [showPolygonOverlay, setShowPolygonOverlay] = useState<boolean>(() => {
@@ -616,6 +638,61 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
           </div>
         )}
         
+        {/* Plate Detection Overlay - Bounding Box em tempo real */}
+        {isActive && debugModeEnabled && processingInfo.plateRegion && (
+          <svg 
+            className="absolute inset-0 w-full h-full pointer-events-none"
+            viewBox={`0 0 ${videoDimensions.width} ${videoDimensions.height}`}
+            preserveAspectRatio="xMidYMid meet"
+          >
+            {/* Retângulo verde ao redor da placa detectada */}
+            <rect
+              x={processingInfo.plateRegion.x}
+              y={processingInfo.plateRegion.y}
+              width={processingInfo.plateRegion.width}
+              height={processingInfo.plateRegion.height}
+              fill="none"
+              stroke="#00FF00"
+              strokeWidth="3"
+            />
+            
+            {/* Background do texto acima */}
+            <rect
+              x={processingInfo.plateRegion.x}
+              y={Math.max(0, processingInfo.plateRegion.y - 28)}
+              width={Math.max(processingInfo.plateRegion.width, 120)}
+              height="24"
+              fill="rgba(0, 0, 0, 0.8)"
+              rx="4"
+            />
+            
+            {/* Texto da placa detectada */}
+            <text
+              x={processingInfo.plateRegion.x + processingInfo.plateRegion.width / 2}
+              y={Math.max(16, processingInfo.plateRegion.y - 10)}
+              textAnchor="middle"
+              fill="#00FF00"
+              fontSize="16"
+              fontWeight="bold"
+              fontFamily="monospace"
+            >
+              {processingInfo.detectedPlate || processingInfo.rawText || 'Detectando...'}
+            </text>
+            
+            {/* Confiança do YOLO abaixo */}
+            <text
+              x={processingInfo.plateRegion.x + processingInfo.plateRegion.width}
+              y={processingInfo.plateRegion.y + processingInfo.plateRegion.height + 16}
+              textAnchor="end"
+              fill="#00FF00"
+              fontSize="12"
+              fontFamily="sans-serif"
+            >
+              YOLO: {Math.round(processingInfo.plateRegion.confidence * 100)}%
+            </text>
+          </svg>
+        )}
+        
         {/* Placeholder quando não está ativo */}
         {!isActive && (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-800/90">
@@ -701,6 +778,17 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
               )}
               <span className="text-xs text-gray-600">{processingInfo.stageLabel}</span>
             </div>
+            
+            {/* Texto OCR para diagnóstico */}
+            {processingInfo.rawText && (
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-yellow-50 border border-yellow-200 rounded text-xs">
+                <span className="text-yellow-700 font-medium">OCR:</span>
+                <span className="font-mono text-yellow-800">"{processingInfo.rawText}"</span>
+                {processingInfo.ocrConfidence !== undefined && (
+                  <span className="text-yellow-600">({Math.round(processingInfo.ocrConfidence * 100)}%)</span>
+                )}
+              </div>
+            )}
             
             {/* Métricas de tempo */}
             <div className="flex items-center gap-3 ml-auto text-xs">

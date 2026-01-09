@@ -69,6 +69,17 @@ export interface ProcessingInfo {
   lastOcrTimeMs: number;
   avgTimeMs: number;
   debugImage?: string; // Data URL da imagem de debug com região detectada
+  rawText?: string; // Texto bruto lido pelo OCR (para diagnóstico)
+  ocrConfidence?: number; // Confiança do OCR (0-1)
+  // Bounding box da placa detectada (para overlay visual em tempo real)
+  plateRegion?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    confidence: number;
+  };
+  detectedPlate?: string; // Texto da placa formatada para exibir no overlay
 }
 
 interface MonitoringContextType {
@@ -171,6 +182,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     error: workerError,
     modelLoaded,
     modelLoading,
+    modelFailed,
     processPlate: processPlateWorker,
     loadYoloModel,
   } = usePlateWorker();
@@ -196,13 +208,13 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     }
   }, [workerReady, workerProcessing, workerError, setWorkerStatus]);
   
-  // Carregar modelo YOLO quando monitoramento iniciar
+  // Carregar modelo YOLO quando monitoramento iniciar (apenas uma vez)
   useEffect(() => {
-    if (isActive && workerReady && !modelLoaded && !modelLoading) {
+    if (isActive && workerReady && !modelLoaded && !modelLoading && !modelFailed) {
       console.log('🧠 Tentando carregar modelo YOLO...');
       loadYoloModel();
     }
-  }, [isActive, workerReady, modelLoaded, modelLoading, loadYoloModel]);
+  }, [isActive, workerReady, modelLoaded, modelLoading, modelFailed, loadYoloModel]);
   
   const [_usedFallback, setUsedFallback] = useState(false);
   const [debugImage, setDebugImage] = useState<string | null>(null);
@@ -509,6 +521,24 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       if (result.debugImage) {
         setDebugImage(result.debugImage);
       }
+      
+      // Atualizar processingInfo com rawText e plateRegion para diagnóstico e overlay visual
+      setProcessingInfo(prev => ({
+        ...prev,
+        rawText: result.rawText || '',
+        ocrConfidence: result.ocrConfidence || 0,
+        plateRegion: result.plateRegion,
+        detectedPlate: result.validation?.isValid ? result.validation.formatted : undefined,
+      }));
+      
+      // Limpar plateRegion após 3 segundos para não poluir o overlay
+      setTimeout(() => {
+        setProcessingInfo(prev => ({
+          ...prev,
+          plateRegion: undefined,
+          detectedPlate: undefined,
+        }));
+      }, 3000);
       
       updateProcessingStage('validating', 'Validando placa...');
       

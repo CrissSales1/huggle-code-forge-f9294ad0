@@ -8,6 +8,7 @@
  */
 
 import Tesseract from 'tesseract.js';
+import * as tf from '@tensorflow/tfjs';
 
 // ============ TIPOS ============
 
@@ -37,6 +38,7 @@ interface OCRResult {
   usedFallback?: boolean;
   usedYolo?: boolean;
   debugImage?: string;
+  plateRegion?: BoundingBox; // Região da placa detectada pelo YOLO/heurística
 }
 
 interface MotionDetectionConfig {
@@ -63,7 +65,7 @@ type WorkerMessage =
 
 type WorkerResponse = 
   | { type: 'READY' }
-  | { type: 'MODEL_LOADED'; payload: { success: boolean } }
+  | { type: 'MODEL_LOADED'; payload: { success: boolean; permanentFailure?: boolean; error?: string } }
   | { type: 'PLATE_RESULT'; payload: OCRResult }
   | { type: 'MOTION_RESULT'; payload: { motionPercent: number } }
   | { type: 'ERROR'; payload: { message: string } }
@@ -77,10 +79,8 @@ let tesseractWorker: Tesseract.Worker | null = null;
 let yoloModel: any = null;
 let modelLoading = false;
 let modelReady = false;
-let tf: any = null;
-
-// Declarar importScripts para TypeScript (função global de Web Workers)
-declare function importScripts(...urls: string[]): void;
+let modelFailed = false; // Marca falha permanente para evitar loop infinito
+// TensorFlow.js é importado estaticamente no topo do arquivo
 
 // Constantes YOLO
 const YOLO_INPUT_SIZE = 640;
@@ -100,6 +100,7 @@ async function checkModelExists(): Promise<boolean> {
 async function loadYoloModel(): Promise<boolean> {
   if (modelReady) return true;
   if (modelLoading) return false;
+  if (modelFailed) return false; // Não tentar novamente após falha permanente
   
   modelLoading = true;
   
@@ -109,17 +110,20 @@ async function loadYoloModel(): Promise<boolean> {
     if (!modelExists) {
       console.log('ℹ️ Modelo YOLO não disponível, usando detecção heurística');
       modelLoading = false;
+      modelFailed = true; // Marcar como falha permanente
+      self.postMessage({ 
+        type: 'MODEL_LOADED', 
+        payload: { success: false, permanentFailure: true, error: 'Modelo não encontrado' } 
+      });
       return false;
     }
     
     self.postMessage({ type: 'PROGRESS', payload: { 
-      stage: 'Carregando TensorFlow.js...', 
+      stage: 'Inicializando TensorFlow.js...', 
       progress: 0 
     }});
     
-    // Importar TensorFlow.js dinamicamente
-    importScripts('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js');
-    tf = (self as any).tf;
+    // TensorFlow.js já está importado estaticamente no topo do arquivo
     
     // Configurar backend WebGL para GPU (fallback para CPU se não disponível)
     try {
@@ -159,8 +163,14 @@ async function loadYoloModel(): Promise<boolean> {
     console.log('✅ Modelo YOLO carregado com sucesso');
     return true;
   } catch (error) {
-    console.error('Erro ao carregar modelo YOLO:', error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error('❌ Erro ao carregar modelo YOLO:', errorMsg);
     modelLoading = false;
+    modelFailed = true; // Marcar como falha permanente
+    self.postMessage({ 
+      type: 'MODEL_LOADED', 
+      payload: { success: false, permanentFailure: true, error: errorMsg } 
+    });
     return false;
   }
 }
@@ -175,7 +185,7 @@ async function detectPlateWithYOLO(
   try {
     // 1. Criar tensor a partir de ImageData
     const imageTensor = tf.browser.fromPixels({
-      data: imageData.data,
+      data: new Uint8Array(imageData.data.buffer),
       width: width,
       height: height,
     });
@@ -523,12 +533,32 @@ function findBestPlateRegion(
 
 // ============ PRÉ-PROCESSAMENTO DE IMAGEM ============
 
-function preprocessImageData(data: Uint8ClampedArray): Uint8ClampedArray {
+/**
+ * Pré-processa a imagem para OCR
+ * @param data - Dados da imagem RGBA
+ * @param useBinarization - Se true, aplica binarização Otsu. Se false, retorna grayscale com contraste
+ */
+function preprocessImageData(data: Uint8ClampedArray, useBinarization: boolean = true): Uint8ClampedArray {
   const result = new Uint8ClampedArray(data.length);
   
-  const factor = 1.5;
+  // Fator de contraste mais suave para não destruir detalhes
+  const factor = useBinarization ? 1.3 : 1.2;
   const intercept = 128 * (1 - factor);
   
+  // Se não usar binarização, retornar grayscale com contraste melhorado
+  if (!useBinarization) {
+    for (let i = 0; i < data.length; i += 4) {
+      const gray = Math.round(data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
+      const contrasted = Math.max(0, Math.min(255, gray * factor + intercept));
+      result[i] = contrasted;
+      result[i + 1] = contrasted;
+      result[i + 2] = contrasted;
+      result[i + 3] = 255;
+    }
+    return result;
+  }
+  
+  // Binarização com Otsu
   const histogram = new Array(256).fill(0);
   for (let i = 0; i < data.length; i += 4) {
     const gray = Math.round(data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
@@ -577,6 +607,49 @@ function preprocessImageData(data: Uint8ClampedArray): Uint8ClampedArray {
   return result;
 }
 
+/**
+ * Pré-processamento específico para placas azuis Mercosul
+ * Detecta pixels azuis (fundo) e os converte para preto,
+ * enquanto preserva texto branco/claro
+ */
+function preprocessForBluePlate(data: Uint8ClampedArray): Uint8ClampedArray {
+  const result = new Uint8ClampedArray(data.length);
+  
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    
+    // Detectar se é azul (placa Mercosul) - azul dominante
+    const isBlue = b > r * 1.2 && b > g && b > 80;
+    
+    // Calcular luminância
+    const luminance = (r * 0.299 + g * 0.587 + b * 0.114);
+    
+    let value: number;
+    if (isBlue) {
+      // Fundo azul vira preto
+      value = 0;
+    } else if (luminance > 160) {
+      // Texto branco/claro vira branco puro
+      value = 255;
+    } else if (luminance > 100) {
+      // Zona intermediária - aumentar contraste
+      value = luminance > 130 ? 255 : 0;
+    } else {
+      // Escuro vira preto
+      value = 0;
+    }
+    
+    result[i] = value;
+    result[i + 1] = value;
+    result[i + 2] = value;
+    result[i + 3] = 255;
+  }
+  
+  return result;
+}
+
 // ============ VALIDAÇÃO DE PLACA ============
 
 const MERCOSUL_REGEX = /^[A-Z]{3}[0-9][A-Z][0-9]{2}$/;
@@ -597,6 +670,10 @@ const CHAR_SUBSTITUTIONS: Record<string, string[]> = {
   'B': ['8', '6'],
   'Q': ['0', 'O'],
   'D': ['0', 'O'],
+  'A': ['4'],
+  '4': ['A'],
+  'E': ['3'],
+  '3': ['E'],
 };
 
 function generateVariations(plate: string): string[] {
@@ -617,53 +694,151 @@ function generateVariations(plate: string): string[] {
   return Array.from(variations);
 }
 
+/**
+ * Extrai candidatos de 7 caracteres de texto OCR com ruído
+ * Quando OCR retorna texto com mais de 7 caracteres (ex: "I12 333EI"),
+ * tenta extrair a subsequência mais provável de placa válida
+ */
+function extractPlateCandidate(rawText: string): string {
+  const cleaned = rawText.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  
+  // Se já tem 7, retornar
+  if (cleaned.length === 7) return cleaned;
+  
+  // Se tem menos de 7, não há como formar placa
+  if (cleaned.length < 7) return cleaned;
+  
+  // Se tem mais de 7, tentar extrair os 7 mais prováveis
+  let candidate = cleaned;
+  
+  // Remover 'I' ou '1' das extremidades (comum em OCR de placas)
+  while (candidate.length > 7 && (candidate[0] === 'I' || candidate[0] === '1')) {
+    candidate = candidate.slice(1);
+  }
+  while (candidate.length > 7 && (candidate.slice(-1) === 'I' || candidate.slice(-1) === '1' || candidate.slice(-1) === 'E')) {
+    candidate = candidate.slice(0, -1);
+  }
+  
+  if (candidate.length === 7) {
+    // Verificar se é válido com esta extração
+    const tempValidation = validatePlateFormat(candidate);
+    if (tempValidation.isValid) return candidate;
+  }
+  
+  // Se ainda tem mais de 7, tentar todas as subsequências de 7 caracteres
+  if (candidate.length > 7) {
+    const candidates: string[] = [];
+    for (let i = 0; i <= candidate.length - 7; i++) {
+      candidates.push(candidate.slice(i, i + 7));
+    }
+    
+    // Também tentar com o cleaned original
+    for (let i = 0; i <= cleaned.length - 7; i++) {
+      candidates.push(cleaned.slice(i, i + 7));
+    }
+    
+    // Retornar a primeira que parecer válida
+    for (const c of candidates) {
+      const tempValidation = validatePlateFormat(c);
+      if (tempValidation.isValid) {
+        console.log(`🔍 Extraído candidato válido: "${c}" de "${cleaned}"`);
+        return c;
+      }
+    }
+    
+    // Se nenhuma é válida, tentar aplicar variações em cada candidato
+    for (const c of candidates) {
+      const variations = generateVariations(c);
+      for (const v of variations) {
+        const tempValidation = validatePlateFormat(v);
+        if (tempValidation.isValid) {
+          console.log(`🔍 Extraído candidato com variação: "${v}" de "${cleaned}"`);
+          return v;
+        }
+      }
+    }
+    
+    // Retornar os primeiros 7 caracteres como fallback
+    return candidate.slice(0, 7);
+  }
+  
+  return candidate;
+}
+
+/**
+ * Valida apenas o formato da placa (sem correções)
+ */
+function validatePlateFormat(plate: string): { isValid: boolean; format: 'mercosul' | 'antiga' | 'unknown' } {
+  if (plate.length !== 7) {
+    return { isValid: false, format: 'unknown' };
+  }
+  
+  if (MERCOSUL_REGEX.test(plate)) {
+    return { isValid: true, format: 'mercosul' };
+  }
+  
+  if (ANTIGA_REGEX.test(plate)) {
+    return { isValid: true, format: 'antiga' };
+  }
+  
+  return { isValid: false, format: 'unknown' };
+}
+
 function validateAndCorrectPlate(rawText: string): PlateValidationResult {
   const cleaned = rawText.toUpperCase().replace(/[^A-Z0-9]/g, '');
   
-  if (cleaned.length !== 7) {
+  // Usar extração inteligente de candidato
+  const candidate = extractPlateCandidate(rawText);
+  
+  console.log(`📝 OCR: "${rawText}" → limpo: "${cleaned}" (${cleaned.length} chars) → candidato: "${candidate}"`);
+  
+  if (candidate.length !== 7) {
     return {
       isValid: false,
       original: rawText,
-      corrected: cleaned,
-      formatted: cleaned,
+      corrected: candidate,
+      formatted: candidate,
       format: 'unknown',
       confidence: 0,
     };
   }
   
-  const variations = generateVariations(cleaned);
+  const variations = generateVariations(candidate);
   
   for (const variation of variations) {
     if (MERCOSUL_REGEX.test(variation)) {
       const formatted = variation.substring(0, 3) + '-' + variation.substring(3);
+      console.log(`✅ Validação: ${formatted} (Mercosul)`);
       return {
         isValid: true,
         original: rawText,
         corrected: variation,
         formatted,
         format: 'mercosul',
-        confidence: variation === cleaned ? 0.95 : 0.85,
+        confidence: variation === candidate ? 0.95 : 0.85,
       };
     }
     
     if (ANTIGA_REGEX.test(variation)) {
       const formatted = variation.substring(0, 3) + '-' + variation.substring(3);
+      console.log(`✅ Validação: ${formatted} (Antiga)`);
       return {
         isValid: true,
         original: rawText,
         corrected: variation,
         formatted,
         format: 'antiga',
-        confidence: variation === cleaned ? 0.95 : 0.85,
+        confidence: variation === candidate ? 0.95 : 0.85,
       };
     }
   }
   
+  console.log(`❌ Validação: INVÁLIDO - "${candidate}"`);
   return {
     isValid: false,
     original: rawText,
-    corrected: cleaned,
-    formatted: cleaned,
+    corrected: candidate,
+    formatted: candidate,
     format: 'unknown',
     confidence: 0.3,
   };
@@ -901,8 +1076,8 @@ async function processPlate(
     let processHeight: number;
     
     if (plateRegion) {
-      // Recortar região da placa
-      const padding = 5;
+      // Recortar região da placa com padding maior para melhor OCR
+      const padding = 20; // Aumentado de 5 para 20 pixels
       const x = Math.max(0, plateRegion.x - padding);
       const y = Math.max(0, plateRegion.y - padding);
       const w = Math.min(width - x, plateRegion.width + padding * 2);
@@ -930,33 +1105,122 @@ async function processPlate(
     
     self.postMessage({ type: 'PROGRESS', payload: { stage: 'Pré-processando...', progress: 0.3 } });
     
-    // 2. Pré-processar imagem
-    const preprocessed = preprocessImageData(processData);
+    // Log do tamanho da região para diagnóstico
+    console.log(`📏 Região para OCR: ${processWidth}x${processHeight}px`);
     
-    // 3. Converter para formato que Tesseract aceita usando OffscreenCanvas
-    const offscreen = new OffscreenCanvas(processWidth, processHeight);
-    const offCtx = offscreen.getContext('2d');
-    if (!offCtx) throw new Error('Falha ao criar OffscreenCanvas');
+    // Helper para executar OCR com um preprocessamento específico
+    const runOCRWithPreprocess = async (
+      preprocessFn: (data: Uint8ClampedArray) => Uint8ClampedArray,
+      methodName: string
+    ): Promise<{ rawText: string; ocrConfidence: number; validation: PlateValidationResult }> => {
+      const preprocessed = preprocessFn(processData);
+      const dataArray = new Uint8ClampedArray(processWidth * processHeight * 4);
+      for (let i = 0; i < preprocessed.length; i++) {
+        dataArray[i] = preprocessed[i];
+      }
+      const imgData = new ImageData(dataArray, processWidth, processHeight);
+      
+      const offscreen = new OffscreenCanvas(processWidth, processHeight);
+      const ctx = offscreen.getContext('2d');
+      if (!ctx) throw new Error('Falha ao criar OffscreenCanvas');
+      ctx.putImageData(imgData, 0, 0);
+      
+      const result = await tesseractWorker!.recognize(offscreen as unknown as Tesseract.ImageLike);
+      const rawText = result.data.text.trim();
+      const ocrConfidence = result.data.confidence / 100;
+      const validation = validateAndCorrectPlate(rawText);
+      
+      console.log(`📝 OCR [${methodName}]: "${rawText}" (confiança: ${Math.round(ocrConfidence * 100)}%)`);
+      
+      return { rawText, ocrConfidence, validation };
+    };
     
-    const dataArray = new Uint8ClampedArray(processWidth * processHeight * 4);
-    for (let i = 0; i < preprocessed.length; i++) {
-      dataArray[i] = preprocessed[i];
+    self.postMessage({ type: 'PROGRESS', payload: { stage: 'Executando OCR...', progress: 0.4 } });
+    
+    // Array para armazenar resultados de todas as tentativas
+    interface OCRAttempt {
+      rawText: string;
+      ocrConfidence: number;
+      validation: PlateValidationResult;
+      method: string;
     }
-    const processedImageData = new ImageData(dataArray, processWidth, processHeight);
-    offCtx.putImageData(processedImageData, 0, 0);
+    const attempts: OCRAttempt[] = [];
     
-    self.postMessage({ type: 'PROGRESS', payload: { stage: 'Executando OCR...', progress: 0.5 } });
+    // Tentativa 1: Binarização padrão
+    try {
+      const attempt1 = await runOCRWithPreprocess(
+        (data) => preprocessImageData(data, true),
+        'binarização'
+      );
+      attempts.push({ ...attempt1, method: 'binarização' });
+    } catch (e) {
+      console.error('Erro OCR binarização:', e);
+    }
     
-    // 4. OCR usando OffscreenCanvas
-    const result = await tesseractWorker!.recognize(offscreen as unknown as Tesseract.ImageLike);
+    self.postMessage({ type: 'PROGRESS', payload: { stage: 'OCR alternativo...', progress: 0.55 } });
     
-    const rawText = result.data.text.trim();
-    const ocrConfidence = result.data.confidence / 100;
+    // Tentativa 2: Grayscale com contraste (se primeira falhou ou baixa confiança)
+    const firstValid = attempts[0]?.validation?.isValid;
+    const firstConfidence = attempts[0]?.ocrConfidence || 0;
+    
+    if (!firstValid || firstConfidence < 0.6) {
+      try {
+        const attempt2 = await runOCRWithPreprocess(
+          (data) => preprocessImageData(data, false),
+          'grayscale'
+        );
+        attempts.push({ ...attempt2, method: 'grayscale' });
+      } catch (e) {
+        console.error('Erro OCR grayscale:', e);
+      }
+    }
+    
+    self.postMessage({ type: 'PROGRESS', payload: { stage: 'OCR placa azul...', progress: 0.7 } });
+    
+    // Tentativa 3: Específico para placa azul Mercosul (se ainda não encontrou válida)
+    const anyValid = attempts.some(a => a.validation.isValid);
+    if (!anyValid) {
+      try {
+        const attempt3 = await runOCRWithPreprocess(
+          (data) => preprocessForBluePlate(data),
+          'placa azul'
+        );
+        attempts.push({ ...attempt3, method: 'placa azul' });
+      } catch (e) {
+        console.error('Erro OCR placa azul:', e);
+      }
+    }
+    
+    // Escolher o melhor resultado
+    let bestAttempt: OCRAttempt | null = null;
+    
+    // Prioridade 1: resultado válido com maior confiança
+    const validAttempts = attempts.filter(a => a.validation.isValid);
+    if (validAttempts.length > 0) {
+      bestAttempt = validAttempts.reduce((best, current) => 
+        current.ocrConfidence > best.ocrConfidence ? current : best
+      );
+      console.log(`✅ Usando resultado [${bestAttempt.method}]: "${bestAttempt.validation.formatted}"`);
+    } else {
+      // Prioridade 2: maior confiança OCR entre inválidos
+      bestAttempt = attempts.reduce((best, current) => 
+        current.ocrConfidence > best.ocrConfidence ? current : best
+      , attempts[0]);
+      console.log(`⚠️ Nenhum válido, usando [${bestAttempt?.method}]: "${bestAttempt?.rawText}"`);
+    }
+    
+    const rawText = bestAttempt?.rawText || '';
+    const ocrConfidence = bestAttempt?.ocrConfidence || 0;
+    const validation = bestAttempt?.validation || {
+      isValid: false,
+      original: '',
+      corrected: '',
+      formatted: '',
+      format: 'unknown' as const,
+      confidence: 0,
+    };
     
     self.postMessage({ type: 'PROGRESS', payload: { stage: 'Validando...', progress: 0.9 } });
-    
-    // 5. Validar placa
-    const validation = validateAndCorrectPlate(rawText);
     
     const processingTimeMs = performance.now() - startTime;
     
@@ -995,6 +1259,7 @@ async function processPlate(
       usedFallback: false,
       usedYolo,
       debugImage,
+      plateRegion: plateRegion || undefined,
     };
   } catch (error) {
     console.error('Erro no processamento:', error);
