@@ -6,7 +6,6 @@
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import Hls from 'hls.js';
 import { supabase } from '@/integrations/supabase/client';
-import { usePlateRecognition } from '@/react-app/hooks/usePlateRecognition';
 import { usePlateWorker } from '@/react-app/hooks/usePlateWorker';
 import { usePerformanceMetrics, PerformanceMetrics } from '@/react-app/hooks/usePerformanceMetrics';
 import logger from '@/react-app/utils/logger';
@@ -168,6 +167,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     isReady: workerReady, 
     isProcessing: workerProcessing,
     error: workerError,
+    processPlate: processPlateWorker,
   } = usePlateWorker();
   
   const {
@@ -191,7 +191,14 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     }
   }, [workerReady, workerProcessing, workerError, setWorkerStatus]);
   
-  const { recognizeFromCanvas, reset: resetOCR, usedFallback, debugImage } = usePlateRecognition();
+  const [usedFallback, setUsedFallback] = useState(false);
+  const [debugImage, setDebugImage] = useState<string | null>(null);
+  
+  // Função para resetar estado de OCR
+  const resetOCRState = useCallback(() => {
+    setUsedFallback(false);
+    setDebugImage(null);
+  }, []);
   
   // Estado para modo debug
   const [debugModeEnabled, setDebugModeEnabled] = useState<boolean>(() => {
@@ -460,6 +467,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   
   const processFrameForOCR = useCallback(async (): Promise<boolean> => {
     if (!videoRef.current || status !== 'monitoring') return false;
+    if (!workerReady) return false;
     
     setStatus('processing');
     setStatusMessage('🔍 Reconhecendo placa...');
@@ -474,14 +482,25 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         virtualArea
       );
       
-      updateProcessingStage('preprocessing', 'Pré-processando...');
-      updateProcessingStage('ocr', 'Executando OCR...');
-      const result = await recognizeFromCanvas(capturedCanvas, debugModeEnabled);
+      updateProcessingStage('ocr', 'Executando OCR no Worker...');
+      const result = await processPlateWorker(capturedCanvas, { enableDebug: debugModeEnabled });
+      
+      if (!result) {
+        finishProcessingTimer();
+        setStatusMessage('❌ Erro no processamento');
+        return false;
+      }
+      
+      // Atualizar estado de fallback e debug
+      setUsedFallback(result.usedFallback || false);
+      if (result.debugImage) {
+        setDebugImage(result.debugImage);
+      }
       
       updateProcessingStage('validating', 'Validando placa...');
       
       if (result.success && result.validation.isValid) {
-        const placa = result.validation.corrected; // Sem hífen, para consistência no banco
+        const placa = result.validation.corrected;
         
         if (isPlateRecent(placa)) {
           logger.log(`⏳ Placa ${placa} detectada recentemente, ignorando...`);
@@ -494,10 +513,8 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         
         markPlateDetected(placa);
         
-        // 1. Verificar se é morador
         const { isMorador, casa } = await checkIfMorador(placa);
         
-        // 2. Se não for morador, verificar se é visitante ativo
         let isVisitante = false;
         let nomeVisitante: string | undefined;
         let casaFinal = casa;
@@ -511,7 +528,8 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
           }
         }
         
-        const fonteDeteccao = usedFallback ? 'api' : 'local';
+        const fallbackUsed = result.usedFallback || false;
+        const fonteDeteccao = fallbackUsed ? 'api' : 'local';
         const detection: Detection = {
           placa,
           timestamp: new Date().toISOString(),
@@ -520,7 +538,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
           nomeVisitante,
           casa: casaFinal,
           confidence: result.validation.confidence,
-          usedFallback,
+          usedFallback: fallbackUsed,
           fonteDeteccao,
         };
         
@@ -555,15 +573,17 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   }, [
     status, 
     virtualArea, 
-    recognizeFromCanvas, 
+    workerReady,
+    processPlateWorker, 
     isPlateRecent, 
     markPlateDetected, 
     checkIfMorador, 
+    checkIfVisitanteAtivo,
     saveDetection, 
-    usedFallback,
     startProcessingTimer,
     updateProcessingStage,
     finishProcessingTimer,
+    debugModeEnabled,
   ]);
   
   const captureReferenceFrame = useCallback(() => {
@@ -607,6 +627,11 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       return false;
     }
     
+    if (!workerReady) {
+      setStatusMessage('⚠️ Worker não está pronto');
+      return false;
+    }
+    
     setStatus('processing');
     setStatusMessage('📷 Leitura manual em progresso...');
     startProcessingTimer();
@@ -614,14 +639,25 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     try {
       updateProcessingStage('capturing', 'Capturando frame...');
       
-      // Capturar a área diretamente do vídeo atual
       const capturedCanvas = motionDetectorRef.current.captureArea(
         videoRef.current,
         virtualArea
       );
       
-      updateProcessingStage('ocr', 'Executando OCR...');
-      const result = await recognizeFromCanvas(capturedCanvas, debugModeEnabled);
+      updateProcessingStage('ocr', 'Executando OCR no Worker...');
+      const result = await processPlateWorker(capturedCanvas, { enableDebug: debugModeEnabled });
+      
+      if (!result) {
+        finishProcessingTimer();
+        setStatusMessage('❌ Erro no processamento');
+        setStatus(isActive ? 'monitoring' : 'idle');
+        return false;
+      }
+      
+      setUsedFallback(result.usedFallback || false);
+      if (result.debugImage) {
+        setDebugImage(result.debugImage);
+      }
       
       updateProcessingStage('validating', 'Validando placa...');
       
@@ -638,10 +674,8 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         
         markPlateDetected(placa);
         
-        // Verificar se é morador
         const { isMorador, casa } = await checkIfMorador(placa);
         
-        // Se não for morador, verificar se é visitante ativo
         let isVisitante = false;
         let nomeVisitante: string | undefined;
         let casaFinal = casa;
@@ -655,7 +689,8 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
           }
         }
         
-        const fonteDeteccao = usedFallback ? 'api' : 'local';
+        const fallbackUsed = result.usedFallback || false;
+        const fonteDeteccao = fallbackUsed ? 'api' : 'local';
         const detection: Detection = {
           placa,
           timestamp: new Date().toISOString(),
@@ -664,7 +699,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
           nomeVisitante,
           casa: casaFinal,
           confidence: result.validation.confidence,
-          usedFallback,
+          usedFallback: fallbackUsed,
           fonteDeteccao,
         };
         
@@ -683,7 +718,6 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
           setStatusMessage(`⚠️ Não cadastrado: ${placa}`);
         }
         
-        // Restaurar status após 2 segundos
         setTimeout(() => {
           if (isActiveRef.current) {
             setStatus('monitoring');
@@ -695,7 +729,6 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         finishProcessingTimer();
         setStatusMessage(`❌ Placa não reconhecida${result.rawText ? ` (texto: ${result.rawText})` : ''}`);
         
-        // Restaurar status
         setTimeout(() => {
           if (isActiveRef.current) {
             setStatus('monitoring');
@@ -712,26 +745,23 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       console.error('Erro na leitura manual:', e);
       finishProcessingTimer();
       setStatusMessage('❌ Erro no processamento');
-      
-      // Restaurar status
       setStatus(isActive ? 'monitoring' : 'idle');
-      
       return false;
     }
   }, [
-    status, 
     isActive,
     virtualArea, 
-    recognizeFromCanvas, 
+    workerReady,
+    processPlateWorker, 
     isPlateRecent, 
     markPlateDetected, 
     checkIfMorador, 
     checkIfVisitanteAtivo,
     saveDetection, 
-    usedFallback,
     startProcessingTimer,
     updateProcessingStage,
     finishProcessingTimer,
+    debugModeEnabled,
   ]);
   
   const processFrame = useCallback(async () => {
@@ -833,7 +863,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       
       motionDetectorRef.current.fullReset();
       recentPlatesRef.current.clear();
-      resetOCR();
+      resetOCRState();
       setHasReference(false);
       
       processingTimesRef.current = [];
@@ -876,7 +906,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       setStatus('error');
       setStatusMessage('❌ Erro ao acessar câmera');
     }
-  }, [selectedCamera, selectedResolution, resetOCR]);
+  }, [selectedCamera, selectedResolution, resetOCRState]);
   
   const stopMonitoring = useCallback(() => {
     if (streamRef.current) {
@@ -928,7 +958,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       
       motionDetectorRef.current.fullReset();
       recentPlatesRef.current.clear();
-      resetOCR();
+      resetOCRState();
       setHasReference(false);
       
       processingTimesRef.current = [];
@@ -1017,7 +1047,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       setHlsStatus('error');
       setStatusMessage(`❌ ${e instanceof Error ? e.message : 'Erro ao conectar'}`);
     }
-  }, [hlsUrl, stopMonitoring, resetOCR]);
+  }, [hlsUrl, stopMonitoring, resetOCRState]);
   
   // Reconectar stream quando elemento de vídeo muda (navegação entre páginas)
   const reconnectStream = useCallback(() => {
