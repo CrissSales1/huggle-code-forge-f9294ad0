@@ -234,18 +234,47 @@ async function detectPlateWithYOLO(
       // Formato esperado: [cx, cy, w, h, confidence]
       if (detection.length < 5) continue;
       
-      const [cx, cy, w, h, confidence] = detection;
+      let [cx, cy, w, h, confidence] = detection;
+      
+      // Detectar se coordenadas são normalizadas (0-1) ou em pixels (0-640)
+      const maxCoord = Math.max(cx, cy, w, h);
+      const isNormalized = maxCoord <= 1.0;
+      
+      if (isNormalized) {
+        // Converter de normalizado (0-1) para pixels (0-640)
+        cx *= YOLO_INPUT_SIZE;
+        cy *= YOLO_INPUT_SIZE;
+        w *= YOLO_INPUT_SIZE;
+        h *= YOLO_INPUT_SIZE;
+        console.log(`🔄 Coordenadas normalizadas detectadas, convertendo para pixels`);
+      }
+      
+      console.log(`📍 Detecção: cx=${cx.toFixed(1)}, cy=${cy.toFixed(1)}, w=${w.toFixed(1)}, h=${h.toFixed(1)}, conf=${(confidence*100).toFixed(1)}%`);
       
       if (confidence > bestConfidence) {
-        // Converter de coords normalizadas (0-640) para pixels originais
+        // Converter de coords em pixels (0-640) para tamanho original da imagem
         const scaleX = width / YOLO_INPUT_SIZE;
         const scaleY = height / YOLO_INPUT_SIZE;
         
+        const boxX = Math.round((cx - w/2) * scaleX);
+        const boxY = Math.round((cy - h/2) * scaleY);
+        const boxW = Math.round(w * scaleX);
+        const boxH = Math.round(h * scaleY);
+        
+        // Validar proporção típica de placa brasileira (2.5:1 a 4:1)
+        const aspectRatio = boxW / boxH;
+        console.log(`📦 Box: x=${boxX}, y=${boxY}, ${boxW}x${boxH}px, proporção=${aspectRatio.toFixed(2)}`);
+        
+        if (aspectRatio < 1.5 || aspectRatio > 6.0) {
+          console.log(`⚠️ Proporção inválida: ${aspectRatio.toFixed(2)} - ignorando detecção`);
+          continue;
+        }
+        
         bestBox = {
-          x: Math.round((cx - w/2) * scaleX),
-          y: Math.round((cy - h/2) * scaleY),
-          width: Math.round(w * scaleX),
-          height: Math.round(h * scaleY),
+          x: boxX,
+          y: boxY,
+          width: boxW,
+          height: boxH,
           confidence: confidence,
         };
         bestConfidence = confidence;
