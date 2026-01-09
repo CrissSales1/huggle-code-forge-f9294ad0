@@ -80,8 +80,7 @@ let modelReady = false;
 let modelFailed = false; // Marca falha permanente para evitar loop infinito
 let tf: any = null;
 
-// Declarar importScripts para TypeScript (função global de Web Workers)
-declare function importScripts(...urls: string[]): void;
+// TensorFlow.js será carregado via import dinâmico ESM
 
 // Constantes YOLO
 const YOLO_INPUT_SIZE = 640;
@@ -124,9 +123,10 @@ async function loadYoloModel(): Promise<boolean> {
       progress: 0 
     }});
     
-    // Importar TensorFlow.js dinamicamente
-    importScripts('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js');
-    tf = (self as any).tf;
+    // Import dinâmico ESM compatível com ES Module workers
+    // @ts-ignore - URL externa para TensorFlow.js ESM
+    const tfModule = await import('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.es2017.esm.min.js');
+    tf = tfModule.default || tfModule;
     
     // Configurar backend WebGL para GPU (fallback para CPU se não disponível)
     try {
