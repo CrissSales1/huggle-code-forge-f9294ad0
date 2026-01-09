@@ -8,6 +8,7 @@
  */
 
 import Tesseract from 'tesseract.js';
+import * as tf from '@tensorflow/tfjs';
 
 // ============ TIPOS ============
 
@@ -78,9 +79,7 @@ let yoloModel: any = null;
 let modelLoading = false;
 let modelReady = false;
 let modelFailed = false; // Marca falha permanente para evitar loop infinito
-let tf: any = null;
-
-// TensorFlow.js será carregado via import dinâmico ESM
+// TensorFlow.js é importado estaticamente no topo do arquivo
 
 // Constantes YOLO
 const YOLO_INPUT_SIZE = 640;
@@ -119,14 +118,11 @@ async function loadYoloModel(): Promise<boolean> {
     }
     
     self.postMessage({ type: 'PROGRESS', payload: { 
-      stage: 'Carregando TensorFlow.js...', 
+      stage: 'Inicializando TensorFlow.js...', 
       progress: 0 
     }});
     
-    // Import dinâmico ESM compatível com ES Module workers
-    // @ts-ignore - URL externa para TensorFlow.js ESM
-    const tfModule = await import('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.es2017.esm.min.js');
-    tf = tfModule.default || tfModule;
+    // TensorFlow.js já está importado estaticamente no topo do arquivo
     
     // Configurar backend WebGL para GPU (fallback para CPU se não disponível)
     try {
@@ -188,7 +184,7 @@ async function detectPlateWithYOLO(
   try {
     // 1. Criar tensor a partir de ImageData
     const imageTensor = tf.browser.fromPixels({
-      data: imageData.data,
+      data: new Uint8Array(imageData.data.buffer),
       width: width,
       height: height,
     });
