@@ -84,8 +84,8 @@ let modelFailed = false; // Marca falha permanente para evitar loop infinito
 
 // Constantes YOLO
 const YOLO_INPUT_SIZE = 640;
-const YOLO_CONFIDENCE_THRESHOLD = 0.7; // Aumentado para evitar falsos positivos
-const YOLO_MIN_RAW_CONFIDENCE = 1.0; // Mínimo valor raw para considerar detecção válida (sigmoid(1.0) = 73%)
+const YOLO_CONFIDENCE_THRESHOLD = 0.6; // 60% confiança mínima após sigmoid
+const YOLO_MIN_RAW_CONFIDENCE = 0.5; // sigmoid(0.5) ≈ 62% - permite detecções com raw 0.5+
 
 // ============ FUNÇÕES YOLO (TensorFlow.js) ============
 
@@ -235,11 +235,28 @@ async function detectPlateWithYOLO(
       }
     }
     
-    // Log para diagnóstico
+    // Log para diagnóstico - mostrar top 5 detecções
     if (detections.length > 0) {
       const sample = detections[0];
       console.log(`📊 Amostra de detecção raw: [${sample.slice(0, 5).map(v => v.toFixed(4)).join(', ')}]`);
       console.log(`📊 Máx confiança raw: ${maxRawConfidence.toFixed(4)} (mínimo necessário: ${YOLO_MIN_RAW_CONFIDENCE})`);
+      
+      // Top 5 detecções para debug
+      const topDetections = detections
+        .filter(d => d.length >= 5 && d[4] > 0.3)
+        .sort((a, b) => b[4] - a[4])
+        .slice(0, 5);
+      
+      if (topDetections.length > 0) {
+        console.log(`🔍 Top ${topDetections.length} detecções:`, topDetections.map(d => ({
+          cx: d[0].toFixed(1),
+          cy: d[1].toFixed(1),
+          w: d[2].toFixed(1),
+          h: d[3].toFixed(1),
+          raw: d[4].toFixed(3),
+          conf: `${(100 / (1 + Math.exp(-d[4]))).toFixed(1)}%`
+        })));
+      }
     }
     
     // Se nenhuma detecção tem confiança raw suficiente, YOLO não detectou nada
