@@ -63,7 +63,7 @@ type WorkerMessage =
 
 type WorkerResponse = 
   | { type: 'READY' }
-  | { type: 'MODEL_LOADED'; payload: { success: boolean } }
+  | { type: 'MODEL_LOADED'; payload: { success: boolean; permanentFailure?: boolean; error?: string } }
   | { type: 'PLATE_RESULT'; payload: OCRResult }
   | { type: 'MOTION_RESULT'; payload: { motionPercent: number } }
   | { type: 'ERROR'; payload: { message: string } }
@@ -77,6 +77,7 @@ let tesseractWorker: Tesseract.Worker | null = null;
 let yoloModel: any = null;
 let modelLoading = false;
 let modelReady = false;
+let modelFailed = false; // Marca falha permanente para evitar loop infinito
 let tf: any = null;
 
 // Declarar importScripts para TypeScript (função global de Web Workers)
@@ -100,6 +101,7 @@ async function checkModelExists(): Promise<boolean> {
 async function loadYoloModel(): Promise<boolean> {
   if (modelReady) return true;
   if (modelLoading) return false;
+  if (modelFailed) return false; // Não tentar novamente após falha permanente
   
   modelLoading = true;
   
@@ -109,6 +111,11 @@ async function loadYoloModel(): Promise<boolean> {
     if (!modelExists) {
       console.log('ℹ️ Modelo YOLO não disponível, usando detecção heurística');
       modelLoading = false;
+      modelFailed = true; // Marcar como falha permanente
+      self.postMessage({ 
+        type: 'MODEL_LOADED', 
+        payload: { success: false, permanentFailure: true, error: 'Modelo não encontrado' } 
+      });
       return false;
     }
     
@@ -159,8 +166,14 @@ async function loadYoloModel(): Promise<boolean> {
     console.log('✅ Modelo YOLO carregado com sucesso');
     return true;
   } catch (error) {
-    console.error('Erro ao carregar modelo YOLO:', error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error('❌ Erro ao carregar modelo YOLO:', errorMsg);
     modelLoading = false;
+    modelFailed = true; // Marcar como falha permanente
+    self.postMessage({ 
+      type: 'MODEL_LOADED', 
+      payload: { success: false, permanentFailure: true, error: errorMsg } 
+    });
     return false;
   }
 }
