@@ -191,7 +191,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     }
   }, [workerReady, workerProcessing, workerError, setWorkerStatus]);
   
-  const [usedFallback, setUsedFallback] = useState(false);
+  const [_usedFallback, setUsedFallback] = useState(false);
   const [debugImage, setDebugImage] = useState<string | null>(null);
   
   // Função para resetar estado de OCR
