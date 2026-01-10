@@ -88,7 +88,7 @@ let charset: string[] = [];
 
 // Constantes PaddleOCR
 const OCR_INPUT_HEIGHT = 48; // PaddleOCR PP-OCRv3/v4 usa altura 48px
-const OCR_MIN_WIDTH = 100;   // Largura mínima para OCR
+const OCR_MIN_WIDTH = 320;   // Largura mínima para Seq Len adequado (~40+ fatias para CTC)
 
 // Estado do modelo YOLO (TensorFlow.js)
 let yoloModel: any = null;
@@ -198,13 +198,13 @@ function preprocessForONNX(
   const targetHeight = OCR_INPUT_HEIGHT;
   let targetWidth = Math.round(targetHeight * aspectRatio);
   
-  // Garantir largura mínima
+  // Garantir largura mínima de 320px para Seq Len adequado
   if (targetWidth < OCR_MIN_WIDTH) {
     targetWidth = OCR_MIN_WIDTH;
   }
   
-  // Largura deve ser múltiplo de 4 para alguns modelos
-  targetWidth = Math.ceil(targetWidth / 4) * 4;
+  // Largura deve ser múltiplo de 32 para PaddleOCR (layers de pooling)
+  targetWidth = Math.ceil(targetWidth / 32) * 32;
   
   // Redimensionar imagem (bilinear simples)
   const resizedRGBA = new Uint8ClampedArray(targetWidth * targetHeight * 4);
@@ -225,19 +225,23 @@ function preprocessForONNX(
     }
   }
   
-  // Converter para tensor CHW normalizado [-1, 1]
+  // Converter para tensor CHW com normalização ImageNet (padrão PaddleOCR)
   const pixels = targetWidth * targetHeight;
   const tensor = new Float32Array(3 * pixels);
+  
+  // Médias e desvios padrão ImageNet usados pelo PaddleOCR
+  const mean = [0.485, 0.456, 0.406];
+  const std = [0.229, 0.224, 0.225];
   
   for (let i = 0; i < pixels; i++) {
     const r = resizedRGBA[i * 4] / 255.0;
     const g = resizedRGBA[i * 4 + 1] / 255.0;
     const b = resizedRGBA[i * 4 + 2] / 255.0;
     
-    // Normalização PaddleOCR: (x - 0.5) / 0.5 = 2x - 1
-    tensor[i] = r * 2 - 1;                    // R channel
-    tensor[pixels + i] = g * 2 - 1;           // G channel
-    tensor[2 * pixels + i] = b * 2 - 1;       // B channel
+    // Normalização ImageNet: (x - mean) / std
+    tensor[i] = (r - mean[0]) / std[0];                    // R channel
+    tensor[pixels + i] = (g - mean[1]) / std[1];           // G channel
+    tensor[2 * pixels + i] = (b - mean[2]) / std[2];       // B channel
   }
   
   return { tensor, width: targetWidth, height: targetHeight };
@@ -709,7 +713,9 @@ function labToRgb(L: number, A: number, B: number): [number, number, number] {
 /**
  * Aplica CLAHE (Contrast Limited Adaptive Histogram Equalization) apenas no canal L
  * Preserva cores originais - essencial para PaddleOCR que foi treinado com RGB
+ * NOTA: Temporariamente desabilitado em v1.1.7 para debug
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function applyCLAHE(
   data: Uint8ClampedArray,
   width: number,
@@ -916,7 +922,7 @@ function lanczosResize(
 }
 
 /**
- * Resize inteligente - garante altura mínima para OCR usando Lanczos
+ * Resize inteligente - SEMPRE normaliza para altura 48px (upscale ou downscale)
  */
 function smartResize(
   data: Uint8ClampedArray,
@@ -924,17 +930,18 @@ function smartResize(
   height: number,
   targetHeight: number = 48
 ): { data: Uint8ClampedArray; width: number; height: number } {
-  if (height >= targetHeight) {
-    return { data, width, height }; // Já tem tamanho adequado
+  // Sempre redimensionar para altura alvo (±2px tolerância)
+  if (Math.abs(height - targetHeight) < 2) {
+    return { data, width, height }; // Já está no tamanho certo
   }
   
   const scale = targetHeight / height;
-  const newWidth = Math.round(width * scale);
+  const newWidth = Math.max(48, Math.round(width * scale));
   const newHeight = targetHeight;
   
   console.log(`📏 SmartResize: ${width}x${height} → ${newWidth}x${newHeight} (scale: ${scale.toFixed(2)}x)`);
   
-  // Usar Lanczos para upscale de alta qualidade
+  // Usar Lanczos para resize de alta qualidade
   return lanczosResize(data, width, height, newWidth, newHeight);
 }
 
@@ -959,13 +966,13 @@ function unwarpPlate(
 }
 
 /**
- * Pipeline completo de otimização de imagem para OCR v1.1.6
+ * Pipeline completo de otimização de imagem para OCR v1.1.7
  * 
  * Ordem de processamento:
  * 1. Correção de perspectiva (se necessário)
- * 2. CLAHE no espaço LAB (corrige iluminação mantendo cores)
+ * 2. CLAHE no espaço LAB (DESABILITADO TEMPORARIAMENTE para debug)
  * 3. Padding (margem de segurança)
- * 4. Resize inteligente com Lanczos (mínimo 48px altura)
+ * 4. Resize inteligente com Lanczos (altura 48px)
  * 
  * IMPORTANTE: Mantém RGB - PaddleOCR foi treinado com estatísticas ImageNet em 3 canais
  */
@@ -974,20 +981,25 @@ function optimizeImageForOCR(
   width: number,
   height: number
 ): { data: Uint8ClampedArray; width: number; height: number } {
-  console.log(`🔄 Pipeline v1.1.6 iniciado: ${width}x${height}px`);
+  console.log(`🔄 Pipeline v1.1.7 iniciado: ${width}x${height}px`);
   
   // 1. Correção de perspectiva (placeholder para versão futura)
   let result = unwarpPlate(data, width, height);
   
-  // 2. CLAHE no espaço LAB - corrige sombras/reflexos preservando cores
-  result.data = applyCLAHE(result.data, result.width, result.height, 2.5, 8);
-  console.log(`💡 CLAHE LAB aplicado`);
+  // 2. CLAHE no espaço LAB - pode ser habilitado/desabilitado para debug
+  const ENABLE_CLAHE = false; // Desabilitado em v1.1.7 para isolar variáveis
+  if (ENABLE_CLAHE) {
+    result.data = applyCLAHE(result.data, result.width, result.height, 2.5, 8);
+    console.log(`💡 CLAHE LAB aplicado`);
+  } else {
+    console.log(`⏭️ CLAHE desabilitado (debug v1.1.7)`);
+  }
   
   // 3. Adicionar padding (8px preto)
   result = addPadding(result.data, result.width, result.height, 8, [0, 0, 0]);
   console.log(`🔲 Padding: ${result.width}x${result.height}px`);
   
-  // 4. Resize inteligente (mínimo 48px altura)
+  // 4. Resize inteligente (SEMPRE altura 48px - upscale ou downscale)
   result = smartResize(result.data, result.width, result.height, 48);
   console.log(`📏 Final: ${result.width}x${result.height}px`);
   
@@ -1871,4 +1883,4 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 };
 
 // Notificar que o worker está carregado
-console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.6 - CLAHE LAB + Lanczos)');
+console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.7 - ImageNet norm + 320px)');
