@@ -29,6 +29,13 @@ interface PlateValidationResult {
   confidence: number;
 }
 
+interface DebugImages {
+  original?: string;      // Frame original completo
+  cropped?: string;       // Região recortada (antes do upscale)
+  preprocessed?: string;  // Após pré-processamento
+  final?: string;         // Resultado final com bounding box
+}
+
 interface OCRResult {
   success: boolean;
   rawText: string;
@@ -38,6 +45,7 @@ interface OCRResult {
   usedFallback?: boolean;
   usedYolo?: boolean;
   debugImage?: string;
+  debugImages?: DebugImages; // Múltiplas imagens de debug do pipeline
   plateRegion?: BoundingBox; // Região da placa detectada pelo YOLO/heurística
 }
 
@@ -314,12 +322,18 @@ async function detectPlateWithYOLO(
         const boxW = Math.round(w * scaleX);
         const boxH = Math.round(h * scaleY);
         
-        // Validar proporção típica de placa brasileira (2.0:1 a 5.0:1)
+        // Validar proporção típica de placa brasileira (2.5:1 a 4.2:1 - mais restritivo)
         const aspectRatio = boxW / boxH;
         console.log(`📦 Box: x=${boxX}, y=${boxY}, ${boxW}x${boxH}px, proporção=${aspectRatio.toFixed(2)}`);
         
-        if (aspectRatio < 2.0 || aspectRatio > 5.0) {
-          console.log(`⚠️ Proporção inválida: ${aspectRatio.toFixed(2)} - ignorando detecção`);
+        if (aspectRatio < 2.5 || aspectRatio > 4.2) {
+          console.log(`⚠️ Proporção fora do range de placa BR: ${aspectRatio.toFixed(2)} (esperado: 2.5-4.2)`);
+          continue;
+        }
+        
+        // Validar tamanho mínimo da região
+        if (boxW < 80 || boxH < 20) {
+          console.log(`⚠️ Região muito pequena: ${boxW}x${boxH}px (mínimo: 80x20)`);
           continue;
         }
         
@@ -933,12 +947,29 @@ function validateAndCorrectPlate(rawText: string): PlateValidationResult {
 
 // ============ GERAÇÃO DE DEBUG IMAGE ============
 
-function generateDebugImage(
+/**
+ * Converte OffscreenCanvas para base64 usando convertToBlob (async)
+ */
+async function offscreenCanvasToBase64(canvas: OffscreenCanvas): Promise<string> {
+  const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.85 });
+  const arrayBuffer = await blob.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuffer);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return 'data:image/jpeg;base64,' + btoa(binary);
+}
+
+/**
+ * Gera imagem de debug com bounding box da placa detectada
+ */
+async function generateDebugImage(
   imageData: ImageData,
   width: number,
   height: number,
   plateRegion: BoundingBox | null
-): string | undefined {
+): Promise<string | undefined> {
   try {
     const offscreen = new OffscreenCanvas(width, height);
     const ctx = offscreen.getContext('2d');
@@ -967,24 +998,32 @@ function generateDebugImage(
       ctx.fillText('Nenhuma placa detectada', 10, 25);
     }
     
-    // Converter para base64 usando blob
-    // Note: OffscreenCanvas.convertToBlob é async, então usamos toDataURL via hack
-    // Na verdade, OffscreenCanvas não tem toDataURL, então criamos um ImageBitmap
-    // Para simplificar, retornamos undefined se não conseguirmos
-    
-    // Alternativa: Criar um canvas virtual usando ImageData
-    const tempCanvas = new OffscreenCanvas(width, height);
-    const tempCtx = tempCanvas.getContext('2d');
-    if (!tempCtx) return undefined;
-    
-    tempCtx.drawImage(offscreen as unknown as CanvasImageSource, 0, 0);
-    
-    // Não podemos usar toDataURL em OffscreenCanvas
-    // Vamos retornar os dados como base64 de outra forma
-    // Por enquanto, desabilitamos debug image no worker
-    return undefined;
+    return await offscreenCanvasToBase64(offscreen);
   } catch (error) {
     console.error('Erro ao gerar debug image:', error);
+    return undefined;
+  }
+}
+
+/**
+ * Gera imagem de debug a partir de dados RGBA
+ */
+async function generateImageFromData(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number
+): Promise<string | undefined> {
+  try {
+    const offscreen = new OffscreenCanvas(width, height);
+    const ctx = offscreen.getContext('2d');
+    if (!ctx) return undefined;
+    
+    const imgData = new ImageData(new Uint8ClampedArray(data), width, height);
+    ctx.putImageData(imgData, 0, 0);
+    
+    return await offscreenCanvasToBase64(offscreen);
+  } catch (error) {
+    console.error('Erro ao gerar imagem de dados:', error);
     return undefined;
   }
 }
@@ -1120,7 +1159,7 @@ async function initTesseract(): Promise<void> {
   
   await tesseractWorker.setParameters({
     tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
-    tessedit_pageseg_mode: Tesseract.PSM.SINGLE_LINE,
+    tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK, // Modo 6 - melhor para blocos pequenos de texto
   });
 }
 
@@ -1192,14 +1231,27 @@ async function processPlate(
     
     self.postMessage({ type: 'PROGRESS', payload: { stage: 'Pré-processando...', progress: 0.3 } });
     
-    // Log do tamanho da região para diagnóstico
+    // Log detalhado da região para diagnóstico
     if (plateRegion) {
-      console.log(`📍 Recortando região: x=${plateRegion.x}, y=${plateRegion.y}, ${plateRegion.width}x${plateRegion.height}px`);
+      console.log(`🔲 RECORTE DETALHADO:`);
+      console.log(`   - Posição: (${plateRegion.x}, ${plateRegion.y})`);
+      console.log(`   - Tamanho: ${plateRegion.width}x${plateRegion.height}px`);
+      console.log(`   - Proporção: ${(plateRegion.width / plateRegion.height).toFixed(2)}:1`);
+      console.log(`   - Confiança: ${Math.round(plateRegion.confidence * 100)}%`);
+      console.log(`   - Fonte: ${usedYolo ? 'YOLO' : 'Heurística'}`);
     }
     console.log(`📏 Região para OCR: ${processWidth}x${processHeight}px`);
     
-    // Upscaling: garantir tamanho mínimo para OCR
-    const MIN_OCR_WIDTH = 300;
+    // Gerar debugImages para pipeline visual
+    const debugImages: DebugImages = {};
+    
+    // Debug: Salvar imagem do recorte ANTES do upscale
+    if (options?.enableDebug && processWidth > 0 && processHeight > 0) {
+      debugImages.cropped = await generateImageFromData(processData, processWidth, processHeight);
+    }
+    
+    // Upscaling: garantir tamanho mínimo para OCR (aumentado para 400)
+    const MIN_OCR_WIDTH = 400;
     if (processWidth < MIN_OCR_WIDTH && processWidth > 0) {
       const scale = MIN_OCR_WIDTH / processWidth;
       const newWidth = Math.round(processWidth * scale);
@@ -1230,11 +1282,13 @@ async function processPlate(
       console.log(`🔍 Upscaled para OCR: ${processWidth}x${processHeight}px`);
     }
     
+    // Variável para guardar última imagem pré-processada para debug
     // Helper para executar OCR com um preprocessamento específico
     const runOCRWithPreprocess = async (
       preprocessFn: (data: Uint8ClampedArray) => Uint8ClampedArray,
-      methodName: string
-    ): Promise<{ rawText: string; ocrConfidence: number; validation: PlateValidationResult }> => {
+      methodName: string,
+      saveForDebug: boolean = false
+    ): Promise<{ rawText: string; ocrConfidence: number; validation: PlateValidationResult; preprocessedData?: Uint8ClampedArray }> => {
       const preprocessed = preprocessFn(processData);
       const dataArray = new Uint8ClampedArray(processWidth * processHeight * 4);
       for (let i = 0; i < preprocessed.length; i++) {
@@ -1254,7 +1308,7 @@ async function processPlate(
       
       console.log(`📝 OCR [${methodName}]: "${rawText}" (confiança: ${Math.round(ocrConfidence * 100)}%)`);
       
-      return { rawText, ocrConfidence, validation };
+      return { rawText, ocrConfidence, validation, preprocessedData: saveForDebug ? dataArray : undefined };
     };
     
     self.postMessage({ type: 'PROGRESS', payload: { stage: 'Executando OCR...', progress: 0.4 } });
@@ -1265,8 +1319,36 @@ async function processPlate(
       ocrConfidence: number;
       validation: PlateValidationResult;
       method: string;
+      preprocessedData?: Uint8ClampedArray;
     }
     const attempts: OCRAttempt[] = [];
+    
+    // Tentativa 0: Grayscale PURO (sem binarização nem contraste agressivo) - mais simples
+    try {
+      const attemptRaw = await runOCRWithPreprocess(
+        (data) => {
+          const result = new Uint8ClampedArray(data.length);
+          for (let i = 0; i < data.length; i += 4) {
+            const gray = Math.round(data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
+            result[i] = gray;
+            result[i + 1] = gray;
+            result[i + 2] = gray;
+            result[i + 3] = 255;
+          }
+          return result;
+        },
+        'raw grayscale',
+        options?.enableDebug // Salvar para debug
+      );
+      attempts.push({ ...attemptRaw, method: 'raw grayscale' });
+      
+      // Salvar imagem pré-processada para debug (primeira tentativa)
+      if (options?.enableDebug && attemptRaw.preprocessedData) {
+        debugImages.preprocessed = await generateImageFromData(attemptRaw.preprocessedData, processWidth, processHeight);
+      }
+    } catch (e) {
+      console.error('Erro OCR raw grayscale:', e);
+    }
     
     // Tentativa 1: Binarização padrão
     try {
@@ -1359,17 +1441,21 @@ async function processPlate(
           fallbackResult.processingTimeMs = performance.now() - startTime;
           // Gerar debug image se habilitado
           if (options.enableDebug) {
-            fallbackResult.debugImage = generateDebugImage(imageData, width, height, plateRegion);
+            fallbackResult.debugImage = await generateDebugImage(imageData, width, height, plateRegion);
           }
           return fallbackResult;
         }
       }
     }
     
-    // Gerar debug image se habilitado
+    // Gerar debug images finais se habilitado
     let debugImage: string | undefined;
     if (options?.enableDebug) {
-      debugImage = generateDebugImage(imageData, width, height, plateRegion);
+      // Imagem original (frame completo da área virtual)
+      debugImages.original = await generateImageFromData(imageData.data, width, height);
+      // Imagem final com bounding box
+      debugImages.final = await generateDebugImage(imageData, width, height, plateRegion);
+      debugImage = debugImages.final;
     }
     
     return {
@@ -1381,6 +1467,7 @@ async function processPlate(
       usedFallback: false,
       usedYolo,
       debugImage,
+      debugImages: options?.enableDebug ? debugImages : undefined,
       plateRegion: plateRegion || undefined,
     };
   } catch (error) {

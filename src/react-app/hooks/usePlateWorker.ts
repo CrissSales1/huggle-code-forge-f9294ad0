@@ -23,6 +23,12 @@ export interface OCRResult {
   usedFallback?: boolean;
   usedYolo?: boolean; // Indica se usou detecção YOLO
   debugImage?: string; // Base64 da imagem com bounding box
+  debugImages?: { // Múltiplas imagens de debug do pipeline
+    original?: string;      // Frame original completo
+    cropped?: string;       // Região recortada (antes do upscale)
+    preprocessed?: string;  // Após pré-processamento
+    final?: string;         // Resultado final com bounding box
+  };
   plateRegion?: { // Região da placa detectada pelo YOLO/heurística
     x: number;
     y: number;
