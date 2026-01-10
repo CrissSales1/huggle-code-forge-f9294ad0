@@ -5,28 +5,68 @@
 
 // Caracteres que são frequentemente confundidos pelo OCR
 const OCR_CORRECTIONS: Record<string, string[]> = {
+  // Números → possíveis confusões
+  '0': ['O', 'D', 'Q', 'C'],
+  '1': ['I', 'L', 'T', '7', '|'],
+  '2': ['Z', '7'],
+  '3': ['E', '8'],
+  '4': ['A', 'H'],
+  '5': ['S', '6'],
+  '6': ['G', 'B', '5'],
+  '7': ['T', 'Y', '1', '2'],
+  '8': ['B', '3'],
+  '9': ['G', 'Q', 'P'],
+  
+  // Letras → possíveis confusões
+  'A': ['4', 'H'],
+  'B': ['8', '6', '3'],
+  'C': ['0', 'G', '('],
+  'D': ['0', 'O'],
+  'E': ['3', 'F'],
+  'F': ['E', 'P', 'T'],
+  'G': ['6', '9', 'C', '0'],
+  'H': ['4', 'N', 'M'],
+  'I': ['1', 'L', 'T', '|'],
+  'J': ['1', ']'],
+  'L': ['1', 'I', '7'],
+  'M': ['N', 'H', 'W'],
+  'N': ['M', 'H'],
+  'O': ['0', 'Q', 'D', 'C'],
+  'P': ['9', 'R'],
+  'Q': ['0', 'O', '9'],
+  'R': ['P', 'K'],
+  'S': ['5', '8'],
+  'T': ['7', '1', 'I', 'Y'],
+  'U': ['V', 'W', '0'],
+  'V': ['U', 'W', 'Y'],
+  'W': ['V', 'M', 'N'],
+  'Y': ['V', '7', 'T'],
+  'Z': ['2', '7'],
+};
+
+// Mapeamento de caracteres visualmente similares (para correção agressiva)
+const VISUAL_SIMILAR: Record<string, string[]> = {
+  // Muito similares - altíssima confusão
+  'D': ['0', 'O', 'Q'],
+  'O': ['0', 'D', 'Q'],
   '0': ['O', 'D', 'Q'],
-  '1': ['I', 'L', 'T'],
-  '2': ['Z'],
-  '3': ['E'],
-  '4': ['A'],
+  '1': ['I', 'L', '7', 'T', '|'],
+  'I': ['1', 'L', '|'],
+  '4': ['A', 'H'],
+  'A': ['4', 'H'],
+  '8': ['B', '3'],
+  'B': ['8', '3', '6'],
   '5': ['S'],
-  '6': ['G', 'B'],
-  '7': ['T', 'Y'],
-  '8': ['B'],
-  '9': ['G', 'Q'],
-  'A': ['4'],
-  'B': ['8', '6'],
-  'D': ['0'],
-  'E': ['3'],
-  'G': ['6', '9'],
-  'I': ['1', 'L'],
-  'L': ['1', 'I'],
-  'O': ['0', 'Q', 'D'],
-  'Q': ['0', 'O'],
   'S': ['5'],
-  'T': ['7', '1'],
+  '6': ['G', 'B'],
+  'G': ['6', '9'],
+  '2': ['Z'],
   'Z': ['2'],
+  // Confusões específicas do caso UFHJ -> DFJ
+  'U': ['0', 'O', 'D', 'V'],
+  'F': ['E', 'P', 'T'],
+  'H': ['4', 'N', 'M'],
+  'J': ['1', ']'],
 };
 
 /**
@@ -202,6 +242,76 @@ export interface PlateValidationResult {
 }
 
 /**
+ * Gera variações agressivas baseadas em similaridade visual
+ */
+function generateAggressiveVariations(plate: string): string[] {
+  const variations = new Set<string>();
+  const chars = plate.split('');
+  
+  // Aplicar correção posicional como base
+  const positionCorrected = correctByPosition(plate);
+  variations.add(positionCorrected);
+  
+  // Gerar variações baseadas em confusões visuais
+  // Posições 0, 1, 2: DEVEM ser letras
+  for (let i = 0; i < 3; i++) {
+    const original = chars[i];
+    const alternatives = VISUAL_SIMILAR[original] || [];
+    
+    for (const alt of alternatives) {
+      if (/[A-Z]/.test(alt)) {
+        const variant = [...chars];
+        variant[i] = alt;
+        variations.add(correctByPosition(variant.join('')));
+      }
+    }
+  }
+  
+  // Posição 3: DEVE ser número
+  const alt3 = VISUAL_SIMILAR[chars[3]] || [];
+  for (const alt of alt3) {
+    if (/[0-9]/.test(alt)) {
+      const variant = [...chars];
+      variant[3] = alt;
+      variations.add(correctByPosition(variant.join('')));
+    }
+  }
+  
+  // Posição 4: pode ser letra (Mercosul) ou número (antigo)
+  const alt4 = VISUAL_SIMILAR[chars[4]] || [];
+  for (const alt of alt4) {
+    const variant = [...chars];
+    variant[4] = alt;
+    variations.add(correctByPosition(variant.join('')));
+  }
+  
+  // Posições 5, 6: DEVEM ser números
+  for (let i = 5; i < 7; i++) {
+    const alt = VISUAL_SIMILAR[chars[i]] || [];
+    for (const a of alt) {
+      if (/[0-9]/.test(a)) {
+        const variant = [...chars];
+        variant[i] = a;
+        variations.add(correctByPosition(variant.join('')));
+      }
+    }
+  }
+  
+  return Array.from(variations);
+}
+
+/**
+ * Conta quantos caracteres foram alterados entre duas strings
+ */
+function countChanges(original: string, corrected: string): number {
+  let changes = 0;
+  for (let i = 0; i < Math.min(original.length, corrected.length); i++) {
+    if (original[i] !== corrected[i]) changes++;
+  }
+  return changes;
+}
+
+/**
  * Valida e corrige uma placa
  */
 export function validateAndCorrectPlate(rawPlate: string): PlateValidationResult {
@@ -219,17 +329,41 @@ export function validateAndCorrectPlate(rawPlate: string): PlateValidationResult
     };
   }
   
-  // Tentar corrigir
+  // NOVO: Se tem 8 caracteres, testar sem o primeiro (ruído comum)
+  if (cleaned.length === 8) {
+    const withoutFirst = cleaned.slice(1);
+    if (isValidPlate(withoutFirst)) {
+      return {
+        isValid: true,
+        original: rawPlate,
+        corrected: withoutFirst,
+        formatted: formatPlateForDisplay(withoutFirst),
+        format: isOldFormat(withoutFirst) ? 'old' : 'mercosul',
+        confidence: 0.7,
+      };
+    }
+    
+    // Tentar correção posicional no substring
+    const correctedWithoutFirst = correctByPosition(withoutFirst);
+    if (isValidPlate(correctedWithoutFirst)) {
+      return {
+        isValid: true,
+        original: rawPlate,
+        corrected: correctedWithoutFirst,
+        formatted: formatPlateForDisplay(correctedWithoutFirst),
+        format: isOldFormat(correctedWithoutFirst) ? 'old' : 'mercosul',
+        confidence: 0.6,
+      };
+    }
+  }
+  
+  // Tentar corrigir com 7 caracteres
   if (cleaned.length === 7) {
     const corrected = correctByPosition(cleaned);
     
     if (isValidPlate(corrected)) {
-      // Calcular confiança baseada em quantos caracteres foram alterados
-      let changes = 0;
-      for (let i = 0; i < 7; i++) {
-        if (cleaned[i] !== corrected[i]) changes++;
-      }
-      const confidence = 1 - (changes * 0.15); // -15% por caractere alterado
+      const changes = countChanges(cleaned, corrected);
+      const confidence = 1 - (changes * 0.15);
       
       return {
         isValid: true,
@@ -239,6 +373,24 @@ export function validateAndCorrectPlate(rawPlate: string): PlateValidationResult
         format: isOldFormat(corrected) ? 'old' : 'mercosul',
         confidence: Math.max(0.4, confidence),
       };
+    }
+    
+    // NOVO: Se correção por posição falhou, tentar variações agressivas
+    const variations = generateAggressiveVariations(cleaned);
+    for (const variant of variations) {
+      if (isValidPlate(variant)) {
+        const changes = countChanges(cleaned, variant);
+        const confidence = 1 - (changes * 0.12);
+        
+        return {
+          isValid: true,
+          original: rawPlate,
+          corrected: variant,
+          formatted: formatPlateForDisplay(variant),
+          format: isOldFormat(variant) ? 'old' : 'mercosul',
+          confidence: Math.max(0.35, confidence),
+        };
+      }
     }
   }
   

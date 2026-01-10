@@ -757,24 +757,42 @@ const MERCOSUL_REGEX = /^[A-Z]{3}[0-9][A-Z][0-9]{2}$/;
 const ANTIGA_REGEX = /^[A-Z]{3}[0-9]{4}$/;
 
 const CHAR_SUBSTITUTIONS: Record<string, string[]> = {
-  '0': ['O', 'Q', 'D'],
-  'O': ['0', 'Q', 'D'],
-  '1': ['I', 'L', 'T', '7'],
-  'I': ['1', 'L', 'T'],
-  '2': ['Z'],
-  'Z': ['2'],
-  '5': ['S'],
-  'S': ['5'],
-  '6': ['G', 'B'],
-  'G': ['6', 'C'],
-  '8': ['B'],
-  'B': ['8', '6'],
-  'Q': ['0', 'O'],
+  // Números
+  '0': ['O', 'Q', 'D', 'C'],
+  '1': ['I', 'L', 'T', '7', '|'],
+  '2': ['Z', '7'],
+  '3': ['E', '8'],
+  '4': ['A', 'H'],
+  '5': ['S', '6'],
+  '6': ['G', 'B', '5'],
+  '7': ['T', 'Y', '1', '2'],
+  '8': ['B', '3'],
+  '9': ['G', 'Q', 'P'],
+  // Letras
+  'A': ['4', 'H'],
+  'B': ['8', '6', '3'],
+  'C': ['0', 'G'],
   'D': ['0', 'O'],
-  'A': ['4'],
-  '4': ['A'],
-  'E': ['3'],
-  '3': ['E'],
+  'E': ['3', 'F'],
+  'F': ['E', 'P', 'T'],
+  'G': ['6', '9', 'C'],
+  'H': ['4', 'N', 'M'],
+  'I': ['1', 'L', 'T', '|'],
+  'J': ['1'],
+  'L': ['1', 'I', '7'],
+  'M': ['N', 'H', 'W'],
+  'N': ['M', 'H'],
+  'O': ['0', 'Q', 'D', 'C'],
+  'P': ['9', 'R'],
+  'Q': ['0', 'O', '9'],
+  'R': ['P', 'K'],
+  'S': ['5', '8'],
+  'T': ['7', '1', 'I', 'Y'],
+  'U': ['V', 'W', '0'],
+  'V': ['U', 'W', 'Y'],
+  'W': ['V', 'M', 'N'],
+  'Y': ['V', '7', 'T'],
+  'Z': ['2', '7'],
 };
 
 function generateVariations(plate: string): string[] {
@@ -892,6 +910,69 @@ function validateAndCorrectPlate(rawText: string): PlateValidationResult {
   const candidate = extractPlateCandidate(rawText);
   
   console.log(`📝 OCR: "${rawText}" → limpo: "${cleaned}" (${cleaned.length} chars) → candidato: "${candidate}"`);
+  
+  // NOVO: Se tem 8 caracteres, testar sem o primeiro (ruído comum - ex: UFHJ1112 → FHJ1112)
+  if (cleaned.length === 8) {
+    const withoutFirst = cleaned.slice(1);
+    console.log(`🔍 Tentando sem primeiro char: "${withoutFirst}"`);
+    
+    // Testar diretamente
+    if (MERCOSUL_REGEX.test(withoutFirst)) {
+      const formatted = withoutFirst.substring(0, 3) + '-' + withoutFirst.substring(3);
+      console.log(`✅ Sem primeiro char válido: ${formatted} (Mercosul)`);
+      return {
+        isValid: true,
+        original: rawText,
+        corrected: withoutFirst,
+        formatted,
+        format: 'mercosul',
+        confidence: 0.75,
+      };
+    }
+    
+    if (ANTIGA_REGEX.test(withoutFirst)) {
+      const formatted = withoutFirst.substring(0, 3) + '-' + withoutFirst.substring(3);
+      console.log(`✅ Sem primeiro char válido: ${formatted} (Antiga)`);
+      return {
+        isValid: true,
+        original: rawText,
+        corrected: withoutFirst,
+        formatted,
+        format: 'antiga',
+        confidence: 0.75,
+      };
+    }
+    
+    // Testar variações do substring
+    const variationsWithoutFirst = generateVariations(withoutFirst);
+    for (const variation of variationsWithoutFirst) {
+      if (MERCOSUL_REGEX.test(variation)) {
+        const formatted = variation.substring(0, 3) + '-' + variation.substring(3);
+        console.log(`✅ Variação sem primeiro char: ${formatted} (Mercosul)`);
+        return {
+          isValid: true,
+          original: rawText,
+          corrected: variation,
+          formatted,
+          format: 'mercosul',
+          confidence: 0.65,
+        };
+      }
+      
+      if (ANTIGA_REGEX.test(variation)) {
+        const formatted = variation.substring(0, 3) + '-' + variation.substring(3);
+        console.log(`✅ Variação sem primeiro char: ${formatted} (Antiga)`);
+        return {
+          isValid: true,
+          original: rawText,
+          corrected: variation,
+          formatted,
+          format: 'antiga',
+          confidence: 0.65,
+        };
+      }
+    }
+  }
   
   if (candidate.length !== 7) {
     return {
@@ -1159,7 +1240,8 @@ async function initTesseract(): Promise<void> {
   
   await tesseractWorker.setParameters({
     tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
-    tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK, // Modo 6 - melhor para blocos pequenos de texto
+    tessedit_pageseg_mode: Tesseract.PSM.SINGLE_WORD, // Modo 8 - palavra única (melhor para placas)
+    preserve_interword_spaces: '0',
   });
 }
 
