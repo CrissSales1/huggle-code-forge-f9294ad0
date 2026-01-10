@@ -586,8 +586,15 @@ async function detectPlateWithYOLO(
         
         const aspectRatio = boxW / boxH;
         
-        if (aspectRatio < 2.5 || aspectRatio > 4.2) continue;
-        if (boxW < 80 || boxH < 20) continue;
+        // Filtros relaxados para capturar mais placas
+        if (aspectRatio < 2.0 || aspectRatio > 5.0) {
+          console.log(`⚠️ YOLO: placa descartada por proporção ${aspectRatio.toFixed(2)} (esperado 2.0-5.0)`);
+          continue;
+        }
+        if (boxW < 50 || boxH < 12) {
+          console.log(`⚠️ YOLO: placa descartada por tamanho ${boxW}x${boxH}px (mín 50x12)`);
+          continue;
+        }
         
         bestBox = {
           x: boxX,
@@ -635,6 +642,86 @@ const MAX_X_RATIO = 1.0;
 const FALLBACK_CONFIDENCE_THRESHOLD = 0.60;
 
 // ============ FUNÇÕES DE PROCESSAMENTO DE IMAGEM ============
+
+/**
+ * Otimiza imagem para OCR com:
+ * 1. Conversão para escala de cinza
+ * 2. Stretch de contraste adaptativo
+ * 3. Sharpening (aumento de nitidez)
+ */
+function optimizeImageForOCR(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number
+): Uint8ClampedArray {
+  const result = new Uint8ClampedArray(data.length);
+  const numPixels = width * height;
+  
+  // 1. Converter para grayscale
+  const gray = new Uint8ClampedArray(numPixels);
+  for (let i = 0; i < numPixels; i++) {
+    const idx = i * 4;
+    gray[i] = Math.round(
+      data[idx] * 0.299 + data[idx + 1] * 0.587 + data[idx + 2] * 0.114
+    );
+  }
+  
+  // 2. Calcular histograma para auto-contraste
+  const histogram = new Uint32Array(256);
+  for (let i = 0; i < numPixels; i++) {
+    histogram[gray[i]]++;
+  }
+  
+  // 3. Encontrar min/max para stretch (ignorando 1% extremos)
+  let minVal = 0, maxVal = 255;
+  const threshold = numPixels * 0.01;
+  let count = 0;
+  for (let i = 0; i < 256; i++) {
+    count += histogram[i];
+    if (count > threshold) { minVal = i; break; }
+  }
+  count = 0;
+  for (let i = 255; i >= 0; i--) {
+    count += histogram[i];
+    if (count > threshold) { maxVal = i; break; }
+  }
+  
+  const range = maxVal - minVal || 1;
+  
+  // 4. Aplicar contraste e sharpening
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = y * width + x;
+      const rgbaIdx = idx * 4;
+      
+      // Stretch de contraste
+      let val = gray[idx];
+      val = Math.round(((val - minVal) / range) * 255);
+      val = Math.max(0, Math.min(255, val));
+      
+      // Sharpening (se não for borda)
+      if (x > 0 && x < width - 1 && y > 0 && y < height - 1) {
+        const center = gray[idx];
+        const neighbors = (
+          gray[(y-1) * width + x] +
+          gray[(y+1) * width + x] +
+          gray[y * width + (x-1)] +
+          gray[y * width + (x+1)]
+        ) / 4;
+        const sharpened = center + (center - neighbors) * 0.5;
+        val = Math.round(((sharpened - minVal) / range) * 255);
+        val = Math.max(0, Math.min(255, val));
+      }
+      
+      result[rgbaIdx] = val;
+      result[rgbaIdx + 1] = val;
+      result[rgbaIdx + 2] = val;
+      result[rgbaIdx + 3] = 255;
+    }
+  }
+  
+  return result;
+}
 
 function toGrayscale(data: Uint8ClampedArray): Uint8ClampedArray {
   const grayscale = new Uint8ClampedArray(data.length / 4);
@@ -1368,6 +1455,11 @@ async function processPlate(
       processHeight = height;
     }
     
+    self.postMessage({ type: 'PROGRESS', payload: { stage: 'Otimizando imagem...', progress: 0.3 } });
+    
+    // Otimizar imagem antes do OCR (grayscale + contraste + sharpening)
+    const optimizedData = optimizeImageForOCR(processData, processWidth, processHeight);
+    
     self.postMessage({ type: 'PROGRESS', payload: { stage: 'Executando OCR ONNX...', progress: 0.4 } });
     
     // Debug images
@@ -1376,30 +1468,13 @@ async function processPlate(
     if (options?.enableDebug && processWidth > 0 && processHeight > 0) {
       debugImages.cropped = await generateImageFromData(processData, processWidth, processHeight);
       
-      // Gerar imagem pré-processada para debug (mostra como vai para o OCR)
-      const { tensor, width: tensorWidth, height: tensorHeight } = preprocessForONNX(
-        processData, processWidth, processHeight
-      );
-      
-      // Converter tensor [-1,1] de volta para imagem visualizável [0,255]
-      const previewData = new Uint8ClampedArray(tensorWidth * tensorHeight * 4);
-      const pixels = tensorWidth * tensorHeight;
-      for (let i = 0; i < pixels; i++) {
-        // Desnormalizar: (tensor + 1) * 127.5
-        const r = Math.round((tensor[i] + 1) * 127.5);
-        const g = Math.round((tensor[pixels + i] + 1) * 127.5);
-        const b = Math.round((tensor[2 * pixels + i] + 1) * 127.5);
-        previewData[i * 4] = Math.max(0, Math.min(255, r));
-        previewData[i * 4 + 1] = Math.max(0, Math.min(255, g));
-        previewData[i * 4 + 2] = Math.max(0, Math.min(255, b));
-        previewData[i * 4 + 3] = 255;
-      }
-      debugImages.preprocessed = await generateImageFromData(previewData, tensorWidth, tensorHeight);
+      // Mostrar imagem otimizada (que realmente vai para o OCR)
+      debugImages.preprocessed = await generateImageFromData(optimizedData, processWidth, processHeight);
     }
     
-    // 3. Executar OCR com ONNX
+    // 3. Executar OCR com ONNX usando imagem otimizada
     const { text: rawText, confidence: ocrConfidence } = await runONNXOCR(
-      processData,
+      optimizedData,
       processWidth,
       processHeight
     );
@@ -1525,4 +1600,4 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 };
 
 // Notificar que o worker está carregado
-console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.4)');
+console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.5)');
