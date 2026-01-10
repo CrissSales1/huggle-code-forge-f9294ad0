@@ -3,7 +3,7 @@
  * Move OCR (ONNX Runtime), detecção de placa e motion detection para thread separada
  * Evita bloqueio da UI durante processamento pesado
  * 
- * v1.1.0: Substituído Tesseract.js por PaddleOCR ONNX (muito mais preciso)
+ * v1.1.2: Adicionado debug image preprocessed, logs diagnóstico, validação charset
  */
 
 import * as ort from 'onnxruntime-web';
@@ -128,6 +128,11 @@ async function initONNX(): Promise<void> {
     // Carregar charset
     charset = await loadCharset();
     console.log(`📚 Charset carregado: ${charset.length} caracteres`);
+    
+    // Validar charset - PaddleOCR espera 503 chars + 1 blank = 504
+    if (charset.length !== 504 && charset.length !== 37) {
+      console.warn(`⚠️ Charset tem ${charset.length} chars, esperado 504 ou 37 (fallback)`);
+    }
     
     // Configurar ONNX Runtime para WASM (CDN com versão correta)
     ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.2/dist/';
@@ -314,6 +319,9 @@ async function runONNXOCR(
     // Pré-processar imagem
     const { tensor, width: processedWidth, height: processedHeight } = preprocessForONNX(data, width, height);
     
+    console.log(`📊 Input image: ${width}x${height} → preprocessed: ${processedWidth}x${processedHeight}`);
+    console.log(`📊 Tensor shape: [1, 3, ${processedHeight}, ${processedWidth}]`);
+    
     // Criar tensor de entrada
     const inputTensor = new ort.Tensor('float32', tensor, [1, 3, processedHeight, processedWidth]);
     
@@ -326,6 +334,9 @@ async function runONNXOCR(
     const outputTensor = outputs[outputName];
     const outputData = outputTensor.data as Float32Array;
     const outputShape = outputTensor.dims;
+    
+    console.log(`📊 Output shape: [${outputShape.join(', ')}]`);
+    console.log(`📊 Num classes: ${outputShape[outputShape.length - 1]}, Seq len: ${outputShape.length === 3 ? outputShape[1] : outputShape[0]}`);
     
     // Decodificar CTC
     const { text, confidence } = decodeCTC(outputData, outputShape);
@@ -1296,6 +1307,26 @@ async function processPlate(
     
     if (options?.enableDebug && processWidth > 0 && processHeight > 0) {
       debugImages.cropped = await generateImageFromData(processData, processWidth, processHeight);
+      
+      // Gerar imagem pré-processada para debug (mostra como vai para o OCR)
+      const { tensor, width: tensorWidth, height: tensorHeight } = preprocessForONNX(
+        processData, processWidth, processHeight
+      );
+      
+      // Converter tensor [-1,1] de volta para imagem visualizável [0,255]
+      const previewData = new Uint8ClampedArray(tensorWidth * tensorHeight * 4);
+      const pixels = tensorWidth * tensorHeight;
+      for (let i = 0; i < pixels; i++) {
+        // Desnormalizar: (tensor + 1) * 127.5
+        const r = Math.round((tensor[i] + 1) * 127.5);
+        const g = Math.round((tensor[pixels + i] + 1) * 127.5);
+        const b = Math.round((tensor[2 * pixels + i] + 1) * 127.5);
+        previewData[i * 4] = Math.max(0, Math.min(255, r));
+        previewData[i * 4 + 1] = Math.max(0, Math.min(255, g));
+        previewData[i * 4 + 2] = Math.max(0, Math.min(255, b));
+        previewData[i * 4 + 3] = 255;
+      }
+      debugImages.preprocessed = await generateImageFromData(previewData, tensorWidth, tensorHeight);
     }
     
     // 3. Executar OCR com ONNX

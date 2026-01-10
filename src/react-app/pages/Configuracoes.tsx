@@ -746,7 +746,7 @@ export default function Configuracoes() {
                 Digite a senha para desbloquear.
               </p>
               
-              <div className="space-y-3 sm:space-y-4">
+              <form autoComplete="off" onSubmit={(e) => { e.preventDefault(); handleDesbloquearBackup(); }} className="space-y-3 sm:space-y-4">
                 <div>
                   <input
                     type="password"
@@ -755,7 +755,6 @@ export default function Configuracoes() {
                       setSenhaBackup(e.target.value);
                       setErroSenhaBackup(false);
                     }}
-                    onKeyDown={(e) => e.key === 'Enter' && handleDesbloquearBackup()}
                     placeholder="Digite a senha"
                     className={`w-full px-3 sm:px-4 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 ${
                       erroSenhaBackup ? 'border-red-500' : 'border-gray-300'
@@ -767,13 +766,13 @@ export default function Configuracoes() {
                 </div>
                 
                 <button
-                  onClick={handleDesbloquearBackup}
+                  type="submit"
                   className="w-full flex items-center justify-center space-x-1.5 sm:space-x-2 px-3 sm:px-4 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
                 >
                   <ShieldCheck className="w-4 h-4" />
                   <span>Desbloquear</span>
                 </button>
-              </div>
+              </form>
             </div>
           ) : (
             <>
@@ -997,7 +996,7 @@ export default function Configuracoes() {
                 Operação crítica. Digite a senha.
               </p>
               
-              <div className="space-y-3 sm:space-y-4">
+              <form autoComplete="off" onSubmit={(e) => { e.preventDefault(); handleDesbloquearExclusao(); }} className="space-y-3 sm:space-y-4">
                 <div>
                   <input
                     type="password"
@@ -1006,7 +1005,6 @@ export default function Configuracoes() {
                       setSenhaExclusao(e.target.value);
                       setErroSenhaExclusao(false);
                     }}
-                    onKeyDown={(e) => e.key === 'Enter' && handleDesbloquearExclusao()}
                     placeholder="Digite a senha"
                     className={`w-full px-3 sm:px-4 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 ${
                       erroSenhaExclusao ? 'border-red-500' : 'border-gray-300'
@@ -1018,13 +1016,13 @@ export default function Configuracoes() {
                 </div>
                 
                 <button
-                  onClick={handleDesbloquearExclusao}
+                  type="submit"
                   className="w-full flex items-center justify-center space-x-1.5 sm:space-x-2 px-3 sm:px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
                 >
                   <ShieldCheck className="w-4 h-4" />
                   <span>Desbloquear</span>
                 </button>
-              </div>
+              </form>
             </div>
           ) : (
             <div>
@@ -1058,7 +1056,7 @@ export default function Configuracoes() {
       {/* Rodapé com versão */}
       <div className="mt-8 pt-4 border-t border-gray-200 text-center">
         <p className="text-xs text-gray-400">
-          Versão do Sistema: <span className="font-mono font-medium text-gray-500">1.1.1</span> <span className="text-emerald-500">(ONNX OCR)</span>
+          Versão do Sistema: <span className="font-mono font-medium text-gray-500">1.1.2</span> <span className="text-emerald-500">(ONNX OCR)</span>
         </p>
       </div>
     </div>
