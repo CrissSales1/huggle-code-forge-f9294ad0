@@ -1,13 +1,12 @@
 /**
  * Web Worker para processamento de imagem em background
- * Move OCR (Tesseract.js), detecção de placa e motion detection para thread separada
+ * Move OCR (ONNX Runtime), detecção de placa e motion detection para thread separada
  * Evita bloqueio da UI durante processamento pesado
  * 
- * FASE 1: Processamento completo no worker incluindo fallback API e debug images
- * FASE 2: Integração com TensorFlow.js + YOLOv8 para detecção de placas
+ * v1.1.0: Substituído Tesseract.js por PaddleOCR ONNX (muito mais preciso)
  */
 
-import Tesseract from 'tesseract.js';
+import * as ort from 'onnxruntime-web';
 import * as tf from '@tensorflow/tfjs';
 
 // ============ TIPOS ============
@@ -81,19 +80,263 @@ type WorkerResponse =
 
 // ============ ESTADO DO WORKER ============
 
-let tesseractWorker: Tesseract.Worker | null = null;
+// Estado ONNX OCR (substitui Tesseract)
+let onnxSession: ort.InferenceSession | null = null;
+let onnxReady = false;
+let onnxLoading = false;
+let charset: string[] = [];
+
+// Constantes PaddleOCR
+const OCR_INPUT_HEIGHT = 32; // PaddleOCR usa altura fixa 32px
+const OCR_MIN_WIDTH = 100;   // Largura mínima para OCR
 
 // Estado do modelo YOLO (TensorFlow.js)
 let yoloModel: any = null;
 let modelLoading = false;
 let modelReady = false;
 let modelFailed = false; // Marca falha permanente para evitar loop infinito
-// TensorFlow.js é importado estaticamente no topo do arquivo
 
 // Constantes YOLO
 const YOLO_INPUT_SIZE = 640;
-const YOLO_CONFIDENCE_THRESHOLD = 0.6; // 60% confiança mínima após sigmoid
-const YOLO_MIN_RAW_CONFIDENCE = 0.5; // sigmoid(0.5) ≈ 62% - permite detecções com raw 0.5+
+const YOLO_CONFIDENCE_THRESHOLD = 0.6;
+const YOLO_MIN_RAW_CONFIDENCE = 0.5;
+
+// ============ FUNÇÕES ONNX OCR ============
+
+async function loadCharset(): Promise<string[]> {
+  try {
+    const response = await fetch('/models/plate-ocr/dict.txt');
+    const text = await response.text();
+    // Cada linha é um caractere, adiciona blank token no início
+    const chars = text.split('\n').filter(c => c.length > 0);
+    return ['', ...chars]; // blank token + caracteres
+  } catch (error) {
+    console.warn('⚠️ Falha ao carregar dict.txt, usando charset padrão');
+    // Charset padrão para placas BR
+    return ['', ...'0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')];
+  }
+}
+
+async function initONNX(): Promise<void> {
+  if (onnxReady || onnxLoading) return;
+  
+  onnxLoading = true;
+  
+  try {
+    self.postMessage({ type: 'PROGRESS', payload: { stage: 'Carregando OCR ONNX...', progress: 0 } });
+    
+    // Carregar charset
+    charset = await loadCharset();
+    console.log(`📚 Charset carregado: ${charset.length} caracteres`);
+    
+    // Configurar ONNX Runtime para WASM
+    ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.0/dist/';
+    
+    self.postMessage({ type: 'PROGRESS', payload: { stage: 'Baixando modelo OCR...', progress: 0.3 } });
+    
+    // Carregar modelo
+    onnxSession = await ort.InferenceSession.create('/models/plate-ocr/rec.onnx', {
+      executionProviders: ['wasm'],
+      graphOptimizationLevel: 'all',
+    });
+    
+    self.postMessage({ type: 'PROGRESS', payload: { stage: 'Preparando OCR...', progress: 0.8 } });
+    
+    // Warmup - primeira inferência
+    const warmupWidth = 100;
+    const warmupData = new Float32Array(3 * OCR_INPUT_HEIGHT * warmupWidth);
+    const warmupTensor = new ort.Tensor('float32', warmupData, [1, 3, OCR_INPUT_HEIGHT, warmupWidth]);
+    
+    try {
+      await onnxSession.run({ x: warmupTensor });
+    } catch {
+      // Tentar nome de entrada alternativo
+      try {
+        const inputName = onnxSession.inputNames[0];
+        await onnxSession.run({ [inputName]: warmupTensor });
+      } catch (e) {
+        console.warn('⚠️ Warmup falhou, mas continuando:', e);
+      }
+    }
+    
+    onnxReady = true;
+    onnxLoading = false;
+    
+    console.log('✅ ONNX OCR pronto (PaddleOCR)');
+    console.log(`📊 Input names: ${onnxSession.inputNames.join(', ')}`);
+    console.log(`📊 Output names: ${onnxSession.outputNames.join(', ')}`);
+    
+  } catch (error) {
+    onnxLoading = false;
+    console.error('❌ Erro ao inicializar ONNX:', error);
+    throw error;
+  }
+}
+
+/**
+ * Pré-processa imagem para PaddleOCR
+ * Input: ImageData RGBA
+ * Output: Float32Array em formato CHW normalizado [-1, 1]
+ */
+function preprocessForONNX(
+  data: Uint8ClampedArray,
+  srcWidth: number,
+  srcHeight: number
+): { tensor: Float32Array; width: number; height: number } {
+  // Calcular novo tamanho mantendo proporção
+  const aspectRatio = srcWidth / srcHeight;
+  const targetHeight = OCR_INPUT_HEIGHT;
+  let targetWidth = Math.round(targetHeight * aspectRatio);
+  
+  // Garantir largura mínima
+  if (targetWidth < OCR_MIN_WIDTH) {
+    targetWidth = OCR_MIN_WIDTH;
+  }
+  
+  // Largura deve ser múltiplo de 4 para alguns modelos
+  targetWidth = Math.ceil(targetWidth / 4) * 4;
+  
+  // Redimensionar imagem (bilinear simples)
+  const resizedRGBA = new Uint8ClampedArray(targetWidth * targetHeight * 4);
+  const xRatio = srcWidth / targetWidth;
+  const yRatio = srcHeight / targetHeight;
+  
+  for (let y = 0; y < targetHeight; y++) {
+    for (let x = 0; x < targetWidth; x++) {
+      const srcX = Math.min(Math.floor(x * xRatio), srcWidth - 1);
+      const srcY = Math.min(Math.floor(y * yRatio), srcHeight - 1);
+      const srcIdx = (srcY * srcWidth + srcX) * 4;
+      const dstIdx = (y * targetWidth + x) * 4;
+      
+      resizedRGBA[dstIdx] = data[srcIdx];
+      resizedRGBA[dstIdx + 1] = data[srcIdx + 1];
+      resizedRGBA[dstIdx + 2] = data[srcIdx + 2];
+      resizedRGBA[dstIdx + 3] = 255;
+    }
+  }
+  
+  // Converter para tensor CHW normalizado [-1, 1]
+  const pixels = targetWidth * targetHeight;
+  const tensor = new Float32Array(3 * pixels);
+  
+  for (let i = 0; i < pixels; i++) {
+    const r = resizedRGBA[i * 4] / 255.0;
+    const g = resizedRGBA[i * 4 + 1] / 255.0;
+    const b = resizedRGBA[i * 4 + 2] / 255.0;
+    
+    // Normalização PaddleOCR: (x - 0.5) / 0.5 = 2x - 1
+    tensor[i] = r * 2 - 1;                    // R channel
+    tensor[pixels + i] = g * 2 - 1;           // G channel
+    tensor[2 * pixels + i] = b * 2 - 1;       // B channel
+  }
+  
+  return { tensor, width: targetWidth, height: targetHeight };
+}
+
+/**
+ * Decodifica output CTC do PaddleOCR
+ */
+function decodeCTC(output: Float32Array, outputShape: readonly number[]): { text: string; confidence: number } {
+  // Shape: [1, seq_len, num_classes] ou [seq_len, num_classes]
+  let seqLen: number;
+  let numClasses: number;
+  
+  if (outputShape.length === 3) {
+    seqLen = outputShape[1];
+    numClasses = outputShape[2];
+  } else if (outputShape.length === 2) {
+    seqLen = outputShape[0];
+    numClasses = outputShape[1];
+  } else {
+    console.error('Formato de output inesperado:', outputShape);
+    return { text: '', confidence: 0 };
+  }
+  
+  let result = '';
+  let lastIdx = 0; // blank token
+  let totalConf = 0;
+  let charCount = 0;
+  
+  for (let t = 0; t < seqLen; t++) {
+    // Encontrar índice com maior probabilidade
+    let maxIdx = 0;
+    let maxVal = -Infinity;
+    
+    for (let c = 0; c < numClasses; c++) {
+      const val = output[t * numClasses + c];
+      if (val > maxVal) {
+        maxVal = val;
+        maxIdx = c;
+      }
+    }
+    
+    // Aplicar softmax para obter probabilidade
+    let expSum = 0;
+    for (let c = 0; c < numClasses; c++) {
+      expSum += Math.exp(output[t * numClasses + c] - maxVal);
+    }
+    const prob = 1 / expSum; // probabilidade do max após softmax
+    
+    // CTC: ignorar blank (índice 0) e repetições
+    if (maxIdx !== 0 && maxIdx !== lastIdx) {
+      if (maxIdx < charset.length) {
+        result += charset[maxIdx];
+        totalConf += prob;
+        charCount++;
+      }
+    }
+    lastIdx = maxIdx;
+  }
+  
+  const confidence = charCount > 0 ? totalConf / charCount : 0;
+  
+  return { text: result.toUpperCase(), confidence };
+}
+
+/**
+ * Executa OCR com ONNX
+ */
+async function runONNXOCR(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number
+): Promise<{ text: string; confidence: number }> {
+  if (!onnxSession || !onnxReady) {
+    await initONNX();
+  }
+  
+  if (!onnxSession) {
+    return { text: '', confidence: 0 };
+  }
+  
+  try {
+    // Pré-processar imagem
+    const { tensor, width: processedWidth, height: processedHeight } = preprocessForONNX(data, width, height);
+    
+    // Criar tensor de entrada
+    const inputTensor = new ort.Tensor('float32', tensor, [1, 3, processedHeight, processedWidth]);
+    
+    // Executar inferência
+    const inputName = onnxSession.inputNames[0];
+    const outputs = await onnxSession.run({ [inputName]: inputTensor });
+    
+    // Obter output
+    const outputName = onnxSession.outputNames[0];
+    const outputTensor = outputs[outputName];
+    const outputData = outputTensor.data as Float32Array;
+    const outputShape = outputTensor.dims;
+    
+    // Decodificar CTC
+    const { text, confidence } = decodeCTC(outputData, outputShape);
+    
+    console.log(`🔤 ONNX OCR: "${text}" (conf: ${(confidence * 100).toFixed(1)}%)`);
+    
+    return { text, confidence };
+  } catch (error) {
+    console.error('❌ Erro no OCR ONNX:', error);
+    return { text: '', confidence: 0 };
+  }
+}
 
 // ============ FUNÇÕES YOLO (TensorFlow.js) ============
 
@@ -109,17 +352,16 @@ async function checkModelExists(): Promise<boolean> {
 async function loadYoloModel(): Promise<boolean> {
   if (modelReady) return true;
   if (modelLoading) return false;
-  if (modelFailed) return false; // Não tentar novamente após falha permanente
+  if (modelFailed) return false;
   
   modelLoading = true;
   
   try {
-    // Verificar se os arquivos do modelo existem
     const modelExists = await checkModelExists();
     if (!modelExists) {
       console.log('ℹ️ Modelo YOLO não disponível, usando detecção heurística');
       modelLoading = false;
-      modelFailed = true; // Marcar como falha permanente
+      modelFailed = true;
       self.postMessage({ 
         type: 'MODEL_LOADED', 
         payload: { success: false, permanentFailure: true, error: 'Modelo não encontrado' } 
@@ -132,9 +374,6 @@ async function loadYoloModel(): Promise<boolean> {
       progress: 0 
     }});
     
-    // TensorFlow.js já está importado estaticamente no topo do arquivo
-    
-    // Configurar backend WebGL para GPU (fallback para CPU se não disponível)
     try {
       await tf.setBackend('webgl');
     } catch {
@@ -148,7 +387,6 @@ async function loadYoloModel(): Promise<boolean> {
       progress: 0.3 
     }});
     
-    // Carregar modelo do diretório public
     yoloModel = await tf.loadGraphModel('/models/yolov8n-plates/model.json');
     
     self.postMessage({ type: 'PROGRESS', payload: { 
@@ -156,7 +394,6 @@ async function loadYoloModel(): Promise<boolean> {
       progress: 0.8 
     }});
     
-    // Warmup - primeira inferência é mais lenta
     const warmupTensor = tf.zeros([1, YOLO_INPUT_SIZE, YOLO_INPUT_SIZE, 3]);
     await yoloModel.predict(warmupTensor);
     warmupTensor.dispose();
@@ -175,7 +412,7 @@ async function loadYoloModel(): Promise<boolean> {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error('❌ Erro ao carregar modelo YOLO:', errorMsg);
     modelLoading = false;
-    modelFailed = true; // Marcar como falha permanente
+    modelFailed = true;
     self.postMessage({ 
       type: 'MODEL_LOADED', 
       payload: { success: false, permanentFailure: true, error: errorMsg } 
@@ -192,50 +429,34 @@ async function detectPlateWithYOLO(
   if (!modelReady || !yoloModel || !tf) return null;
   
   try {
-    // 1. Criar tensor a partir de ImageData
     const imageTensor = tf.browser.fromPixels({
       data: new Uint8Array(imageData.data.buffer),
       width: width,
       height: height,
     });
     
-    // 2. Redimensionar para 640x640 (entrada padrão YOLO)
     const resized = tf.image.resizeBilinear(imageTensor, [YOLO_INPUT_SIZE, YOLO_INPUT_SIZE]);
-    
-    // 3. Normalizar para [0, 1]
     const normalized = resized.div(255.0);
-    
-    // 4. Adicionar dimensão de batch
     const batched = normalized.expandDims(0);
     
-    // 5. Executar inferência
     const predictions = await yoloModel.predict(batched);
-    
-    // 6. Processar saída do YOLOv8
-    // Output shape típico: [1, 5, 8400] ou [1, 8400, 5] dependendo do export
-    // onde 5 = 4 (box: cx, cy, w, h) + 1 (confidence para classe "plate")
     const outputData = await predictions.array();
     
-    // Determinar formato da saída
     let detections: number[][] = [];
     
     if (Array.isArray(outputData[0]) && Array.isArray(outputData[0][0])) {
-      // Formato [1, num_classes+4, num_boxes] - transpor para [num_boxes, num_classes+4]
       const data = outputData[0];
       if (data.length < 8400) {
-        // Formato [1, 5, 8400]
         const numBoxes = data[0].length;
         for (let i = 0; i < numBoxes; i++) {
           const box = data.map((row: number[]) => row[i]);
           detections.push(box);
         }
       } else {
-        // Formato [1, 8400, 5]
         detections = data;
       }
     }
     
-    // 7. Verificar se há detecções reais (YOLO retorna 0 quando não detecta)
     let maxRawConfidence = -Infinity;
     for (const detection of detections) {
       if (detection.length >= 5) {
@@ -243,77 +464,38 @@ async function detectPlateWithYOLO(
       }
     }
     
-    // Log para diagnóstico - mostrar top 5 detecções
-    if (detections.length > 0) {
-      const sample = detections[0];
-      console.log(`📊 Amostra de detecção raw: [${sample.slice(0, 5).map(v => v.toFixed(4)).join(', ')}]`);
-      console.log(`📊 Máx confiança raw: ${maxRawConfidence.toFixed(4)} (mínimo necessário: ${YOLO_MIN_RAW_CONFIDENCE})`);
-      
-      // Top 5 detecções para debug
-      const topDetections = detections
-        .filter(d => d.length >= 5 && d[4] > 0.3)
-        .sort((a, b) => b[4] - a[4])
-        .slice(0, 5);
-      
-      if (topDetections.length > 0) {
-        console.log(`🔍 Top ${topDetections.length} detecções:`, topDetections.map(d => ({
-          cx: d[0].toFixed(1),
-          cy: d[1].toFixed(1),
-          w: d[2].toFixed(1),
-          h: d[3].toFixed(1),
-          raw: d[4].toFixed(3),
-          conf: `${(100 / (1 + Math.exp(-d[4]))).toFixed(1)}%`
-        })));
-      }
-    }
-    
-    // Se nenhuma detecção tem confiança raw suficiente, YOLO não detectou nada
     if (maxRawConfidence < YOLO_MIN_RAW_CONFIDENCE) {
-      console.log(`⚠️ YOLO não detectou placa (max raw: ${maxRawConfidence.toFixed(3)}). Usando fallback heurístico.`);
-      
-      // Cleanup tensors antes de retornar
       imageTensor.dispose();
       resized.dispose();
       normalized.dispose();
       batched.dispose();
       if (predictions.dispose) predictions.dispose();
-      
-      return null; // Sinaliza para usar fallback heurístico
+      return null;
     }
     
-    // 8. Encontrar melhor detecção
     let bestBox: BoundingBox | null = null;
     let bestConfidence = YOLO_CONFIDENCE_THRESHOLD;
     
     for (const detection of detections) {
-      // Formato esperado: [cx, cy, w, h, confidence_logit]
       if (detection.length < 5) continue;
       
       let [cx, cy, w, h, confidenceRaw] = detection;
       
-      // Pular detecções com confiança muito baixa
       if (confidenceRaw < YOLO_MIN_RAW_CONFIDENCE) continue;
       
-      // YOLOv8 retorna logits brutos - aplicar sigmoid para obter probabilidade
       const confidence = 1 / (1 + Math.exp(-confidenceRaw));
       
-      // Detectar se coordenadas são normalizadas (0-1) ou em pixels (0-640)
       const maxCoord = Math.max(cx, cy, w, h);
       const isNormalized = maxCoord <= 1.0;
       
       if (isNormalized) {
-        // Converter de normalizado (0-1) para pixels (0-640)
         cx *= YOLO_INPUT_SIZE;
         cy *= YOLO_INPUT_SIZE;
         w *= YOLO_INPUT_SIZE;
         h *= YOLO_INPUT_SIZE;
       }
       
-      // Área virtual já recorta a região - processar toda a imagem recebida
-      console.log(`📍 Detecção: cx=${cx.toFixed(1)}, cy=${cy.toFixed(1)}, w=${w.toFixed(1)}, h=${h.toFixed(1)}, raw=${confidenceRaw.toFixed(3)}, conf=${(confidence*100).toFixed(1)}%`);
-      
       if (confidence > bestConfidence) {
-        // Converter de coords em pixels (0-640) para tamanho original da imagem
         const scaleX = width / YOLO_INPUT_SIZE;
         const scaleY = height / YOLO_INPUT_SIZE;
         
@@ -322,20 +504,10 @@ async function detectPlateWithYOLO(
         const boxW = Math.round(w * scaleX);
         const boxH = Math.round(h * scaleY);
         
-        // Validar proporção típica de placa brasileira (2.5:1 a 4.2:1 - mais restritivo)
         const aspectRatio = boxW / boxH;
-        console.log(`📦 Box: x=${boxX}, y=${boxY}, ${boxW}x${boxH}px, proporção=${aspectRatio.toFixed(2)}`);
         
-        if (aspectRatio < 2.5 || aspectRatio > 4.2) {
-          console.log(`⚠️ Proporção fora do range de placa BR: ${aspectRatio.toFixed(2)} (esperado: 2.5-4.2)`);
-          continue;
-        }
-        
-        // Validar tamanho mínimo da região
-        if (boxW < 80 || boxH < 20) {
-          console.log(`⚠️ Região muito pequena: ${boxW}x${boxH}px (mínimo: 80x20)`);
-          continue;
-        }
+        if (aspectRatio < 2.5 || aspectRatio > 4.2) continue;
+        if (boxW < 80 || boxH < 20) continue;
         
         bestBox = {
           x: boxX,
@@ -348,7 +520,6 @@ async function detectPlateWithYOLO(
       }
     }
     
-    // Cleanup tensors
     imageTensor.dispose();
     resized.dispose();
     normalized.dispose();
@@ -373,17 +544,14 @@ const MIN_PLATE_HEIGHT_RATIO = 0.03;
 const MAX_PLATE_HEIGHT_RATIO = 0.2;
 const EDGE_THRESHOLD = 30;
 
-// Parâmetros refinados para reduzir falsos positivos
 const MIN_EDGE_DENSITY = 0.20;
 const MIN_CONTRAST_SCORE = 0.4;
 const MAX_SATURATION = 0.50;
-// ROI: usar frame inteiro (já recortado pela área virtual)
 const MIN_Y_RATIO = 0.0;
 const MAX_Y_RATIO = 1.0;
 const MIN_X_RATIO = 0.0;
 const MAX_X_RATIO = 1.0;
 
-// Threshold de confiança para fallback
 const FALLBACK_CONFIDENCE_THRESHOLD = 0.60;
 
 // ============ FUNÇÕES DE PROCESSAMENTO DE IMAGEM ============
@@ -632,132 +800,12 @@ function findBestPlateRegion(
   return bestRegion;
 }
 
-// ============ PRÉ-PROCESSAMENTO DE IMAGEM ============
-
-/**
- * Pré-processa a imagem para OCR
- * @param data - Dados da imagem RGBA
- * @param useBinarization - Se true, aplica binarização Otsu. Se false, retorna grayscale com contraste
- */
-function preprocessImageData(data: Uint8ClampedArray, useBinarization: boolean = true): Uint8ClampedArray {
-  const result = new Uint8ClampedArray(data.length);
-  
-  // Fator de contraste mais suave para não destruir detalhes
-  const factor = useBinarization ? 1.3 : 1.2;
-  const intercept = 128 * (1 - factor);
-  
-  // Se não usar binarização, retornar grayscale com contraste melhorado
-  if (!useBinarization) {
-    for (let i = 0; i < data.length; i += 4) {
-      const gray = Math.round(data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
-      const contrasted = Math.max(0, Math.min(255, gray * factor + intercept));
-      result[i] = contrasted;
-      result[i + 1] = contrasted;
-      result[i + 2] = contrasted;
-      result[i + 3] = 255;
-    }
-    return result;
-  }
-  
-  // Binarização com Otsu
-  const histogram = new Array(256).fill(0);
-  for (let i = 0; i < data.length; i += 4) {
-    const gray = Math.round(data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
-    const contrasted = Math.max(0, Math.min(255, gray * factor + intercept));
-    histogram[Math.round(contrasted)]++;
-  }
-  
-  const totalPixels = data.length / 4;
-  let sum = 0;
-  for (let i = 0; i < 256; i++) sum += i * histogram[i];
-  
-  let sumB = 0;
-  let wB = 0;
-  let maxVariance = 0;
-  let threshold = 128;
-  
-  for (let t = 0; t < 256; t++) {
-    wB += histogram[t];
-    if (wB === 0) continue;
-    
-    const wF = totalPixels - wB;
-    if (wF === 0) break;
-    
-    sumB += t * histogram[t];
-    const mB = sumB / wB;
-    const mF = (sum - sumB) / wF;
-    const variance = wB * wF * (mB - mF) * (mB - mF);
-    
-    if (variance > maxVariance) {
-      maxVariance = variance;
-      threshold = t;
-    }
-  }
-  
-  for (let i = 0; i < data.length; i += 4) {
-    const gray = Math.round(data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
-    const contrasted = Math.max(0, Math.min(255, gray * factor + intercept));
-    const value = contrasted > threshold ? 255 : 0;
-    
-    result[i] = value;
-    result[i + 1] = value;
-    result[i + 2] = value;
-    result[i + 3] = 255;
-  }
-  
-  return result;
-}
-
-/**
- * Pré-processamento específico para placas azuis Mercosul
- * Detecta pixels azuis (fundo) e os converte para preto,
- * enquanto preserva texto branco/claro
- */
-function preprocessForBluePlate(data: Uint8ClampedArray): Uint8ClampedArray {
-  const result = new Uint8ClampedArray(data.length);
-  
-  for (let i = 0; i < data.length; i += 4) {
-    const r = data[i];
-    const g = data[i + 1];
-    const b = data[i + 2];
-    
-    // Detectar se é azul (placa Mercosul) - azul dominante
-    const isBlue = b > r * 1.2 && b > g && b > 80;
-    
-    // Calcular luminância
-    const luminance = (r * 0.299 + g * 0.587 + b * 0.114);
-    
-    let value: number;
-    if (isBlue) {
-      // Fundo azul vira preto
-      value = 0;
-    } else if (luminance > 160) {
-      // Texto branco/claro vira branco puro
-      value = 255;
-    } else if (luminance > 100) {
-      // Zona intermediária - aumentar contraste
-      value = luminance > 130 ? 255 : 0;
-    } else {
-      // Escuro vira preto
-      value = 0;
-    }
-    
-    result[i] = value;
-    result[i + 1] = value;
-    result[i + 2] = value;
-    result[i + 3] = 255;
-  }
-  
-  return result;
-}
-
 // ============ VALIDAÇÃO DE PLACA ============
 
 const MERCOSUL_REGEX = /^[A-Z]{3}[0-9][A-Z][0-9]{2}$/;
 const ANTIGA_REGEX = /^[A-Z]{3}[0-9]{4}$/;
 
 const CHAR_SUBSTITUTIONS: Record<string, string[]> = {
-  // Números
   '0': ['O', 'Q', 'D', 'C'],
   '1': ['I', 'L', 'T', '7', '|'],
   '2': ['Z', '7'],
@@ -768,7 +816,6 @@ const CHAR_SUBSTITUTIONS: Record<string, string[]> = {
   '7': ['T', 'Y', '1', '2'],
   '8': ['B', '3'],
   '9': ['G', 'Q', 'P'],
-  // Letras
   'A': ['4', 'H'],
   'B': ['8', '6', '3'],
   'C': ['0', 'G'],
@@ -813,24 +860,14 @@ function generateVariations(plate: string): string[] {
   return Array.from(variations);
 }
 
-/**
- * Extrai candidatos de 7 caracteres de texto OCR com ruído
- * Quando OCR retorna texto com mais de 7 caracteres (ex: "I12 333EI"),
- * tenta extrair a subsequência mais provável de placa válida
- */
 function extractPlateCandidate(rawText: string): string {
   const cleaned = rawText.toUpperCase().replace(/[^A-Z0-9]/g, '');
   
-  // Se já tem 7, retornar
   if (cleaned.length === 7) return cleaned;
-  
-  // Se tem menos de 7, não há como formar placa
   if (cleaned.length < 7) return cleaned;
   
-  // Se tem mais de 7, tentar extrair os 7 mais prováveis
   let candidate = cleaned;
   
-  // Remover 'I' ou '1' das extremidades (comum em OCR de placas)
   while (candidate.length > 7 && (candidate[0] === 'I' || candidate[0] === '1')) {
     candidate = candidate.slice(1);
   }
@@ -839,24 +876,20 @@ function extractPlateCandidate(rawText: string): string {
   }
   
   if (candidate.length === 7) {
-    // Verificar se é válido com esta extração
     const tempValidation = validatePlateFormat(candidate);
     if (tempValidation.isValid) return candidate;
   }
   
-  // Se ainda tem mais de 7, tentar todas as subsequências de 7 caracteres
   if (candidate.length > 7) {
     const candidates: string[] = [];
     for (let i = 0; i <= candidate.length - 7; i++) {
       candidates.push(candidate.slice(i, i + 7));
     }
     
-    // Também tentar com o cleaned original
     for (let i = 0; i <= cleaned.length - 7; i++) {
       candidates.push(cleaned.slice(i, i + 7));
     }
     
-    // Retornar a primeira que parecer válida
     for (const c of candidates) {
       const tempValidation = validatePlateFormat(c);
       if (tempValidation.isValid) {
@@ -865,7 +898,6 @@ function extractPlateCandidate(rawText: string): string {
       }
     }
     
-    // Se nenhuma é válida, tentar aplicar variações em cada candidato
     for (const c of candidates) {
       const variations = generateVariations(c);
       for (const v of variations) {
@@ -877,16 +909,12 @@ function extractPlateCandidate(rawText: string): string {
       }
     }
     
-    // Retornar os primeiros 7 caracteres como fallback
     return candidate.slice(0, 7);
   }
   
   return candidate;
 }
 
-/**
- * Valida apenas o formato da placa (sem correções)
- */
 function validatePlateFormat(plate: string): { isValid: boolean; format: 'mercosul' | 'antiga' | 'unknown' } {
   if (plate.length !== 7) {
     return { isValid: false, format: 'unknown' };
@@ -905,21 +933,16 @@ function validatePlateFormat(plate: string): { isValid: boolean; format: 'mercos
 
 function validateAndCorrectPlate(rawText: string): PlateValidationResult {
   const cleaned = rawText.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  
-  // Usar extração inteligente de candidato
   const candidate = extractPlateCandidate(rawText);
   
-  console.log(`📝 OCR: "${rawText}" → limpo: "${cleaned}" (${cleaned.length} chars) → candidato: "${candidate}"`);
+  console.log(`📝 Validação: "${rawText}" → limpo: "${cleaned}" → candidato: "${candidate}"`);
   
-  // NOVO: Se tem 8 caracteres, testar sem o primeiro (ruído comum - ex: UFHJ1112 → FHJ1112)
+  // Se tem 8 caracteres, testar sem o primeiro
   if (cleaned.length === 8) {
     const withoutFirst = cleaned.slice(1);
-    console.log(`🔍 Tentando sem primeiro char: "${withoutFirst}"`);
     
-    // Testar diretamente
     if (MERCOSUL_REGEX.test(withoutFirst)) {
       const formatted = withoutFirst.substring(0, 3) + '-' + withoutFirst.substring(3);
-      console.log(`✅ Sem primeiro char válido: ${formatted} (Mercosul)`);
       return {
         isValid: true,
         original: rawText,
@@ -932,7 +955,6 @@ function validateAndCorrectPlate(rawText: string): PlateValidationResult {
     
     if (ANTIGA_REGEX.test(withoutFirst)) {
       const formatted = withoutFirst.substring(0, 3) + '-' + withoutFirst.substring(3);
-      console.log(`✅ Sem primeiro char válido: ${formatted} (Antiga)`);
       return {
         isValid: true,
         original: rawText,
@@ -943,12 +965,10 @@ function validateAndCorrectPlate(rawText: string): PlateValidationResult {
       };
     }
     
-    // Testar variações do substring
     const variationsWithoutFirst = generateVariations(withoutFirst);
     for (const variation of variationsWithoutFirst) {
       if (MERCOSUL_REGEX.test(variation)) {
         const formatted = variation.substring(0, 3) + '-' + variation.substring(3);
-        console.log(`✅ Variação sem primeiro char: ${formatted} (Mercosul)`);
         return {
           isValid: true,
           original: rawText,
@@ -961,7 +981,6 @@ function validateAndCorrectPlate(rawText: string): PlateValidationResult {
       
       if (ANTIGA_REGEX.test(variation)) {
         const formatted = variation.substring(0, 3) + '-' + variation.substring(3);
-        console.log(`✅ Variação sem primeiro char: ${formatted} (Antiga)`);
         return {
           isValid: true,
           original: rawText,
@@ -990,7 +1009,6 @@ function validateAndCorrectPlate(rawText: string): PlateValidationResult {
   for (const variation of variations) {
     if (MERCOSUL_REGEX.test(variation)) {
       const formatted = variation.substring(0, 3) + '-' + variation.substring(3);
-      console.log(`✅ Validação: ${formatted} (Mercosul)`);
       return {
         isValid: true,
         original: rawText,
@@ -1003,7 +1021,6 @@ function validateAndCorrectPlate(rawText: string): PlateValidationResult {
     
     if (ANTIGA_REGEX.test(variation)) {
       const formatted = variation.substring(0, 3) + '-' + variation.substring(3);
-      console.log(`✅ Validação: ${formatted} (Antiga)`);
       return {
         isValid: true,
         original: rawText,
@@ -1015,7 +1032,6 @@ function validateAndCorrectPlate(rawText: string): PlateValidationResult {
     }
   }
   
-  console.log(`❌ Validação: INVÁLIDO - "${candidate}"`);
   return {
     isValid: false,
     original: rawText,
@@ -1028,9 +1044,6 @@ function validateAndCorrectPlate(rawText: string): PlateValidationResult {
 
 // ============ GERAÇÃO DE DEBUG IMAGE ============
 
-/**
- * Converte OffscreenCanvas para base64 usando convertToBlob (async)
- */
 async function offscreenCanvasToBase64(canvas: OffscreenCanvas): Promise<string> {
   const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.85 });
   const arrayBuffer = await blob.arrayBuffer();
@@ -1042,9 +1055,6 @@ async function offscreenCanvasToBase64(canvas: OffscreenCanvas): Promise<string>
   return 'data:image/jpeg;base64,' + btoa(binary);
 }
 
-/**
- * Gera imagem de debug com bounding box da placa detectada
- */
 async function generateDebugImage(
   imageData: ImageData,
   width: number,
@@ -1056,24 +1066,20 @@ async function generateDebugImage(
     const ctx = offscreen.getContext('2d');
     if (!ctx) return undefined;
     
-    // Desenhar imagem original
     const clonedData = new Uint8ClampedArray(imageData.data);
     const newImageData = new ImageData(clonedData, width, height);
     ctx.putImageData(newImageData, 0, 0);
     
-    // Desenhar bounding box se detectou placa
     if (plateRegion) {
       ctx.strokeStyle = '#00FF00';
       ctx.lineWidth = 3;
       ctx.strokeRect(plateRegion.x, plateRegion.y, plateRegion.width, plateRegion.height);
       
-      // Label com confiança
       ctx.fillStyle = '#00FF00';
       ctx.font = 'bold 14px Arial';
       const label = `Placa (${Math.round(plateRegion.confidence * 100)}%)`;
       ctx.fillText(label, plateRegion.x, plateRegion.y - 5);
     } else {
-      // Nenhuma região detectada
       ctx.fillStyle = '#FF0000';
       ctx.font = 'bold 16px Arial';
       ctx.fillText('Nenhuma placa detectada', 10, 25);
@@ -1086,9 +1092,6 @@ async function generateDebugImage(
   }
 }
 
-/**
- * Gera imagem de debug a partir de dados RGBA
- */
 async function generateImageFromData(
   data: Uint8ClampedArray,
   width: number,
@@ -1122,7 +1125,6 @@ async function callFallbackAPI(
   }
   
   try {
-    // Criar canvas para converter para JPEG
     const offscreen = new OffscreenCanvas(width, height);
     const ctx = offscreen.getContext('2d');
     if (!ctx) return null;
@@ -1131,10 +1133,8 @@ async function callFallbackAPI(
     const newImageData = new ImageData(clonedData, width, height);
     ctx.putImageData(newImageData, 0, 0);
     
-    // Converter para blob JPEG
     const blob = await offscreen.convertToBlob({ type: 'image/jpeg', quality: 0.85 });
     
-    // Converter blob para base64
     const arrayBuffer = await blob.arrayBuffer();
     const bytes = new Uint8Array(arrayBuffer);
     let binary = '';
@@ -1143,7 +1143,6 @@ async function callFallbackAPI(
     }
     const base64 = btoa(binary);
     
-    // Chamar API
     const response = await fetch(options.fallbackApiUrl, {
       method: 'POST',
       headers: {
@@ -1220,31 +1219,6 @@ function compareFrames(
   return changedPixels / totalPixels;
 }
 
-// ============ INICIALIZAÇÃO DO TESSERACT ============
-
-async function initTesseract(): Promise<void> {
-  if (tesseractWorker) return;
-  
-  self.postMessage({ type: 'PROGRESS', payload: { stage: 'Carregando OCR...', progress: 0 } });
-  
-  tesseractWorker = await Tesseract.createWorker('eng', 0, {
-    logger: (m) => {
-      if (m.status === 'recognizing text') {
-        self.postMessage({ 
-          type: 'PROGRESS', 
-          payload: { stage: 'Reconhecendo texto...', progress: m.progress } 
-        });
-      }
-    }
-  });
-  
-  await tesseractWorker.setParameters({
-    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
-    tessedit_pageseg_mode: Tesseract.PSM.SINGLE_WORD, // Modo 8 - palavra única (melhor para placas)
-    preserve_interword_spaces: '0',
-  });
-}
-
 // ============ PROCESSAMENTO DE PLACA ============
 
 async function processPlate(
@@ -1257,13 +1231,14 @@ async function processPlate(
   let usedYolo = false;
   
   try {
-    if (!tesseractWorker) {
-      await initTesseract();
+    // Inicializar ONNX se necessário
+    if (!onnxReady) {
+      await initONNX();
     }
     
     self.postMessage({ type: 'PROGRESS', payload: { stage: 'Detectando placa...', progress: 0.1 } });
     
-    // 1. Tentar detecção com YOLO primeiro (se modelo disponível)
+    // 1. Tentar detecção com YOLO primeiro
     let plateRegion: BoundingBox | null = null;
     
     if (modelReady) {
@@ -1274,7 +1249,7 @@ async function processPlate(
       }
     }
     
-    // 2. Fallback para heurística se YOLO não detectar
+    // 2. Fallback para heurística
     if (!plateRegion) {
       plateRegion = findBestPlateRegion(imageData, width, height);
     }
@@ -1284,8 +1259,8 @@ async function processPlate(
     let processHeight: number;
     
     if (plateRegion) {
-      // Recortar região da placa com padding maior para melhor OCR
-      const padding = 20; // Aumentado de 5 para 20 pixels
+      // Recortar região da placa com padding
+      const padding = 15;
       const x = Math.max(0, plateRegion.x - padding);
       const y = Math.max(0, plateRegion.y - padding);
       const w = Math.min(width - x, plateRegion.width + padding * 2);
@@ -1305,223 +1280,47 @@ async function processPlate(
           processData[dstIdx + 3] = 255;
         }
       }
+      
+      console.log(`🔲 Região recortada: ${processWidth}x${processHeight}px`);
     } else {
       processData = imageData.data;
       processWidth = width;
       processHeight = height;
     }
     
-    self.postMessage({ type: 'PROGRESS', payload: { stage: 'Pré-processando...', progress: 0.3 } });
+    self.postMessage({ type: 'PROGRESS', payload: { stage: 'Executando OCR ONNX...', progress: 0.4 } });
     
-    // Log detalhado da região para diagnóstico
-    if (plateRegion) {
-      console.log(`🔲 RECORTE DETALHADO:`);
-      console.log(`   - Posição: (${plateRegion.x}, ${plateRegion.y})`);
-      console.log(`   - Tamanho: ${plateRegion.width}x${plateRegion.height}px`);
-      console.log(`   - Proporção: ${(plateRegion.width / plateRegion.height).toFixed(2)}:1`);
-      console.log(`   - Confiança: ${Math.round(plateRegion.confidence * 100)}%`);
-      console.log(`   - Fonte: ${usedYolo ? 'YOLO' : 'Heurística'}`);
-    }
-    console.log(`📏 Região para OCR: ${processWidth}x${processHeight}px`);
-    
-    // Gerar debugImages para pipeline visual
+    // Debug images
     const debugImages: DebugImages = {};
     
-    // Debug: Salvar imagem do recorte ANTES do upscale
     if (options?.enableDebug && processWidth > 0 && processHeight > 0) {
       debugImages.cropped = await generateImageFromData(processData, processWidth, processHeight);
     }
     
-    // Upscaling: garantir tamanho mínimo para OCR (aumentado para 400)
-    const MIN_OCR_WIDTH = 400;
-    if (processWidth < MIN_OCR_WIDTH && processWidth > 0) {
-      const scale = MIN_OCR_WIDTH / processWidth;
-      const newWidth = Math.round(processWidth * scale);
-      const newHeight = Math.round(processHeight * scale);
-      
-      // Upscale bilinear
-      const upscaledData = new Uint8ClampedArray(newWidth * newHeight * 4);
-      const xRatio = processWidth / newWidth;
-      const yRatio = processHeight / newHeight;
-      
-      for (let y = 0; y < newHeight; y++) {
-        for (let x = 0; x < newWidth; x++) {
-          const srcX = Math.floor(x * xRatio);
-          const srcY = Math.floor(y * yRatio);
-          const srcIdx = (srcY * processWidth + srcX) * 4;
-          const dstIdx = (y * newWidth + x) * 4;
-          
-          upscaledData[dstIdx] = processData[srcIdx];
-          upscaledData[dstIdx + 1] = processData[srcIdx + 1];
-          upscaledData[dstIdx + 2] = processData[srcIdx + 2];
-          upscaledData[dstIdx + 3] = 255;
-        }
-      }
-      
-      processData = upscaledData;
-      processWidth = newWidth;
-      processHeight = newHeight;
-      console.log(`🔍 Upscaled para OCR: ${processWidth}x${processHeight}px`);
-    }
+    // 3. Executar OCR com ONNX
+    const { text: rawText, confidence: ocrConfidence } = await runONNXOCR(
+      processData,
+      processWidth,
+      processHeight
+    );
     
-    // Variável para guardar última imagem pré-processada para debug
-    // Helper para executar OCR com um preprocessamento específico
-    const runOCRWithPreprocess = async (
-      preprocessFn: (data: Uint8ClampedArray) => Uint8ClampedArray,
-      methodName: string,
-      saveForDebug: boolean = false
-    ): Promise<{ rawText: string; ocrConfidence: number; validation: PlateValidationResult; preprocessedData?: Uint8ClampedArray }> => {
-      const preprocessed = preprocessFn(processData);
-      const dataArray = new Uint8ClampedArray(processWidth * processHeight * 4);
-      for (let i = 0; i < preprocessed.length; i++) {
-        dataArray[i] = preprocessed[i];
-      }
-      const imgData = new ImageData(dataArray, processWidth, processHeight);
-      
-      const offscreen = new OffscreenCanvas(processWidth, processHeight);
-      const ctx = offscreen.getContext('2d');
-      if (!ctx) throw new Error('Falha ao criar OffscreenCanvas');
-      ctx.putImageData(imgData, 0, 0);
-      
-      const result = await tesseractWorker!.recognize(offscreen as unknown as Tesseract.ImageLike);
-      const rawText = result.data.text.trim();
-      const ocrConfidence = result.data.confidence / 100;
-      const validation = validateAndCorrectPlate(rawText);
-      
-      console.log(`📝 OCR [${methodName}]: "${rawText}" (confiança: ${Math.round(ocrConfidence * 100)}%)`);
-      
-      return { rawText, ocrConfidence, validation, preprocessedData: saveForDebug ? dataArray : undefined };
-    };
+    self.postMessage({ type: 'PROGRESS', payload: { stage: 'Validando...', progress: 0.8 } });
     
-    self.postMessage({ type: 'PROGRESS', payload: { stage: 'Executando OCR...', progress: 0.4 } });
-    
-    // Array para armazenar resultados de todas as tentativas
-    interface OCRAttempt {
-      rawText: string;
-      ocrConfidence: number;
-      validation: PlateValidationResult;
-      method: string;
-      preprocessedData?: Uint8ClampedArray;
-    }
-    const attempts: OCRAttempt[] = [];
-    
-    // Tentativa 0: Grayscale PURO (sem binarização nem contraste agressivo) - mais simples
-    try {
-      const attemptRaw = await runOCRWithPreprocess(
-        (data) => {
-          const result = new Uint8ClampedArray(data.length);
-          for (let i = 0; i < data.length; i += 4) {
-            const gray = Math.round(data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
-            result[i] = gray;
-            result[i + 1] = gray;
-            result[i + 2] = gray;
-            result[i + 3] = 255;
-          }
-          return result;
-        },
-        'raw grayscale',
-        options?.enableDebug // Salvar para debug
-      );
-      attempts.push({ ...attemptRaw, method: 'raw grayscale' });
-      
-      // Salvar imagem pré-processada para debug (primeira tentativa)
-      if (options?.enableDebug && attemptRaw.preprocessedData) {
-        debugImages.preprocessed = await generateImageFromData(attemptRaw.preprocessedData, processWidth, processHeight);
-      }
-    } catch (e) {
-      console.error('Erro OCR raw grayscale:', e);
-    }
-    
-    // Tentativa 1: Binarização padrão
-    try {
-      const attempt1 = await runOCRWithPreprocess(
-        (data) => preprocessImageData(data, true),
-        'binarização'
-      );
-      attempts.push({ ...attempt1, method: 'binarização' });
-    } catch (e) {
-      console.error('Erro OCR binarização:', e);
-    }
-    
-    self.postMessage({ type: 'PROGRESS', payload: { stage: 'OCR alternativo...', progress: 0.55 } });
-    
-    // Tentativa 2: Grayscale com contraste (se primeira falhou ou baixa confiança)
-    const firstValid = attempts[0]?.validation?.isValid;
-    const firstConfidence = attempts[0]?.ocrConfidence || 0;
-    
-    if (!firstValid || firstConfidence < 0.6) {
-      try {
-        const attempt2 = await runOCRWithPreprocess(
-          (data) => preprocessImageData(data, false),
-          'grayscale'
-        );
-        attempts.push({ ...attempt2, method: 'grayscale' });
-      } catch (e) {
-        console.error('Erro OCR grayscale:', e);
-      }
-    }
-    
-    self.postMessage({ type: 'PROGRESS', payload: { stage: 'OCR placa azul...', progress: 0.7 } });
-    
-    // Tentativa 3: Específico para placa azul Mercosul (se ainda não encontrou válida)
-    const anyValid = attempts.some(a => a.validation.isValid);
-    if (!anyValid) {
-      try {
-        const attempt3 = await runOCRWithPreprocess(
-          (data) => preprocessForBluePlate(data),
-          'placa azul'
-        );
-        attempts.push({ ...attempt3, method: 'placa azul' });
-      } catch (e) {
-        console.error('Erro OCR placa azul:', e);
-      }
-    }
-    
-    // Escolher o melhor resultado
-    let bestAttempt: OCRAttempt | null = null;
-    
-    // Prioridade 1: resultado válido com maior confiança
-    const validAttempts = attempts.filter(a => a.validation.isValid);
-    if (validAttempts.length > 0) {
-      bestAttempt = validAttempts.reduce((best, current) => 
-        current.ocrConfidence > best.ocrConfidence ? current : best
-      );
-      console.log(`✅ Usando resultado [${bestAttempt.method}]: "${bestAttempt.validation.formatted}"`);
-    } else {
-      // Prioridade 2: maior confiança OCR entre inválidos
-      bestAttempt = attempts.reduce((best, current) => 
-        current.ocrConfidence > best.ocrConfidence ? current : best
-      , attempts[0]);
-      console.log(`⚠️ Nenhum válido, usando [${bestAttempt?.method}]: "${bestAttempt?.rawText}"`);
-    }
-    
-    const rawText = bestAttempt?.rawText || '';
-    const ocrConfidence = bestAttempt?.ocrConfidence || 0;
-    const validation = bestAttempt?.validation || {
-      isValid: false,
-      original: '',
-      corrected: '',
-      formatted: '',
-      format: 'unknown' as const,
-      confidence: 0,
-    };
-    
-    self.postMessage({ type: 'PROGRESS', payload: { stage: 'Validando...', progress: 0.9 } });
+    // 4. Validar e corrigir placa
+    const validation = validateAndCorrectPlate(rawText);
     
     const processingTimeMs = performance.now() - startTime;
     
-    // 6. Verificar se precisa de fallback
+    // 5. Verificar se precisa de fallback
     const combinedConfidence = (ocrConfidence + validation.confidence) / 2;
     
     if (!validation.isValid || combinedConfidence < FALLBACK_CONFIDENCE_THRESHOLD) {
-      // Tentar fallback se configurado
       if (options?.enableFallback && options?.fallbackApiUrl && options?.fallbackApiToken) {
         self.postMessage({ type: 'PROGRESS', payload: { stage: 'Consultando API...', progress: 0.95 } });
         
         const fallbackResult = await callFallbackAPI(imageData, width, height, options);
         if (fallbackResult) {
           fallbackResult.processingTimeMs = performance.now() - startTime;
-          // Gerar debug image se habilitado
           if (options.enableDebug) {
             fallbackResult.debugImage = await generateDebugImage(imageData, width, height, plateRegion);
           }
@@ -1530,12 +1329,10 @@ async function processPlate(
       }
     }
     
-    // Gerar debug images finais se habilitado
+    // Gerar debug images finais
     let debugImage: string | undefined;
     if (options?.enableDebug) {
-      // Imagem original (frame completo da área virtual)
       debugImages.original = await generateImageFromData(imageData.data, width, height);
-      // Imagem final com bounding box
       debugImages.final = await generateDebugImage(imageData, width, height, plateRegion);
       debugImage = debugImages.final;
     }
@@ -1581,7 +1378,7 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
   try {
     switch (type) {
       case 'INIT':
-        await initTesseract();
+        await initONNX();
         self.postMessage({ type: 'READY' } as WorkerResponse);
         break;
         
@@ -1606,11 +1403,14 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
       }
         
       case 'TERMINATE':
-        if (tesseractWorker) {
-          await tesseractWorker.terminate();
-          tesseractWorker = null;
+        // Limpar ONNX
+        if (onnxSession) {
+          // onnxSession não tem método dispose explícito em onnxruntime-web
+          onnxSession = null;
         }
-        // Limpar modelo YOLO se carregado
+        onnxReady = false;
+        
+        // Limpar modelo YOLO
         if (yoloModel) {
           yoloModel.dispose?.();
           yoloModel = null;
@@ -1625,4 +1425,4 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 };
 
 // Notificar que o worker está carregado
-console.log('🔧 PlateProcessor Worker carregado');
+console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.0)');
