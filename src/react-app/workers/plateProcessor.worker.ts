@@ -87,7 +87,7 @@ let onnxLoading = false;
 let charset: string[] = [];
 
 // Constantes PaddleOCR
-const OCR_INPUT_HEIGHT = 32; // PaddleOCR usa altura fixa 32px
+const OCR_INPUT_HEIGHT = 48; // PaddleOCR PP-OCRv3/v4 usa altura 48px
 const OCR_MIN_WIDTH = 100;   // Largura mínima para OCR
 
 // Estado do modelo YOLO (TensorFlow.js)
