@@ -129,8 +129,9 @@ async function initONNX(): Promise<void> {
     charset = await loadCharset();
     console.log(`📚 Charset carregado: ${charset.length} caracteres`);
     
-    // Configurar ONNX Runtime para WASM
-    ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.0/dist/';
+    // Configurar ONNX Runtime para WASM (CDN com versão correta)
+    ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.2/dist/';
+    ort.env.wasm.numThreads = 1; // Single-thread para compatibilidade máxima
     
     self.postMessage({ type: 'PROGRESS', payload: { stage: 'Baixando modelo OCR...', progress: 0.3 } });
     
