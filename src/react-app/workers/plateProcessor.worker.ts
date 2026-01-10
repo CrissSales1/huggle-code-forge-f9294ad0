@@ -643,82 +643,353 @@ const FALLBACK_CONFIDENCE_THRESHOLD = 0.60;
 
 // ============ FUNÇÕES DE PROCESSAMENTO DE IMAGEM ============
 
+// ============ PIPELINE DE PRÉ-PROCESSAMENTO AVANÇADO v1.1.6 ============
+
 /**
- * Otimiza imagem para OCR com:
- * 1. Conversão para escala de cinza
- * 2. Stretch de contraste adaptativo
- * 3. Sharpening (aumento de nitidez)
+ * Converte RGB para espaço de cor LAB
+ * PaddleOCR requer RGB preservado - usamos LAB para ajustar luminosidade sem perder cores
+ */
+function rgbToLab(r: number, g: number, b: number): [number, number, number] {
+  // sRGB para linear
+  let rn = r / 255;
+  let gn = g / 255;
+  let bn = b / 255;
+  
+  rn = rn > 0.04045 ? Math.pow((rn + 0.055) / 1.055, 2.4) : rn / 12.92;
+  gn = gn > 0.04045 ? Math.pow((gn + 0.055) / 1.055, 2.4) : gn / 12.92;
+  bn = bn > 0.04045 ? Math.pow((bn + 0.055) / 1.055, 2.4) : bn / 12.92;
+  
+  // RGB para XYZ (D65)
+  const x = (rn * 0.4124 + gn * 0.3576 + bn * 0.1805) / 0.95047;
+  const y = (rn * 0.2126 + gn * 0.7152 + bn * 0.0722) / 1.00000;
+  const z = (rn * 0.0193 + gn * 0.1192 + bn * 0.9505) / 1.08883;
+  
+  // XYZ para LAB
+  const fx = x > 0.008856 ? Math.pow(x, 1/3) : (7.787 * x) + 16/116;
+  const fy = y > 0.008856 ? Math.pow(y, 1/3) : (7.787 * y) + 16/116;
+  const fz = z > 0.008856 ? Math.pow(z, 1/3) : (7.787 * z) + 16/116;
+  
+  const L = (116 * fy) - 16;
+  const A = 500 * (fx - fy);
+  const B = 200 * (fy - fz);
+  
+  return [L, A, B];
+}
+
+/**
+ * Converte LAB de volta para RGB
+ */
+function labToRgb(L: number, A: number, B: number): [number, number, number] {
+  // LAB -> XYZ
+  const fy = (L + 16) / 116;
+  const fx = A / 500 + fy;
+  const fz = fy - B / 200;
+  
+  const x = (fx > 0.206897 ? Math.pow(fx, 3) : (fx - 16/116) / 7.787) * 0.95047;
+  const y = (fy > 0.206897 ? Math.pow(fy, 3) : (fy - 16/116) / 7.787) * 1.00000;
+  const z = (fz > 0.206897 ? Math.pow(fz, 3) : (fz - 16/116) / 7.787) * 1.08883;
+  
+  // XYZ para RGB linear
+  let rn = x *  3.2406 + y * -1.5372 + z * -0.4986;
+  let gn = x * -0.9689 + y *  1.8758 + z *  0.0415;
+  let bn = x *  0.0557 + y * -0.2040 + z *  1.0570;
+  
+  // Linear para sRGB
+  rn = rn > 0.0031308 ? 1.055 * Math.pow(rn, 1/2.4) - 0.055 : 12.92 * rn;
+  gn = gn > 0.0031308 ? 1.055 * Math.pow(gn, 1/2.4) - 0.055 : 12.92 * gn;
+  bn = bn > 0.0031308 ? 1.055 * Math.pow(bn, 1/2.4) - 0.055 : 12.92 * bn;
+  
+  return [
+    Math.max(0, Math.min(255, Math.round(rn * 255))),
+    Math.max(0, Math.min(255, Math.round(gn * 255))),
+    Math.max(0, Math.min(255, Math.round(bn * 255)))
+  ];
+}
+
+/**
+ * Aplica CLAHE (Contrast Limited Adaptive Histogram Equalization) apenas no canal L
+ * Preserva cores originais - essencial para PaddleOCR que foi treinado com RGB
+ */
+function applyCLAHE(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  clipLimit: number = 2.5,
+  tileSize: number = 8
+): Uint8ClampedArray {
+  const result = new Uint8ClampedArray(data.length);
+  const numPixels = width * height;
+  
+  // 1. Converter RGB para LAB
+  const L = new Float32Array(numPixels);
+  const A = new Float32Array(numPixels);
+  const B = new Float32Array(numPixels);
+  
+  for (let i = 0; i < numPixels; i++) {
+    const idx = i * 4;
+    const [l, a, b] = rgbToLab(data[idx], data[idx + 1], data[idx + 2]);
+    L[i] = l;
+    A[i] = a;
+    B[i] = b;
+  }
+  
+  // 2. Aplicar CLAHE apenas no canal L
+  const tilesX = Math.max(1, Math.ceil(width / tileSize));
+  const tilesY = Math.max(1, Math.ceil(height / tileSize));
+  const enhancedL = new Float32Array(numPixels);
+  
+  for (let ty = 0; ty < tilesY; ty++) {
+    for (let tx = 0; tx < tilesX; tx++) {
+      const startX = tx * tileSize;
+      const startY = ty * tileSize;
+      const endX = Math.min(startX + tileSize, width);
+      const endY = Math.min(startY + tileSize, height);
+      const tileWidth = endX - startX;
+      const tileHeight = endY - startY;
+      
+      if (tileWidth <= 0 || tileHeight <= 0) continue;
+      
+      // Calcular histograma do tile (L vai de 0-100)
+      const histogram = new Uint32Array(101);
+      let pixelCount = 0;
+      
+      for (let y = startY; y < endY; y++) {
+        for (let x = startX; x < endX; x++) {
+          const val = Math.max(0, Math.min(100, Math.round(L[y * width + x])));
+          histogram[val]++;
+          pixelCount++;
+        }
+      }
+      
+      if (pixelCount === 0) continue;
+      
+      // Aplicar clip limit
+      const clipThreshold = Math.max(1, Math.round(clipLimit * pixelCount / 101));
+      let excess = 0;
+      for (let i = 0; i <= 100; i++) {
+        if (histogram[i] > clipThreshold) {
+          excess += histogram[i] - clipThreshold;
+          histogram[i] = clipThreshold;
+        }
+      }
+      
+      // Redistribuir excesso uniformemente
+      const increment = Math.floor(excess / 101);
+      for (let i = 0; i <= 100; i++) {
+        histogram[i] += increment;
+      }
+      
+      // Calcular CDF
+      const cdf = new Uint32Array(101);
+      cdf[0] = histogram[0];
+      for (let i = 1; i <= 100; i++) {
+        cdf[i] = cdf[i - 1] + histogram[i];
+      }
+      
+      // Aplicar equalização
+      for (let y = startY; y < endY; y++) {
+        for (let x = startX; x < endX; x++) {
+          const idx = y * width + x;
+          const val = Math.max(0, Math.min(100, Math.round(L[idx])));
+          const newVal = (cdf[val] / pixelCount) * 100;
+          enhancedL[idx] = newVal;
+        }
+      }
+    }
+  }
+  
+  // 3. Converter de volta para RGB (preservando cores A e B)
+  for (let i = 0; i < numPixels; i++) {
+    const idx = i * 4;
+    const [r, g, b] = labToRgb(enhancedL[i], A[i], B[i]);
+    result[idx] = r;
+    result[idx + 1] = g;
+    result[idx + 2] = b;
+    result[idx + 3] = 255;
+  }
+  
+  return result;
+}
+
+/**
+ * Adiciona padding (margem) em volta da imagem
+ * Evita que caracteres fiquem muito próximos das bordas - melhora OCR
+ */
+function addPadding(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  padSize: number = 10,
+  padColor: [number, number, number] = [0, 0, 0]
+): { data: Uint8ClampedArray; width: number; height: number } {
+  const newWidth = width + padSize * 2;
+  const newHeight = height + padSize * 2;
+  const result = new Uint8ClampedArray(newWidth * newHeight * 4);
+  
+  // Preencher com cor de padding
+  for (let i = 0; i < newWidth * newHeight; i++) {
+    result[i * 4] = padColor[0];
+    result[i * 4 + 1] = padColor[1];
+    result[i * 4 + 2] = padColor[2];
+    result[i * 4 + 3] = 255;
+  }
+  
+  // Copiar imagem original no centro
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const srcIdx = (y * width + x) * 4;
+      const dstIdx = ((y + padSize) * newWidth + (x + padSize)) * 4;
+      result[dstIdx] = data[srcIdx];
+      result[dstIdx + 1] = data[srcIdx + 1];
+      result[dstIdx + 2] = data[srcIdx + 2];
+      result[dstIdx + 3] = 255;
+    }
+  }
+  
+  return { data: result, width: newWidth, height: newHeight };
+}
+
+/**
+ * Kernel Lanczos para upscale de alta qualidade
+ */
+function lanczos(x: number, a: number = 3): number {
+  if (x === 0) return 1;
+  if (Math.abs(x) >= a) return 0;
+  const pix = Math.PI * x;
+  return (a * Math.sin(pix) * Math.sin(pix / a)) / (pix * pix);
+}
+
+/**
+ * Resize com interpolação Lanczos - mantém nitidez em upscale
+ */
+function lanczosResize(
+  data: Uint8ClampedArray,
+  srcW: number,
+  srcH: number,
+  dstW: number,
+  dstH: number,
+  a: number = 3
+): { data: Uint8ClampedArray; width: number; height: number } {
+  const result = new Uint8ClampedArray(dstW * dstH * 4);
+  
+  const scaleX = srcW / dstW;
+  const scaleY = srcH / dstH;
+  
+  for (let dstY = 0; dstY < dstH; dstY++) {
+    for (let dstX = 0; dstX < dstW; dstX++) {
+      const srcX = (dstX + 0.5) * scaleX - 0.5;
+      const srcY = (dstY + 0.5) * scaleY - 0.5;
+      
+      let r = 0, g = 0, b = 0, weightSum = 0;
+      
+      const startKY = Math.floor(srcY) - a + 1;
+      const endKY = Math.floor(srcY) + a;
+      const startKX = Math.floor(srcX) - a + 1;
+      const endKX = Math.floor(srcX) + a;
+      
+      for (let ky = startKY; ky <= endKY; ky++) {
+        for (let kx = startKX; kx <= endKX; kx++) {
+          const clampedX = Math.max(0, Math.min(srcW - 1, kx));
+          const clampedY = Math.max(0, Math.min(srcH - 1, ky));
+          
+          const weight = lanczos(srcX - kx, a) * lanczos(srcY - ky, a);
+          const srcIdx = (clampedY * srcW + clampedX) * 4;
+          
+          r += data[srcIdx] * weight;
+          g += data[srcIdx + 1] * weight;
+          b += data[srcIdx + 2] * weight;
+          weightSum += weight;
+        }
+      }
+      
+      const dstIdx = (dstY * dstW + dstX) * 4;
+      if (weightSum > 0) {
+        result[dstIdx] = Math.max(0, Math.min(255, Math.round(r / weightSum)));
+        result[dstIdx + 1] = Math.max(0, Math.min(255, Math.round(g / weightSum)));
+        result[dstIdx + 2] = Math.max(0, Math.min(255, Math.round(b / weightSum)));
+      }
+      result[dstIdx + 3] = 255;
+    }
+  }
+  
+  return { data: result, width: dstW, height: dstH };
+}
+
+/**
+ * Resize inteligente - garante altura mínima para OCR usando Lanczos
+ */
+function smartResize(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  targetHeight: number = 48
+): { data: Uint8ClampedArray; width: number; height: number } {
+  if (height >= targetHeight) {
+    return { data, width, height }; // Já tem tamanho adequado
+  }
+  
+  const scale = targetHeight / height;
+  const newWidth = Math.round(width * scale);
+  const newHeight = targetHeight;
+  
+  console.log(`📏 SmartResize: ${width}x${height} → ${newWidth}x${newHeight} (scale: ${scale.toFixed(2)}x)`);
+  
+  // Usar Lanczos para upscale de alta qualidade
+  return lanczosResize(data, width, height, newWidth, newHeight);
+}
+
+/**
+ * Tenta detectar e corrigir perspectiva da placa (simplificado)
+ * Se a placa estiver muito torta, tenta retificar
+ */
+function unwarpPlate(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number
+): { data: Uint8ClampedArray; width: number; height: number } {
+  // Implementação simplificada: verificar se precisa de correção
+  // Por ora, apenas retorna a imagem original
+  // A correção de perspectiva completa requer detecção de 4 cantos
+  // que é computacionalmente cara no browser
+  
+  // Para v1.1.6, focamos nas outras otimizações que têm mais impacto
+  // Perspectiva será implementada em versão futura se necessário
+  
+  return { data, width, height };
+}
+
+/**
+ * Pipeline completo de otimização de imagem para OCR v1.1.6
+ * 
+ * Ordem de processamento:
+ * 1. Correção de perspectiva (se necessário)
+ * 2. CLAHE no espaço LAB (corrige iluminação mantendo cores)
+ * 3. Padding (margem de segurança)
+ * 4. Resize inteligente com Lanczos (mínimo 48px altura)
+ * 
+ * IMPORTANTE: Mantém RGB - PaddleOCR foi treinado com estatísticas ImageNet em 3 canais
  */
 function optimizeImageForOCR(
   data: Uint8ClampedArray,
   width: number,
   height: number
-): Uint8ClampedArray {
-  const result = new Uint8ClampedArray(data.length);
-  const numPixels = width * height;
+): { data: Uint8ClampedArray; width: number; height: number } {
+  console.log(`🔄 Pipeline v1.1.6 iniciado: ${width}x${height}px`);
   
-  // 1. Converter para grayscale
-  const gray = new Uint8ClampedArray(numPixels);
-  for (let i = 0; i < numPixels; i++) {
-    const idx = i * 4;
-    gray[i] = Math.round(
-      data[idx] * 0.299 + data[idx + 1] * 0.587 + data[idx + 2] * 0.114
-    );
-  }
+  // 1. Correção de perspectiva (placeholder para versão futura)
+  let result = unwarpPlate(data, width, height);
   
-  // 2. Calcular histograma para auto-contraste
-  const histogram = new Uint32Array(256);
-  for (let i = 0; i < numPixels; i++) {
-    histogram[gray[i]]++;
-  }
+  // 2. CLAHE no espaço LAB - corrige sombras/reflexos preservando cores
+  result.data = applyCLAHE(result.data, result.width, result.height, 2.5, 8);
+  console.log(`💡 CLAHE LAB aplicado`);
   
-  // 3. Encontrar min/max para stretch (ignorando 1% extremos)
-  let minVal = 0, maxVal = 255;
-  const threshold = numPixels * 0.01;
-  let count = 0;
-  for (let i = 0; i < 256; i++) {
-    count += histogram[i];
-    if (count > threshold) { minVal = i; break; }
-  }
-  count = 0;
-  for (let i = 255; i >= 0; i--) {
-    count += histogram[i];
-    if (count > threshold) { maxVal = i; break; }
-  }
+  // 3. Adicionar padding (8px preto)
+  result = addPadding(result.data, result.width, result.height, 8, [0, 0, 0]);
+  console.log(`🔲 Padding: ${result.width}x${result.height}px`);
   
-  const range = maxVal - minVal || 1;
-  
-  // 4. Aplicar contraste e sharpening
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const idx = y * width + x;
-      const rgbaIdx = idx * 4;
-      
-      // Stretch de contraste
-      let val = gray[idx];
-      val = Math.round(((val - minVal) / range) * 255);
-      val = Math.max(0, Math.min(255, val));
-      
-      // Sharpening (se não for borda)
-      if (x > 0 && x < width - 1 && y > 0 && y < height - 1) {
-        const center = gray[idx];
-        const neighbors = (
-          gray[(y-1) * width + x] +
-          gray[(y+1) * width + x] +
-          gray[y * width + (x-1)] +
-          gray[y * width + (x+1)]
-        ) / 4;
-        const sharpened = center + (center - neighbors) * 0.5;
-        val = Math.round(((sharpened - minVal) / range) * 255);
-        val = Math.max(0, Math.min(255, val));
-      }
-      
-      result[rgbaIdx] = val;
-      result[rgbaIdx + 1] = val;
-      result[rgbaIdx + 2] = val;
-      result[rgbaIdx + 3] = 255;
-    }
-  }
+  // 4. Resize inteligente (mínimo 48px altura)
+  result = smartResize(result.data, result.width, result.height, 48);
+  console.log(`📏 Final: ${result.width}x${result.height}px`);
   
   return result;
 }
@@ -1457,8 +1728,8 @@ async function processPlate(
     
     self.postMessage({ type: 'PROGRESS', payload: { stage: 'Otimizando imagem...', progress: 0.3 } });
     
-    // Otimizar imagem antes do OCR (grayscale + contraste + sharpening)
-    const optimizedData = optimizeImageForOCR(processData, processWidth, processHeight);
+    // Otimizar imagem com pipeline avançado v1.1.6 (CLAHE LAB + Padding + Lanczos)
+    const optimized = optimizeImageForOCR(processData, processWidth, processHeight);
     
     self.postMessage({ type: 'PROGRESS', payload: { stage: 'Executando OCR ONNX...', progress: 0.4 } });
     
@@ -1469,14 +1740,14 @@ async function processPlate(
       debugImages.cropped = await generateImageFromData(processData, processWidth, processHeight);
       
       // Mostrar imagem otimizada (que realmente vai para o OCR)
-      debugImages.preprocessed = await generateImageFromData(optimizedData, processWidth, processHeight);
+      debugImages.preprocessed = await generateImageFromData(optimized.data, optimized.width, optimized.height);
     }
     
     // 3. Executar OCR com ONNX usando imagem otimizada
     const { text: rawText, confidence: ocrConfidence } = await runONNXOCR(
-      optimizedData,
-      processWidth,
-      processHeight
+      optimized.data,
+      optimized.width,
+      optimized.height
     );
     
     self.postMessage({ type: 'PROGRESS', payload: { stage: 'Validando...', progress: 0.8 } });
@@ -1600,4 +1871,4 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 };
 
 // Notificar que o worker está carregado
-console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.5)');
+console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.6 - CLAHE LAB + Lanczos)');
