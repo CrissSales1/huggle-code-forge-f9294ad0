@@ -79,7 +79,6 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
     videoRef,
     canvasRef,
     // Debug
-    debugImage,
     debugModeEnabled,
     setDebugModeEnabled,
     // Performance
@@ -811,21 +810,69 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
             </div>
           </div>
           
-          {/* Debug Image - Região da placa detectada */}
-          {debugModeEnabled && debugImage && (
+          {/* Debug Pipeline - 4 etapas visuais do processamento OCR */}
+          {debugModeEnabled && (
             <div className="mt-3 pt-3 border-t border-gray-200">
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-xs font-medium text-purple-700">🔍 Última detecção (região da placa)</span>
+                <span className="text-xs font-medium text-purple-700">🔍 Pipeline de Processamento OCR</span>
+                {processingInfo.rawText && (
+                  <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">
+                    OCR: "{processingInfo.rawText}" ({Math.round((processingInfo.ocrConfidence || 0) * 100)}%)
+                  </span>
+                )}
               </div>
-              <div className="relative bg-gray-900 rounded-lg overflow-hidden">
-                <img 
-                  src={debugImage} 
-                  alt="Região detectada da placa" 
-                  className="w-full h-auto max-h-32 object-contain"
-                />
-                <div className="absolute bottom-1 right-1 bg-black/70 text-white text-xs px-2 py-0.5 rounded">
-                  Verde = Melhor região detectada
+              
+              <div className="grid grid-cols-4 gap-2">
+                {/* 1. Frame Original */}
+                <div className="bg-gray-800 rounded-lg overflow-hidden">
+                  <div className="text-[10px] text-center text-gray-400 py-1 bg-gray-900">1. Original</div>
+                  {processingInfo.debugImages?.original ? (
+                    <img src={processingInfo.debugImages.original} alt="Original" className="w-full h-20 object-contain" />
+                  ) : (
+                    <div className="h-20 flex items-center justify-center text-gray-500 text-xs">-</div>
+                  )}
                 </div>
+                
+                {/* 2. Recorte */}
+                <div className="bg-gray-800 rounded-lg overflow-hidden">
+                  <div className="text-[10px] text-center text-gray-400 py-1 bg-gray-900">2. Recorte</div>
+                  {processingInfo.debugImages?.cropped ? (
+                    <img src={processingInfo.debugImages.cropped} alt="Recorte" className="w-full h-20 object-contain" />
+                  ) : (
+                    <div className="h-20 flex items-center justify-center text-gray-500 text-xs">-</div>
+                  )}
+                </div>
+                
+                {/* 3. Pré-processado */}
+                <div className="bg-gray-800 rounded-lg overflow-hidden">
+                  <div className="text-[10px] text-center text-gray-400 py-1 bg-gray-900">3. Otimizado</div>
+                  {processingInfo.debugImages?.preprocessed ? (
+                    <img src={processingInfo.debugImages.preprocessed} alt="Preprocessado" className="w-full h-20 object-contain" />
+                  ) : (
+                    <div className="h-20 flex items-center justify-center text-gray-500 text-xs">-</div>
+                  )}
+                </div>
+                
+                {/* 4. Resultado Final */}
+                <div className="bg-gray-800 rounded-lg overflow-hidden border-2 border-green-500">
+                  <div className="text-[10px] text-center text-green-400 py-1 bg-gray-900">4. Detecção</div>
+                  {processingInfo.debugImages?.final ? (
+                    <img src={processingInfo.debugImages.final} alt="Final" className="w-full h-20 object-contain" />
+                  ) : (
+                    <div className="h-20 flex items-center justify-center text-gray-500 text-xs">-</div>
+                  )}
+                </div>
+              </div>
+              
+              {/* Info adicional */}
+              <div className="flex items-center gap-4 mt-2 text-[10px] text-gray-500">
+                <span>Fonte: {processingInfo.usedYolo ? '🧠 YOLO' : '📐 Heurística'}</span>
+                {processingInfo.plateRegion && (
+                  <span>Região: {processingInfo.plateRegion.width}x{processingInfo.plateRegion.height}px</span>
+                )}
+                {processingInfo.plateRegion && (
+                  <span>Proporção: {(processingInfo.plateRegion.width / processingInfo.plateRegion.height).toFixed(2)}:1</span>
+                )}
               </div>
             </div>
           )}

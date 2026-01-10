@@ -71,6 +71,7 @@ export interface ProcessingInfo {
   debugImage?: string; // Data URL da imagem de debug com região detectada
   rawText?: string; // Texto bruto lido pelo OCR (para diagnóstico)
   ocrConfidence?: number; // Confiança do OCR (0-1)
+  usedYolo?: boolean; // Se usou YOLO ou heurística
   // Bounding box da placa detectada (para overlay visual em tempo real)
   plateRegion?: {
     x: number;
@@ -80,6 +81,13 @@ export interface ProcessingInfo {
     confidence: number;
   };
   detectedPlate?: string; // Texto da placa formatada para exibir no overlay
+  // Múltiplas imagens de debug do pipeline de processamento
+  debugImages?: {
+    original?: string;      // Frame original completo
+    cropped?: string;       // Região recortada (antes do upscale)
+    preprocessed?: string;  // Após pré-processamento
+    final?: string;         // Resultado final com bounding box
+  };
 }
 
 interface MonitoringContextType {
@@ -522,13 +530,15 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         setDebugImage(result.debugImage);
       }
       
-      // Atualizar processingInfo com rawText e plateRegion para diagnóstico e overlay visual
+      // Atualizar processingInfo com rawText, plateRegion, usedYolo e debugImages para diagnóstico e overlay visual
       setProcessingInfo(prev => ({
         ...prev,
         rawText: result.rawText || '',
         ocrConfidence: result.ocrConfidence || 0,
         plateRegion: result.plateRegion,
+        usedYolo: result.usedYolo,
         detectedPlate: result.validation?.isValid ? result.validation.formatted : undefined,
+        debugImages: result.debugImages,
       }));
       
       // Limpar plateRegion após 3 segundos para não poluir o overlay
