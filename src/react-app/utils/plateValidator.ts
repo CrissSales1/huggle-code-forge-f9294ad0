@@ -237,7 +237,7 @@ export interface PlateValidationResult {
   original: string;
   corrected: string;
   formatted: string;
-  format: 'old' | 'mercosul' | 'unknown';
+  format: 'antiga' | 'mercosul' | 'unknown';
   confidence: number;
 }
 
@@ -324,7 +324,7 @@ export function validateAndCorrectPlate(rawPlate: string): PlateValidationResult
       original: rawPlate,
       corrected: cleaned,
       formatted: formatPlateForDisplay(cleaned),
-      format: isOldFormat(cleaned) ? 'old' : 'mercosul',
+      format: isOldFormat(cleaned) ? 'antiga' : 'mercosul',
       confidence: 1.0,
     };
   }
@@ -338,7 +338,7 @@ export function validateAndCorrectPlate(rawPlate: string): PlateValidationResult
         original: rawPlate,
         corrected: withoutFirst,
         formatted: formatPlateForDisplay(withoutFirst),
-        format: isOldFormat(withoutFirst) ? 'old' : 'mercosul',
+        format: isOldFormat(withoutFirst) ? 'antiga' : 'mercosul',
         confidence: 0.7,
       };
     }
@@ -351,7 +351,7 @@ export function validateAndCorrectPlate(rawPlate: string): PlateValidationResult
         original: rawPlate,
         corrected: correctedWithoutFirst,
         formatted: formatPlateForDisplay(correctedWithoutFirst),
-        format: isOldFormat(correctedWithoutFirst) ? 'old' : 'mercosul',
+        format: isOldFormat(correctedWithoutFirst) ? 'antiga' : 'mercosul',
         confidence: 0.6,
       };
     }
@@ -370,7 +370,7 @@ export function validateAndCorrectPlate(rawPlate: string): PlateValidationResult
         original: rawPlate,
         corrected,
         formatted: formatPlateForDisplay(corrected),
-        format: isOldFormat(corrected) ? 'old' : 'mercosul',
+        format: isOldFormat(corrected) ? 'antiga' : 'mercosul',
         confidence: Math.max(0.4, confidence),
       };
     }
@@ -387,7 +387,7 @@ export function validateAndCorrectPlate(rawPlate: string): PlateValidationResult
           original: rawPlate,
           corrected: variant,
           formatted: formatPlateForDisplay(variant),
-          format: isOldFormat(variant) ? 'old' : 'mercosul',
+          format: isOldFormat(variant) ? 'antiga' : 'mercosul',
           confidence: Math.max(0.35, confidence),
         };
       }
