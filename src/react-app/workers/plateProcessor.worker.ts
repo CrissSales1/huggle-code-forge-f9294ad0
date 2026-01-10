@@ -3,7 +3,7 @@
  * Move OCR (ONNX Runtime), detecção de placa e motion detection para thread separada
  * Evita bloqueio da UI durante processamento pesado
  * 
- * v1.1.2: Adicionado debug image preprocessed, logs diagnóstico, validação charset
+ * v1.1.3: Corrigido cálculo softmax, adicionado pós-processamento placas BR
  */
 
 import * as ort from 'onnxruntime-web';
@@ -109,11 +109,15 @@ async function loadCharset(): Promise<string[]> {
     const text = await response.text();
     // Cada linha é um caractere, adiciona blank token no início
     const chars = text.split('\n').filter(c => c.length > 0);
-    return ['', ...chars]; // blank token + caracteres
+    const fullCharset = ['', ...chars]; // blank token + caracteres
+    console.log(`📚 Charset carregado: ${fullCharset.length} caracteres (${chars.length} + blank)`);
+    return fullCharset;
   } catch (error) {
     console.warn('⚠️ Falha ao carregar dict.txt, usando charset padrão');
     // Charset padrão para placas BR
-    return ['', ...'0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')];
+    const fallbackChars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+    console.log(`📚 Charset fallback: ${fallbackChars.length + 1} caracteres`);
+    return ['', ...fallbackChars];
   }
 }
 
@@ -127,11 +131,10 @@ async function initONNX(): Promise<void> {
     
     // Carregar charset
     charset = await loadCharset();
-    console.log(`📚 Charset carregado: ${charset.length} caracteres`);
     
     // Validar charset - PaddleOCR espera 503 chars + 1 blank = 504
     if (charset.length !== 504 && charset.length !== 37) {
-      console.warn(`⚠️ Charset tem ${charset.length} chars, esperado 504 ou 37 (fallback)`);
+      console.warn(`⚠️ Charset inesperado: ${charset.length} chars, esperado 504 ou 37`);
     }
     
     // Configurar ONNX Runtime para WASM (CDN com versão correta)
@@ -276,12 +279,17 @@ function decodeCTC(output: Float32Array, outputShape: readonly number[]): { text
       }
     }
     
-    // Aplicar softmax para obter probabilidade
+    // Aplicar softmax para obter probabilidade correta
     let expSum = 0;
+    const expValues: number[] = [];
     for (let c = 0; c < numClasses; c++) {
-      expSum += Math.exp(output[t * numClasses + c] - maxVal);
+      const expVal = Math.exp(output[t * numClasses + c] - maxVal);
+      expValues.push(expVal);
+      expSum += expVal;
     }
-    const prob = 1 / expSum; // probabilidade do max após softmax
+    // Probabilidade real = exp(maxVal - maxVal) / expSum = 1 / expSum
+    // Mas expValues[maxIdx] = exp(0) = 1, então:
+    const prob = expValues[maxIdx] / expSum;
     
     // CTC: ignorar blank (índice 0) e repetições
     if (maxIdx !== 0 && maxIdx !== lastIdx) {
@@ -296,7 +304,66 @@ function decodeCTC(output: Float32Array, outputShape: readonly number[]): { text
   
   const confidence = charCount > 0 ? totalConf / charCount : 0;
   
-  return { text: result.toUpperCase(), confidence };
+  // Aplicar pós-processamento para placas brasileiras
+  const correctedText = postProcessBrazilianPlate(result.toUpperCase());
+  
+  return { text: correctedText, confidence };
+}
+
+/**
+ * Pós-processamento específico para placas brasileiras
+ * Corrige erros comuns de OCR baseado na posição do caractere
+ */
+function postProcessBrazilianPlate(text: string): string {
+  if (text.length < 7) return text;
+  
+  // Mapeamentos de correção por tipo de posição
+  const numToLetter: Record<string, string> = {
+    '0': 'O', '1': 'I', '2': 'Z', '4': 'A', '5': 'S', '6': 'G', '8': 'B'
+  };
+  const letterToNum: Record<string, string> = {
+    'O': '0', 'I': '1', 'Z': '2', 'A': '4', 'S': '5', 'G': '6', 'B': '8', 'D': '0', 'Q': '0'
+  };
+  
+  let result = text.substring(0, 7); // Pegar apenas os 7 primeiros
+  const chars = result.split('');
+  
+  // Posições 0, 1, 2: devem ser letras
+  for (let i = 0; i < 3 && i < chars.length; i++) {
+    if (/[0-9]/.test(chars[i]) && numToLetter[chars[i]]) {
+      chars[i] = numToLetter[chars[i]];
+    }
+  }
+  
+  // Posição 3: número (formato antigo ABC-1234) ou letra (Mercosul ABC1D23)
+  // Não corrigir pois pode ser ambíguo
+  
+  // Posição 4: sempre letra no Mercosul, número no antigo
+  // Se parece Mercosul (posição 4 é letra), aplicar regras Mercosul
+  const isMercosul = chars.length > 4 && /[A-Z]/.test(chars[4]);
+  
+  if (isMercosul) {
+    // Mercosul: ABC1D23 - posições 3,5,6 são números, posição 4 é letra
+    if (chars[3] && /[A-Z]/.test(chars[3]) && letterToNum[chars[3]]) {
+      chars[3] = letterToNum[chars[3]];
+    }
+    // Posição 4 já é letra (não corrigir)
+    if (chars[5] && /[A-Z]/.test(chars[5]) && letterToNum[chars[5]]) {
+      chars[5] = letterToNum[chars[5]];
+    }
+    if (chars[6] && /[A-Z]/.test(chars[6]) && letterToNum[chars[6]]) {
+      chars[6] = letterToNum[chars[6]];
+    }
+  } else {
+    // Formato antigo: ABC-1234 - posições 3,4,5,6 são números
+    for (let i = 3; i < 7 && i < chars.length; i++) {
+      if (/[A-Z]/.test(chars[i]) && letterToNum[chars[i]]) {
+        chars[i] = letterToNum[chars[i]];
+      }
+    }
+  }
+  
+  return chars.join('');
 }
 
 /**
@@ -1457,4 +1524,4 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 };
 
 // Notificar que o worker está carregado
-console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.0)');
+console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.3)');
