@@ -110,7 +110,13 @@ async function loadCharset(): Promise<string[]> {
     // Cada linha é um caractere, adiciona blank token no início
     const chars = text.split('\n').filter(c => c.length > 0);
     const fullCharset = ['', ...chars]; // blank token + caracteres
-    console.log(`📚 Charset carregado: ${fullCharset.length} caracteres (${chars.length} + blank)`);
+    
+    // PaddleOCR espera exatamente 504 classes - adicionar padding se necessário
+    while (fullCharset.length < 504) {
+      fullCharset.push(''); // Caractere vazio para índices extras
+    }
+    
+    console.log(`📚 Charset carregado: ${fullCharset.length} caracteres (${chars.length} do dict + blank + padding)`);
     return fullCharset;
   } catch (error) {
     console.warn('⚠️ Falha ao carregar dict.txt, usando charset padrão');
@@ -131,11 +137,6 @@ async function initONNX(): Promise<void> {
     
     // Carregar charset
     charset = await loadCharset();
-    
-    // Validar charset - PaddleOCR espera 503 chars + 1 blank = 504
-    if (charset.length !== 504 && charset.length !== 37) {
-      console.warn(`⚠️ Charset inesperado: ${charset.length} chars, esperado 504 ou 37`);
-    }
     
     // Configurar ONNX Runtime para WASM (CDN com versão correta)
     ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.2/dist/';
@@ -1524,4 +1525,4 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 };
 
 // Notificar que o worker está carregado
-console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.3)');
+console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.4)');
