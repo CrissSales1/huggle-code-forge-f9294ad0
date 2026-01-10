@@ -1,14 +1,14 @@
 /**
- * Hook para reconhecimento de placas usando OCR local gratuito
- * Com fallback para Plate Recognizer API quando confiança < 90%
- * OTIMIZADO: Prioriza OCR local para economizar custos
+ * Hook para reconhecimento de placas usando OCR ONNX no worker
+ * Com fallback para Plate Recognizer API quando confiança < threshold
+ * v1.1.0: Migrado de Tesseract para PaddleOCR ONNX
  */
 import { useState, useCallback, useRef } from 'react';
-import { recognizePlateFast, terminateOCR, type OCRResult } from '../utils/plateOCR';
 import { validateAndCorrectPlate } from '../utils/plateValidator';
 import { getPlateDetector } from '../utils/plateDetector';
+import { usePlateWorker, type OCRResult } from './usePlateWorker';
 
-// Threshold reduzido para aceitar mais resultados do OCR local
+// Threshold para aceitar resultados do OCR local
 const CONFIDENCE_THRESHOLD = 0.60;
 const PLATE_RECOGNIZER_URL = 'https://kbgftpiyzfmabrncpnas.supabase.co/functions/v1/detect-plate';
 
@@ -29,7 +29,7 @@ interface UsePlateRecognitionReturn {
   error: string | null;
   statusMessage: string;
   usedFallback: boolean;
-  debugImage: string | null; // Data URL da imagem de debug com região detectada
+  debugImage: string | null;
   recognizeFromCanvas: (canvas: HTMLCanvasElement, enableDebug?: boolean) => Promise<OCRResult>;
   reset: () => void;
   cleanup: () => Promise<void>;
@@ -42,7 +42,6 @@ function canvasToBase64(canvas: HTMLCanvasElement): string {
   const maxDimension = 1280;
   let targetCanvas = canvas;
   
-  // Redimensionar se necessário
   if (canvas.width > maxDimension || canvas.height > maxDimension) {
     const scale = maxDimension / Math.max(canvas.width, canvas.height);
     const newWidth = Math.round(canvas.width * scale);
@@ -61,6 +60,26 @@ function canvasToBase64(canvas: HTMLCanvasElement): string {
   
   const dataUrl = targetCanvas.toDataURL('image/jpeg', 0.75);
   return dataUrl.split(',')[1];
+}
+
+/**
+ * Cria resultado vazio para erros
+ */
+function createEmptyResult(): OCRResult {
+  return {
+    success: false,
+    rawText: '',
+    validation: {
+      isValid: false,
+      original: '',
+      corrected: '',
+      formatted: '',
+      format: 'unknown',
+      confidence: 0,
+    },
+    ocrConfidence: 0,
+    processingTimeMs: 0,
+  };
 }
 
 /**
@@ -96,7 +115,7 @@ async function callPlateRecognizerFallback(canvas: HTMLCanvasElement): Promise<O
         rawText: data.placa,
         validation: {
           ...validation,
-          confidence: data.confidence || 0.95, // API geralmente tem alta confiança
+          confidence: data.confidence || 0.95,
         },
         ocrConfidence: data.confidence || 0.95,
         processingTimeMs,
@@ -104,17 +123,7 @@ async function callPlateRecognizerFallback(canvas: HTMLCanvasElement): Promise<O
     }
     
     return {
-      success: false,
-      rawText: '',
-      validation: {
-        isValid: false,
-        original: '',
-        corrected: '',
-        formatted: '',
-        format: 'unknown',
-        confidence: 0,
-      },
-      ocrConfidence: 0,
+      ...createEmptyResult(),
       processingTimeMs,
     };
   } catch (error) {
@@ -131,6 +140,9 @@ export function usePlateRecognition(): UsePlateRecognitionReturn {
   const [usedFallback, setUsedFallback] = useState(false);
   const [debugImage, setDebugImage] = useState<string | null>(null);
   const attemptRef = useRef(0);
+  
+  // Usar o worker para processamento OCR
+  const { processPlate, terminate } = usePlateWorker();
 
   const recognizeFromCanvas = useCallback(async (canvas: HTMLCanvasElement, enableDebug: boolean = false): Promise<OCRResult> => {
     attemptRef.current++;
@@ -159,35 +171,50 @@ export function usePlateRecognition(): UsePlateRecognitionReturn {
     }
     
     try {
-      // Primeira tentativa: OCR local rápido (gratuito)
-      setStatusMessage('🔍 Reconhecendo com OCR local...');
+      // OCR via worker ONNX - passa o canvas diretamente
+      setStatusMessage('🔍 Reconhecendo com OCR ONNX...');
       
-      const localResult = await recognizePlateFast(canvas);
+      const workerResult = await processPlate(canvas, {
+        enableDebug,
+        enableFallback: false, // Gerenciamos fallback aqui
+      });
       
       // Verificar se ainda é a tentativa atual
       if (currentAttempt !== attemptRef.current) {
-        return localResult;
+        return workerResult ?? createEmptyResult();
       }
       
-      const localConfidence = localResult.success ? localResult.validation.confidence : 0;
+      // Se worker retornou null, criar resultado vazio
+      if (!workerResult) {
+        setStatusMessage('❌ Erro no processamento');
+        setError('Falha ao processar imagem');
+        return createEmptyResult();
+      }
       
-      // Debug log para diagnóstico
-      console.log('🔍 OCR Debug:', {
-        rawText: localResult.rawText,
+      const localConfidence = workerResult.success ? workerResult.validation.confidence : 0;
+      
+      // Debug log
+      console.log('🔍 OCR ONNX Debug:', {
+        rawText: workerResult.rawText,
         confidence: Math.round(localConfidence * 100) + '%',
-        isValid: localResult.validation?.isValid,
-        corrected: localResult.validation?.corrected,
-        format: localResult.validation?.format,
+        isValid: workerResult.validation?.isValid,
+        corrected: workerResult.validation?.corrected,
+        format: workerResult.validation?.format,
       });
       
-      console.log(`📊 OCR local: confiança ${Math.round(localConfidence * 100)}% (limite: ${CONFIDENCE_THRESHOLD * 100}%)`);
+      console.log(`📊 OCR ONNX: confiança ${Math.round(localConfidence * 100)}% (limite: ${CONFIDENCE_THRESHOLD * 100}%)`);
+      
+      // Se debug image do worker disponível
+      if (workerResult.debugImage) {
+        setDebugImage(workerResult.debugImage);
+      }
       
       // Se confiança >= threshold, usar resultado local
-      if (localResult.success && localConfidence >= CONFIDENCE_THRESHOLD) {
-        setLastResult(localResult);
-        setStatusMessage(`✅ Placa: ${localResult.validation.formatted} (${Math.round(localConfidence * 100)}% - OCR local)`);
-        console.log(`✅ Usando OCR local: ${localResult.validation.formatted}`);
-        return localResult;
+      if (workerResult.success && localConfidence >= CONFIDENCE_THRESHOLD) {
+        setLastResult(workerResult);
+        setStatusMessage(`✅ Placa: ${workerResult.validation.formatted} (${Math.round(localConfidence * 100)}% - ONNX)`);
+        console.log(`✅ Usando OCR ONNX: ${workerResult.validation.formatted}`);
+        return workerResult;
       }
       
       // Verificar se fallback está habilitado
@@ -195,17 +222,15 @@ export function usePlateRecognition(): UsePlateRecognitionReturn {
       
       if (!fallbackEnabled) {
         // Modo econômico: tentar usar resultado local mesmo com baixa confiança
-        // Se temos um texto com 7 caracteres alfanuméricos, pode ser uma placa
-        const rawClean = localResult.rawText?.replace(/[^A-Z0-9]/gi, '') || '';
+        const rawClean = workerResult.rawText?.replace(/[^A-Z0-9]/gi, '') || '';
         const couldBePlate = rawClean.length === 7;
         
-        if (localResult.success || couldBePlate) {
-          // Se tem 7 caracteres, tentar validar/corrigir novamente
-          if (couldBePlate && !localResult.success) {
+        if (workerResult.success || couldBePlate) {
+          if (couldBePlate && !workerResult.success) {
             const revalidated = validateAndCorrectPlate(rawClean);
             if (revalidated.isValid) {
-              const correctedResult = {
-                ...localResult,
+              const correctedResult: OCRResult = {
+                ...workerResult,
                 success: true,
                 validation: revalidated,
               };
@@ -216,16 +241,16 @@ export function usePlateRecognition(): UsePlateRecognitionReturn {
             }
           }
           
-          setLastResult(localResult);
-          const msg = localResult.success 
-            ? `⚠️ Placa: ${localResult.validation.formatted} (${Math.round(localConfidence * 100)}% - modo econômico)`
-            : `⚠️ Texto detectado: "${localResult.rawText}" - Verificar manualmente`;
+          setLastResult(workerResult);
+          const msg = workerResult.success 
+            ? `⚠️ Placa: ${workerResult.validation.formatted} (${Math.round(localConfidence * 100)}% - modo econômico)`
+            : `⚠️ Texto detectado: "${workerResult.rawText}" - Verificar manualmente`;
           setStatusMessage(msg);
-          console.log(`💰 Modo econômico: usando OCR local (${Math.round(localConfidence * 100)}%)`);
-          return localResult;
+          console.log(`💰 Modo econômico: usando OCR ONNX (${Math.round(localConfidence * 100)}%)`);
+          return workerResult;
         }
         setStatusMessage('❌ Nenhuma placa detectada (modo econômico)');
-        return localResult;
+        return workerResult;
       }
       
       // Fallback: usar Plate Recognizer API
@@ -245,12 +270,11 @@ export function usePlateRecognition(): UsePlateRecognitionReturn {
           setStatusMessage(`✅ Placa: ${fallbackResult.validation.formatted} (API externa)`);
           console.log(`✅ Usando fallback API: ${fallbackResult.validation.formatted}`);
         } else {
-          // Se API também falhar, usar resultado local se tiver algo
-          if (localResult.rawText) {
-            setLastResult(localResult);
-            setStatusMessage(`⚠️ Texto detectado: "${localResult.rawText}" - Baixa confiança`);
+          if (workerResult.rawText) {
+            setLastResult(workerResult);
+            setStatusMessage(`⚠️ Texto detectado: "${workerResult.rawText}" - Baixa confiança`);
             setError('Placa detectada com baixa confiança. Verifique o resultado.');
-            return localResult;
+            return workerResult;
           }
           setStatusMessage('❌ Nenhuma placa detectada');
           setError('Nenhuma placa detectada. Tente novamente.');
@@ -258,24 +282,23 @@ export function usePlateRecognition(): UsePlateRecognitionReturn {
         
         return fallbackResult;
       } catch (fallbackError) {
-        console.warn('⚠️ Fallback falhou, usando resultado local:', fallbackError);
+        console.warn('⚠️ Fallback falhou, usando resultado ONNX:', fallbackError);
         
-        // Se fallback falhar, usar resultado local mesmo com baixa confiança
-        if (localResult.success || localResult.rawText) {
-          setLastResult(localResult);
-          const msg = localResult.success 
-            ? `⚠️ Placa: ${localResult.validation.formatted} (${Math.round(localConfidence * 100)}% - sem validação externa)`
-            : `⚠️ Texto detectado: "${localResult.rawText}" - Formato inválido`;
+        if (workerResult.success || workerResult.rawText) {
+          setLastResult(workerResult);
+          const msg = workerResult.success 
+            ? `⚠️ Placa: ${workerResult.validation.formatted} (${Math.round(localConfidence * 100)}% - sem validação externa)`
+            : `⚠️ Texto detectado: "${workerResult.rawText}" - Formato inválido`;
           setStatusMessage(msg);
-          if (!localResult.success) {
+          if (!workerResult.success) {
             setError('API de validação indisponível. Verifique o resultado manualmente.');
           }
-          return localResult;
+          return workerResult;
         }
         
         setStatusMessage('❌ Nenhuma placa detectada');
         setError('Nenhuma placa detectada e API de fallback indisponível.');
-        return localResult;
+        return workerResult;
       }
       
     } catch (err) {
@@ -284,26 +307,13 @@ export function usePlateRecognition(): UsePlateRecognitionReturn {
       setError(`Erro no processamento: ${errorMessage}`);
       setStatusMessage('❌ Erro no processamento');
       
-      return {
-        success: false,
-        rawText: '',
-        validation: {
-          isValid: false,
-          original: '',
-          corrected: '',
-          formatted: '',
-          format: 'unknown',
-          confidence: 0,
-        },
-        ocrConfidence: 0,
-        processingTimeMs: 0,
-      };
+      return createEmptyResult();
     } finally {
       if (currentAttempt === attemptRef.current) {
         setIsProcessing(false);
       }
     }
-  }, []);
+  }, [processPlate]);
 
   const reset = useCallback(() => {
     setIsProcessing(false);
@@ -317,8 +327,8 @@ export function usePlateRecognition(): UsePlateRecognitionReturn {
 
   const cleanup = useCallback(async () => {
     reset();
-    await terminateOCR();
-  }, [reset]);
+    terminate();
+  }, [reset, terminate]);
 
   return {
     isProcessing,
