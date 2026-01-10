@@ -301,13 +301,7 @@ async function detectPlateWithYOLO(
         h *= YOLO_INPUT_SIZE;
       }
       
-      // FILTRO ROI: Ignorar detecções no topo da imagem (timestamp da câmera)
-      const centerYRatio = cy / YOLO_INPUT_SIZE;
-      if (centerYRatio < 0.20) {
-        console.log(`⚠️ Detecção no topo da imagem (y=${(centerYRatio*100).toFixed(1)}%) - provavelmente timestamp`);
-        continue;
-      }
-      
+      // Área virtual já recorta a região - processar toda a imagem recebida
       console.log(`📍 Detecção: cx=${cx.toFixed(1)}, cy=${cy.toFixed(1)}, w=${w.toFixed(1)}, h=${h.toFixed(1)}, raw=${confidenceRaw.toFixed(3)}, conf=${(confidence*100).toFixed(1)}%`);
       
       if (confidence > bestConfidence) {
@@ -369,10 +363,11 @@ const EDGE_THRESHOLD = 30;
 const MIN_EDGE_DENSITY = 0.20;
 const MIN_CONTRAST_SCORE = 0.4;
 const MAX_SATURATION = 0.50;
-const MIN_Y_RATIO = 0.35; // Aumentado para ignorar topo da imagem
-const MAX_Y_RATIO = 0.85; // Reduzido para ignorar rodapé
-const MIN_X_RATIO = 0.20; // Foco no centro horizontal
-const MAX_X_RATIO = 0.80;
+// ROI: usar frame inteiro (já recortado pela área virtual)
+const MIN_Y_RATIO = 0.0;
+const MAX_Y_RATIO = 1.0;
+const MIN_X_RATIO = 0.0;
+const MAX_X_RATIO = 1.0;
 
 // Threshold de confiança para fallback
 const FALLBACK_CONFIDENCE_THRESHOLD = 0.60;
