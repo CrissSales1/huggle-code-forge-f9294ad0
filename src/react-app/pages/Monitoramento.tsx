@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Plus, Camera, CheckCircle, XCircle, Home, Edit2, Trash2, Car, Activity, HelpCircle, RotateCcw, Search, X, User } from 'lucide-react';
 import { useLPRDetections } from '@/react-app/hooks/useApi';
 import { supabase } from '@/integrations/supabase/client';
@@ -42,6 +42,18 @@ export default function Monitoramento() {
     detectionHistory,
     refetch
   } = useLPRDetections();
+
+  // v1.1.30: Debounce para evitar múltiplos refetches simultâneos
+  const lastRefetchTimeRef = useRef<number>(0);
+  const REFETCH_DEBOUNCE_MS = 2000; // Mínimo 2s entre refetches
+
+  const debouncedRefetch = useCallback(() => {
+    const now = Date.now();
+    if (now - lastRefetchTimeRef.current >= REFETCH_DEBOUNCE_MS) {
+      lastRefetchTimeRef.current = now;
+      refetch();
+    }
+  }, [refetch]);
 
   const carregarVeiculos = async () => {
     try {
@@ -144,7 +156,7 @@ export default function Monitoramento() {
         {/* Câmera - 3/5 da largura */}
         <div className="lg:col-span-3">
           <CameraMonitor 
-            onDetection={() => refetch()} 
+            onDetection={debouncedRefetch} 
             compact 
           />
         </div>

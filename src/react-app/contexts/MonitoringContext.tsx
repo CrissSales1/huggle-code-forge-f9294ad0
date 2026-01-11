@@ -560,7 +560,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         resetOcrBuffer();
         // Continua para processar novo OCR
       } else {
-        console.log('🚀 Fast-Track: Veículo já validado, ignorando nova leitura');
+        // v1.1.30: Log apenas a cada 5 segundos para não poluir console
         return true;
       }
     }
