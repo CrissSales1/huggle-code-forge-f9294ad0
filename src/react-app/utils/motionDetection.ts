@@ -1,6 +1,7 @@
 /**
  * Utilitário para detecção de movimento em área virtual do vídeo
  * Suporta área poligonal definida por pontos
+ * v1.1.28 - Fast-Track OCR Imediato (OCR inicia assim que movimento é detectado)
  */
 
 // Ponto relativo (0-1) no vídeo
@@ -368,7 +369,7 @@ export function compareFrames(
 const DETECTION_THRESHOLD = 0.15; // 15% de diferença = veículo presente
 const CLEAN_THRESHOLD = 0.05;     // 5% de diferença = área considerada limpa
 const AUTO_UPDATE_DELAY_MS = 10000; // 10 segundos limpa = atualiza referência
-const OCR_RETRY_DELAY_MS = 5000;  // 5 segundos entre re-tentativas de OCR
+const OCR_RETRY_DELAY_MS = 800;   // Fast-Track: 800ms entre tentativas para coleta de buffer
 
 /**
  * Classe para gerenciar detecção de movimento contínua
@@ -559,17 +560,20 @@ export class MotionDetector {
     // Determinar se deve tentar OCR
     let shouldAttemptOCR = false;
     
-    if (isStable && hasMotion) {
-      // Primeira tentativa ou re-tentativa após falha
-      if (!this.ocrAttempted) {
-        // Primeira tentativa
+    // Fast-Track v1.1.28: Começar OCR assim que movimento detectado (não esperar estabilizar)
+    // Isso permite coletar leituras para consistência temporal enquanto veículo se aproxima
+    if (hasMotion && !this.ocrSucceeded) {
+      // Permitir tentativa a cada OCR_RETRY_DELAY_MS para Fast-Track
+      const timeSinceLastAttempt = this.lastOcrAttemptTime > 0 
+        ? now - this.lastOcrAttemptTime 
+        : OCR_RETRY_DELAY_MS; // Primeira tentativa imediata
+      
+      if (timeSinceLastAttempt >= OCR_RETRY_DELAY_MS) {
         shouldAttemptOCR = true;
-      } else if (!this.ocrSucceeded && (now - this.lastOcrAttemptTime >= OCR_RETRY_DELAY_MS)) {
-        // Re-tentativa após 5 segundos se falhou
-        shouldAttemptOCR = true;
-        console.log('🔄 Re-tentando OCR após falha...');
+        if (!this.ocrAttempted) {
+          console.log('🚀 Fast-Track: Iniciando coleta OCR (movimento detectado)');
+        }
       }
-      // Se já teve sucesso, não tenta novamente
     }
     
     return { hasMotion, isStable, shouldAttemptOCR, motionPercent: diffPercent, shouldUpdateReference };
