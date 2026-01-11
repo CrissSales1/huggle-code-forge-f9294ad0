@@ -3,7 +3,7 @@
  * Move OCR (ONNX Runtime), detecção de placa e motion detection para thread separada
  * Evita bloqueio da UI durante processamento pesado
  * 
- * v1.1.27: Fix escala de confiança Fast-Track (0-1)
+ * v1.1.30: Debounce Refetch + Fast-Track Auto-Reset
  */
 
 import * as ort from 'onnxruntime-web';
