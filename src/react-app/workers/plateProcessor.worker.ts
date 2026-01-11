@@ -310,11 +310,11 @@ function resizeToTensorDirect(
 }
 
 /**
- * Pré-processa imagem para PaddleOCR v1.1.10
+ * Pré-processa imagem para PaddleOCR v1.1.11
  * - Histogram Equalization (força max=255)
- * - Resize DIRETO para tensor dinâmico (texto ocupa ~90% da largura)
+ * - Resize DIRETO para tensor dinâmico (min 160px para Seq Len >= 20)
  * - Sharpen após resize
- * - Normalização [0, 1] em ordem BGR (PaddlePaddle padrão)
+ * - Normalização [0, 1] em ordem RGB (ONNX padrão)
  */
 function preprocessForONNX(
   data: Uint8ClampedArray,
@@ -334,10 +334,10 @@ function preprocessForONNX(
   // 3. Garantir múltiplo de 32 (requisito de alguns modelos)
   tensorWidth = Math.ceil(tensorWidth / 32) * 32;
   
-  // Mínimo 96px (para placas muito pequenas), máximo 480px
-  tensorWidth = Math.max(96, Math.min(480, tensorWidth));
+  // Mínimo 160px para garantir Seq Len >= 20 (7 chars × 2 = 14 mínimo), máximo 480px
+  tensorWidth = Math.max(160, Math.min(480, tensorWidth));
   
-  console.log(`📐 Tensor dinâmico: ${srcWidth}x${srcHeight} → ${contentWidth}x${targetHeight} + margem → ${tensorWidth}x${targetHeight}`);
+  console.log(`📐 Tensor RGB dinâmico: ${srcWidth}x${srcHeight} → ${tensorWidth}x${targetHeight} (Seq Len ≈ ${Math.floor(tensorWidth / 8)})`);
   
   // 4. HISTOGRAM EQUALIZATION antes do resize (força max=255)
   const equalizedData = histogramEqualization(data, srcWidth, srcHeight);
@@ -348,7 +348,7 @@ function preprocessForONNX(
   // 6. SHARPEN após resize (separa caracteres)
   const sharpenedContent = sharpenImage(resizedContent, tensorWidth, targetHeight);
   
-  // 7. Converter para tensor CHW em ordem BGR (PaddlePaddle padrão!)
+  // 7. Converter para tensor CHW em ordem RGB (ONNX padrão!)
   const pixels = tensorWidth * targetHeight;
   const tensor = new Float32Array(3 * pixels);
   
@@ -357,10 +357,10 @@ function preprocessForONNX(
     const g = sharpenedContent[i * 4 + 1] / 255.0;
     const b = sharpenedContent[i * 4 + 2] / 255.0;
     
-    // BGR order (PaddlePaddle padrão - CRÍTICO!)
-    tensor[i] = b;                    // Canal 0 = Blue
+    // RGB order (ONNX padrão - formato correto!)
+    tensor[i] = r;                    // Canal 0 = Red
     tensor[pixels + i] = g;           // Canal 1 = Green
-    tensor[2 * pixels + i] = r;       // Canal 2 = Red
+    tensor[2 * pixels + i] = b;       // Canal 2 = Blue
   }
   
   // Debug: mostrar range do tensor
@@ -369,7 +369,7 @@ function preprocessForONNX(
     if (tensor[j] < minVal) minVal = tensor[j];
     if (tensor[j] > maxVal) maxVal = tensor[j];
   }
-  console.log(`📊 Tensor BGR [0, 1]: min=${minVal.toFixed(2)}, max=${maxVal.toFixed(2)}`);
+  console.log(`📊 Tensor RGB [0, 1]: min=${minVal.toFixed(2)}, max=${maxVal.toFixed(2)}`);
   
   return { tensor, width: tensorWidth, height: targetHeight };
 }
