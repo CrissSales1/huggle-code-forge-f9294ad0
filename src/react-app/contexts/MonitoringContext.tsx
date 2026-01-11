@@ -386,6 +386,32 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     recentPlatesRef.current.set(placa, Date.now());
   }, []);
   
+  // v1.1.39: Verificação ATÔMICA - check E mark em uma única operação
+  // Isso resolve a race condition onde duas validações podiam passar ao mesmo tempo
+  const checkAndMarkPlate = useCallback((placa: string): boolean => {
+    const now = Date.now();
+    
+    // Limpar placas antigas primeiro
+    for (const [plate, time] of recentPlatesRef.current.entries()) {
+      if (now - time >= COOLDOWN_MS) {
+        recentPlatesRef.current.delete(plate);
+      }
+    }
+    
+    // Verificar se já existe (ANTES de marcar)
+    const lastTime = recentPlatesRef.current.get(placa);
+    const wasRecent = lastTime !== undefined && (now - lastTime) < COOLDOWN_MS;
+    
+    // SEMPRE marcar (atualizar timestamp) - isso é a parte "atômica"
+    recentPlatesRef.current.set(placa, now);
+    
+    if (wasRecent) {
+      console.log(`⏳ Anti-Duplicata Atômico: ${placa} detectada há ${((now - lastTime!) / 1000).toFixed(1)}s (cooldown: ${COOLDOWN_MS / 1000}s)`);
+    }
+    
+    return wasRecent;
+  }, []);
+  
   // Fast-Track: Verificar consistência temporal do buffer OCR
   // v1.1.37: VOTAÇÃO PONDERADA POR CONFIANÇA
   const checkOcrConsistency = useCallback((plateText: string, confidence: number): { hasConsensus: boolean; matchCount: number } => {
@@ -707,16 +733,17 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         lastValidationTimeRef.current = Date.now();
         lastValidatedPlateRef.current = placa;
         
-        if (isPlateRecent(placa)) {
-          logger.log(`⏳ Placa ${placa} detectada recentemente, ignorando...`);
+        // v1.1.39: Verificação ATÔMICA - check AND mark em uma operação
+        // Isso resolve a race condition da v1.1.38
+        const wasAlreadyDetected = checkAndMarkPlate(placa);
+        if (wasAlreadyDetected) {
+          logger.log(`⏳ Placa ${placa} detectada recentemente (anti-duplicata atômico), ignorando...`);
           finishProcessingTimer();
           setStatus('monitoring');
           setStatusMessage('🟢 Monitorando...');
           motionDetectorRef.current.markOcrSuccess();
           return true;
         }
-        
-        markPlateDetected(placa);
         
         const { isMorador, casa } = await checkIfMorador(placa);
         
@@ -782,8 +809,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     virtualArea, 
     workerReady,
     processPlateWorker, 
-    isPlateRecent, 
-    markPlateDetected, 
+    checkAndMarkPlate,
     checkIfMorador, 
     checkIfVisitanteAtivo,
     saveDetection, 
