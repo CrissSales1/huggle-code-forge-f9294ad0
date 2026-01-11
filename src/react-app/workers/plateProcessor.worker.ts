@@ -251,11 +251,11 @@ function resizeToTensorDirect(
 }
 
 /**
- * Pré-processa imagem para PaddleOCR v1.1.14
+ * Pré-processa imagem para PaddleOCR v1.1.15
  * - Gamma Correction (suave, sem over-sharpening)
  * - Resize ESTICADO para 320x48 (Stretch to Fill)
  * - SEM Sharpen (causa artefatos F→E, 0→6)
- * - Normalização [0, 1] em ordem RGB (ONNX padrão)
+ * - Normalização [-1, 1] em ordem RGB (PaddleOCR padrão)
  */
 function preprocessForONNX(
   data: Uint8ClampedArray,
@@ -281,11 +281,12 @@ function preprocessForONNX(
   const pixels = targetWidth * targetHeight;
   const tensor = new Float32Array(3 * pixels);
   
-  // Preencher direto (RGB order)
+  // Preencher direto (RGB order) com normalização [-1, 1]
+  // Fórmula PaddleOCR: (pixel/255 - 0.5) / 0.5 = pixel/127.5 - 1
   for (let i = 0; i < pixels; i++) {
-    const r = resizedContent[i * 4] / 255.0;
-    const g = resizedContent[i * 4 + 1] / 255.0;
-    const b = resizedContent[i * 4 + 2] / 255.0;
+    const r = resizedContent[i * 4] / 127.5 - 1.0;
+    const g = resizedContent[i * 4 + 1] / 127.5 - 1.0;
+    const b = resizedContent[i * 4 + 2] / 127.5 - 1.0;
     
     tensor[i] = r;                     // Canal 0 = Red
     tensor[pixels + i] = g;            // Canal 1 = Green
@@ -298,7 +299,7 @@ function preprocessForONNX(
     if (tensor[j] < minVal) minVal = tensor[j];
     if (tensor[j] > maxVal) maxVal = tensor[j];
   }
-  console.log(`📊 Tensor RGB [0, 1]: min=${minVal.toFixed(2)}, max=${maxVal.toFixed(2)}`);
+  console.log(`📊 Tensor RGB [-1, 1]: min=${minVal.toFixed(2)}, max=${maxVal.toFixed(2)}`);
   console.log(`📊 Seq Len: 40 (ideal para 7 caracteres)`);
   
   return { tensor, width: targetWidth, height: targetHeight };
@@ -1843,4 +1844,4 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 };
 
 // Notificar que o worker está carregado
-console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.14 - Gamma + No Sharpen)');
+console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.15 - Norm [-1,1])');
