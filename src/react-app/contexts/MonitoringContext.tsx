@@ -383,6 +383,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   }, []);
   
   // Fast-Track: Verificar consistência temporal do buffer OCR
+  // v1.1.37: VOTAÇÃO PONDERADA POR CONFIANÇA
   const checkOcrConsistency = useCallback((plateText: string, confidence: number): { hasConsensus: boolean; matchCount: number } => {
     // Só aceita leituras com confiança mínima para o buffer
     if (confidence < MIN_CONFIDENCE_FOR_BUFFER) {
@@ -410,11 +411,41 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       ocrBufferRef.current.shift();
     }
     
-    // Conta quantas vezes a placa atual aparece no buffer
-    const matchCount = ocrBufferRef.current.filter(entry => entry.placa === plateText).length;
-    const hasConsensus = matchCount >= CONSISTENCY_THRESHOLD;
+    // v1.1.37: Agrupa por placa e calcula score ponderado (count × avgConf)
+    const voteMap = new Map<string, { count: number; totalConf: number; maxConf: number }>();
     
-    console.log(`🔄 Fast-Track Buffer: "${plateText}" (${(confidence * 100).toFixed(1)}%) aparece ${matchCount}/${OCR_BUFFER_SIZE} vezes (consenso=${hasConsensus ? '✅' : '❌'})`);
+    for (const entry of ocrBufferRef.current) {
+      const existing = voteMap.get(entry.placa) || { count: 0, totalConf: 0, maxConf: 0 };
+      voteMap.set(entry.placa, {
+        count: existing.count + 1,
+        totalConf: existing.totalConf + entry.confidence,
+        maxConf: Math.max(existing.maxConf, entry.confidence)
+      });
+    }
+    
+    // Encontra a placa com maior pontuação ponderada
+    let bestPlate = '';
+    let bestScore = 0;
+    
+    for (const [plate, votes] of voteMap) {
+      // Score = contagem × confiança média
+      const avgConf = votes.totalConf / votes.count;
+      const score = votes.count * avgConf;
+      
+      console.log(`   📊 ${plate}: ${votes.count}x, avg=${(avgConf * 100).toFixed(1)}%, max=${(votes.maxConf * 100).toFixed(1)}%, score=${score.toFixed(2)}`);
+      
+      if (score > bestScore) {
+        bestScore = score;
+        bestPlate = plate;
+      }
+    }
+    
+    // Consenso: placa atual é a melhor E tem >= CONSISTENCY_THRESHOLD leituras
+    const currentVotes = voteMap.get(plateText);
+    const matchCount = currentVotes?.count || 0;
+    const hasConsensus = plateText === bestPlate && matchCount >= CONSISTENCY_THRESHOLD;
+    
+    console.log(`🔄 Fast-Track Buffer: "${plateText}" bestScore=${bestScore.toFixed(2)} (consenso=${hasConsensus ? '✅' : '❌'})`);
     
     return { hasConsensus, matchCount };
   }, []);
