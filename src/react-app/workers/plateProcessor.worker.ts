@@ -184,81 +184,71 @@ async function initONNX(): Promise<void> {
   }
 }
 
-// NOTA v1.1.16: Gamma Correction REMOVIDO - escurecia demais placas em sombra (F→B, Z→8)
-// NOTA v1.1.14: Sharpen REMOVIDO - causava artefatos que confundiam F→E, 0→6
-// O PaddleOCR é robusto o suficiente para lidar com imagens "cruas"
+// NOTA v1.1.17: Gamma/Sharpen/resizeToTensorDirect REMOVIDOS
+// - Gamma escurecia demais placas em sombra (F→B, Z→8)
+// - Sharpen causava artefatos (F→E, 0→6)
+// - Novo pipeline usa Aspect Ratio + Padding + BGR
 
 /**
- * Resize direto usando OffscreenCanvas com interpolação de alta qualidade
- * Evita o problema de aliasing por duplo resize
- */
-function resizeToTensorDirect(
-  data: Uint8ClampedArray,
-  srcWidth: number,
-  srcHeight: number,
-  targetWidth: number,
-  targetHeight: number
-): Uint8ClampedArray {
-  // Criar OffscreenCanvas para resize de alta qualidade
-  const srcCanvas = new OffscreenCanvas(srcWidth, srcHeight);
-  const srcCtx = srcCanvas.getContext('2d', { alpha: false })!;
-  
-  // Desenhar dados de origem
-  const srcImageData = new ImageData(new Uint8ClampedArray(data), srcWidth, srcHeight);
-  srcCtx.putImageData(srcImageData, 0, 0);
-  
-  // Canvas de destino com interpolação alta
-  const dstCanvas = new OffscreenCanvas(targetWidth, targetHeight);
-  const dstCtx = dstCanvas.getContext('2d', { alpha: false })!;
-  
-  // CRÍTICO: Usar interpolação de alta qualidade do browser
-  dstCtx.imageSmoothingEnabled = true;
-  dstCtx.imageSmoothingQuality = 'high';
-  
-  // Desenhar DIRETO do original para o target - sem resize intermediário
-  dstCtx.drawImage(srcCanvas, 0, 0, srcWidth, srcHeight, 0, 0, targetWidth, targetHeight);
-  
-  // Extrair dados
-  const dstImageData = dstCtx.getImageData(0, 0, targetWidth, targetHeight);
-  return new Uint8ClampedArray(dstImageData.data);
-}
-
-/**
- * Pré-processa imagem para PaddleOCR v1.1.16
- * - SEM filtros (Gamma/Sharpen removidos - atrapalhavam em sombras)
- * - Resize ESTICADO para 320x48 (Stretch to Fill)
- * - Normalização [-1, 1] em ordem RGB (PaddleOCR padrão)
+ * Pré-processa imagem para PaddleOCR v1.1.17
+ * - Preserva Aspect Ratio (height=48, width=dinâmico, max 320)
+ * - Padding com cinza (127) para áreas vazias
+ * - Ordem BGR (padrão OpenCV/PaddleOCR)
+ * - Normalização [-1, 1]: (pixel/255 - 0.5) / 0.5
  */
 function preprocessForONNX(
   data: Uint8ClampedArray,
   srcWidth: number,
   srcHeight: number
 ): { tensor: Float32Array; width: number; height: number } {
-  // 1. LARGURA FIXA 320px para Seq Len = 40
   const targetWidth = 320;
   const targetHeight = OCR_INPUT_HEIGHT; // 48
   
-  // v1.1.16: SEM GAMMA - imagem crua funciona melhor para sombras
-  // O PaddleOCR foi treinado com imagens reais (ruído, sombra, etc)
-  console.log(`📐 Stretch to Fill (Clean): ${srcWidth}x${srcHeight} → ${targetWidth}x${targetHeight}`);
+  // 1. CALCULAR DIMENSÕES PRESERVANDO ASPECT RATIO
+  const ratio = srcWidth / srcHeight;
+  let newWidth = Math.round(targetHeight * ratio);
+  if (newWidth > targetWidth) newWidth = targetWidth; // Limite de segurança
   
-  // STRETCH TO FILL direto da imagem original (sem filtros)
-  const resizedContent = resizeToTensorDirect(data, srcWidth, srcHeight, targetWidth, targetHeight);
+  console.log(`📐 Aspect Ratio Preserve: ${srcWidth}x${srcHeight} → ${newWidth}x${targetHeight} (padding: ${targetWidth - newWidth}px)`);
   
-  // Criar tensor 320x48 e preencher com conteúdo
+  // 2. CRIAR CANVAS COM FUNDO CINZA (neutro para rede neural)
+  const processCanvas = new OffscreenCanvas(targetWidth, targetHeight);
+  const ctx = processCanvas.getContext('2d', { alpha: false })!;
+  
+  // Preencher com cinza médio (127) - valor neutro em [-1, 1] ≈ 0
+  ctx.fillStyle = '#7f7f7f';
+  ctx.fillRect(0, 0, targetWidth, targetHeight);
+  
+  // 3. CRIAR CANVAS TEMPORÁRIO COM IMAGEM ORIGINAL
+  const srcCanvas = new OffscreenCanvas(srcWidth, srcHeight);
+  const srcCtx = srcCanvas.getContext('2d', { alpha: false })!;
+  const srcImageData = srcCtx.createImageData(srcWidth, srcHeight);
+  srcImageData.data.set(data);
+  srcCtx.putImageData(srcImageData, 0, 0);
+  
+  // 4. DESENHAR IMAGEM PRESERVANDO PROPORÇÃO (alinhado à esquerda)
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(srcCanvas, 0, 0, srcWidth, srcHeight, 0, 0, newWidth, targetHeight);
+  
+  // 5. EXTRAIR DADOS E CRIAR TENSOR
+  const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
   const pixels = targetWidth * targetHeight;
   const tensor = new Float32Array(3 * pixels);
   
-  // Preencher direto (RGB order) com normalização [-1, 1]
-  // Fórmula PaddleOCR: (pixel/255 - 0.5) / 0.5 = pixel/127.5 - 1
+  // 6. NORMALIZAÇÃO [-1, 1] COM ORDEM BGR (não RGB!)
+  // Fórmula: (pixel/255 - 0.5) / 0.5 = pixel/127.5 - 1
   for (let i = 0; i < pixels; i++) {
-    const r = resizedContent[i * 4] / 127.5 - 1.0;
-    const g = resizedContent[i * 4 + 1] / 127.5 - 1.0;
-    const b = resizedContent[i * 4 + 2] / 127.5 - 1.0;
+    const r = imageData.data[i * 4];
+    const g = imageData.data[i * 4 + 1];
+    const b = imageData.data[i * 4 + 2];
     
-    tensor[i] = r;                     // Canal 0 = Red
-    tensor[pixels + i] = g;            // Canal 1 = Green
-    tensor[2 * pixels + i] = b;        // Canal 2 = Blue
+    // Canal 0 = BLUE (não Red!)
+    tensor[i] = b / 127.5 - 1.0;
+    // Canal 1 = GREEN
+    tensor[pixels + i] = g / 127.5 - 1.0;
+    // Canal 2 = RED (não Blue!)
+    tensor[2 * pixels + i] = r / 127.5 - 1.0;
   }
   
   // Debug: mostrar range do tensor
@@ -267,8 +257,11 @@ function preprocessForONNX(
     if (tensor[j] < minVal) minVal = tensor[j];
     if (tensor[j] > maxVal) maxVal = tensor[j];
   }
-  console.log(`📊 Tensor RGB [-1, 1]: min=${minVal.toFixed(2)}, max=${maxVal.toFixed(2)}`);
-  console.log(`📊 Seq Len: 40 (ideal para 7 caracteres)`);
+  console.log(`📊 Tensor BGR [-1, 1]: min=${minVal.toFixed(2)}, max=${maxVal.toFixed(2)}`);
+  
+  // Calcular seq_len baseado na largura real usada
+  const seqLen = Math.floor(newWidth / 8); // ~8px por passo temporal
+  console.log(`📊 Seq Len efetivo: ${seqLen} (baseado em ${newWidth}px de conteúdo)`);
   
   return { tensor, width: targetWidth, height: targetHeight };
 }
@@ -1812,4 +1805,4 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 };
 
 // Notificar que o worker está carregado
-console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.16 - Clean)');
+console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.17 - BGR + Aspect Ratio)');
