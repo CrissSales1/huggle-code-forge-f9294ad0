@@ -184,15 +184,15 @@ async function initONNX(): Promise<void> {
   }
 }
 
-// NOTA v1.1.18: Stretch to Fill + BGR
-// - Aspect Ratio reduz resolução horizontal (seq_len ~10 insuficiente para 7 chars)
-// - Stretch garante ~40 passos CTC para decodificação clara
+// v1.1.20: Center Crop + BGR + Stretch to Fill
+// - Center Crop vertical: remove 20% do topo e 10% da base (para-choque/grade)
+// - Stretch to Fill (320x48) para máxima resolução
 // - Mantém BGR e normalização [-1, 1] corretas
 
 /**
- * Pré-processa imagem para PaddleOCR v1.1.19 - Letterbox Resize
- * - Preserva Aspect Ratio (height=48px fixo, width proporcional)
- * - Padding com cinza (#7f7f7f) para áreas vazias à direita
+ * Pré-processa imagem para PaddleOCR v1.1.20 - Center Crop + Stretch
+ * - Tight Crop: Remove margem vertical (20% topo, 10% base)
+ * - Stretch to Fill (320x48) para máxima resolução horizontal
  * - Ordem BGR (padrão OpenCV/PaddleOCR)
  * - Normalização [-1, 1]: (pixel/255 - 0.5) / 0.5
  */
@@ -204,14 +204,17 @@ function preprocessForONNX(
   const targetWidth = 320;
   const targetHeight = OCR_INPUT_HEIGHT; // 48
   
-  // 1. CALCULAR DIMENSÕES PRESERVANDO ASPECT RATIO
-  const scale = targetHeight / srcHeight;
-  let newWidth = Math.round(srcWidth * scale);
+  // 1. TIGHT CROP VERTICAL (O Pulo do Gato)
+  // Remove o "lixo" vertical (para-choque, grade) para dar zoom no texto
+  const cropTopRatio = 0.20;  // Remove 20% do topo
+  const cropBottomRatio = 0.10; // Remove 10% da base
   
-  // Trava de segurança: Se a placa for muito comprida, limita a 320
-  if (newWidth > targetWidth) newWidth = targetWidth;
+  const cropTop = Math.round(srcHeight * cropTopRatio);
+  const cropBottom = Math.round(srcHeight * cropBottomRatio);
+  const usefulHeight = srcHeight - cropTop - cropBottom;
   
-  console.log(`📐 Letterbox Resize: ${srcWidth}x${srcHeight} → ${newWidth}x${targetHeight} (padding: ${targetWidth - newWidth}px)`);
+  console.log(`📐 Center Crop: ${srcWidth}x${srcHeight} → crop top=${cropTop}px, bottom=${cropBottom}px → útil=${srcWidth}x${usefulHeight}px`);
+  console.log(`📐 Stretch to Fill: ${srcWidth}x${usefulHeight} → ${targetWidth}x${targetHeight}`);
   
   // 2. CRIAR CANVAS TEMPORÁRIO COM IMAGEM ORIGINAL
   const srcCanvas = new OffscreenCanvas(srcWidth, srcHeight);
@@ -220,50 +223,50 @@ function preprocessForONNX(
   srcImageData.data.set(data);
   srcCtx.putImageData(srcImageData, 0, 0);
   
-  // 3. CRIAR CANVAS DE DESTINO COM FUNDO CINZA (PADDING NEUTRO)
+  // 3. CRIAR CANVAS DE DESTINO E APLICAR CROP + STRETCH
   const processCanvas = new OffscreenCanvas(targetWidth, targetHeight);
   const ctx = processCanvas.getContext('2d', { alpha: false })!;
   
-  // Preencher com cinza médio (#7f7f7f) - valor neutro para a rede neural
-  ctx.fillStyle = '#7f7f7f';
-  ctx.fillRect(0, 0, targetWidth, targetHeight);
-  
-  // 4. DESENHAR IMAGEM ALINHADA À ESQUERDA (x=0)
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(srcCanvas, 0, 0, srcWidth, srcHeight, 0, 0, newWidth, targetHeight);
   
-  // 5. EXTRAIR DADOS E CRIAR TENSOR
+  // Desenhar apenas a parte útil da imagem (sem para-choque)
+  // Source: Pega só o miolo da placa (y=cropTop, height=usefulHeight)
+  // Destino: Enche o tensor 320x48
+  ctx.drawImage(
+    srcCanvas, 
+    0, cropTop, srcWidth, usefulHeight,  // Source: área útil
+    0, 0, targetWidth, targetHeight       // Destino: 320x48
+  );
+  
+  // 4. EXTRAIR DADOS E CRIAR TENSOR
   const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
   const pixels = targetWidth * targetHeight;
   const tensor = new Float32Array(3 * pixels);
   
-  // 6. NORMALIZAÇÃO [-1, 1] COM ORDEM BGR (não RGB!)
+  // 5. NORMALIZAÇÃO [-1, 1] COM ORDEM BGR (não RGB!)
   // Fórmula: (pixel/255 - 0.5) / 0.5
   for (let i = 0; i < pixels; i++) {
     const r = imageData.data[i * 4];
     const g = imageData.data[i * 4 + 1];
     const b = imageData.data[i * 4 + 2];
     
-    // Canal 0 = BLUE (não Red!)
-    tensor[i] = ((b / 255.0) - 0.5) / 0.5;
-    // Canal 1 = GREEN
-    tensor[pixels + i] = ((g / 255.0) - 0.5) / 0.5;
-    // Canal 2 = RED (não Blue!)
+    // Canal 0: Blue
+    tensor[0 * pixels + i] = ((b / 255.0) - 0.5) / 0.5;
+    // Canal 1: Green
+    tensor[1 * pixels + i] = ((g / 255.0) - 0.5) / 0.5;
+    // Canal 2: Red
     tensor[2 * pixels + i] = ((r / 255.0) - 0.5) / 0.5;
   }
   
-  // Debug: mostrar range do tensor e seq len efetivo
+  // Debug: mostrar range do tensor
   let minVal = Infinity, maxVal = -Infinity;
   for (let j = 0; j < tensor.length; j++) {
     if (tensor[j] < minVal) minVal = tensor[j];
     if (tensor[j] > maxVal) maxVal = tensor[j];
   }
   console.log(`📊 Tensor BGR [-1, 1]: min=${minVal.toFixed(2)}, max=${maxVal.toFixed(2)}`);
-  
-  // Seq len baseado na largura real do conteúdo (não do padding)
-  const effectiveSeqLen = Math.floor(newWidth / 8);
-  console.log(`📊 Seq Len efetivo: ${effectiveSeqLen} (baseado em ${newWidth}px de conteúdo)`);
+  console.log(`📊 Seq Len: 40 (320px / 8px por passo) - Full resolution`);
   
   return { tensor, width: targetWidth, height: targetHeight };
 }
@@ -1807,4 +1810,4 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 };
 
 // Notificar que o worker está carregado
-console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.19 - Letterbox Resize)');
+console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.20 - Center Crop + Stretch)');
