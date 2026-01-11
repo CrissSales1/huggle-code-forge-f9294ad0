@@ -4,25 +4,26 @@
  */
 
 // Caracteres que são frequentemente confundidos pelo OCR
+// v1.1.38: OCR_CORRECTIONS com confusões 0↔6 adicionadas
 const OCR_CORRECTIONS: Record<string, string[]> = {
   // Números → possíveis confusões
-  '0': ['O', 'D', 'Q', 'C'],
+  '0': ['O', 'D', 'Q', 'C', '6'],       // v1.1.38: adicionado '6'
   '1': ['I', 'L', 'T', '7', '|'],
   '2': ['Z', '7'],
   '3': ['E', '8'],
   '4': ['A', 'H'],
   '5': ['S', '6'],
-  '6': ['G', 'B', '5'],
+  '6': ['G', 'B', '5', '0', '9'],       // v1.1.38: adicionado '0' e '9'
   '7': ['T', 'Y', '1', '2'],
-  '8': ['B', '3'],
-  '9': ['G', 'Q', 'P'],
+  '8': ['B', '3', '0'],                  // v1.1.38: adicionado '0'
+  '9': ['G', 'Q', 'P', '6'],             // v1.1.38: adicionado '6'
   
   // Letras → possíveis confusões
   'A': ['4', 'H'],
   'B': ['8', '6', '3'],
   'C': ['0', 'G', '('],
   'D': ['0', 'O'],
-  'E': ['3', 'F'],
+  'E': ['3', 'F', 'B'],                  // v1.1.38: adicionado 'B'
   'F': ['E', 'P', 'T'],
   'G': ['6', '9', 'C', '0'],
   'H': ['4', 'N', 'M'],
@@ -44,24 +45,27 @@ const OCR_CORRECTIONS: Record<string, string[]> = {
   'Z': ['2', '7'],
 };
 
-// Mapeamento de caracteres visualmente similares (para correção agressiva)
+// v1.1.38: Mapeamento de caracteres visualmente similares (para correção agressiva)
+// Inclui confusões 0↔6↔9 e E↔B para melhor matching no banco
 const VISUAL_SIMILAR: Record<string, string[]> = {
   // Muito similares - altíssima confusão
   'D': ['0', 'O', 'Q'],
-  'O': ['0', 'D', 'Q'],
-  '0': ['O', 'D', 'Q'],
+  'O': ['0', 'D', 'Q', '6'],             // v1.1.38: adicionado '6'
+  '0': ['O', 'D', 'Q', '6', '8'],        // v1.1.38: adicionado '6' e '8'
   '1': ['I', 'L', '7', 'T', '|'],
   'I': ['1', 'L', '|'],
   '4': ['A', 'H'],
   'A': ['4', 'H'],
-  '8': ['B', '3'],
-  'B': ['8', '3', '6'],
-  '5': ['S'],
+  '8': ['B', '3', '0'],                   // v1.1.38: adicionado '0'
+  'B': ['8', '3', '6', 'E'],              // v1.1.38: adicionado 'E'
+  '5': ['S', '6'],                        // v1.1.38: adicionado '6'
   'S': ['5'],
-  '6': ['G', 'B'],
-  'G': ['6', '9'],
+  '6': ['G', 'B', '0', '9', '5'],         // v1.1.38: adicionado '0', '9', '5'
+  'G': ['6', '9', '0'],                   // v1.1.38: adicionado '0'
+  '9': ['G', '6', '0'],                   // v1.1.38: adicionado '6' e '0'
   '2': ['Z'],
   'Z': ['2'],
+  'E': ['3', 'B', 'F'],                   // v1.1.38: adicionado 'B' e 'F'
   // Confusões específicas do caso UFHJ -> DFJ
   'U': ['0', 'O', 'D', 'V'],
   'F': ['E', 'P', 'T'],
@@ -243,8 +247,9 @@ export interface PlateValidationResult {
 
 /**
  * Gera variações agressivas baseadas em similaridade visual
+ * v1.1.38: Exportado para uso na busca de moradores com confusões 0↔6
  */
-function generateAggressiveVariations(plate: string): string[] {
+export function generateAggressiveVariations(plate: string): string[] {
   const variations = new Set<string>();
   const chars = plate.split('');
   
