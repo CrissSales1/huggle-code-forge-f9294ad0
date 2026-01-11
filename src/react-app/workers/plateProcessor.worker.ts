@@ -184,15 +184,16 @@ async function initONNX(): Promise<void> {
   }
 }
 
-// v1.1.23: Center Crop + Padding "Emagrecido" + Heurística de Homoglifos
+// v1.1.24: Center Crop + Padding "Emagrecido" + Heurística + Remoção Ruído de Borda
 // - Center Crop vertical: 15% topo, 5% base (preserva base dos caracteres)
 // - Padding horizontal: 260px útil centralizado em 320px (30px margem cada lado)
 // - SEM contraste artificial (evita saturação e engrossamento)
 // - Temperature Scaling: x10 no softmax para confiança calibrada
 // - Heurística pós-OCR para corrigir confusões de caracteres (0↔O, 3↔J, etc.)
+// - Remoção de ruído de borda: remove caractere fantasma no início (ex: "BFC..." → "FC...")
 
 /**
- * Pré-processa imagem para PaddleOCR v1.1.23
+ * Pré-processa imagem para PaddleOCR v1.1.24
  * - Tight Crop: Remove margem vertical (15% topo, 5% base)
  * - Padding Horizontal: 260px útil centralizado (30px margem cada lado)
  * - Ordem BGR (padrão OpenCV/PaddleOCR)
@@ -369,13 +370,27 @@ function decodeCTC(output: Float32Array, outputShape: readonly number[]): { text
  * Limpa ruído e garante máximo 7 caracteres
  */
 function heuristicCorrection(text: string): string {
-  // 1. LIMPAR - Remove caracteres não-alfanuméricos e converte para maiúsculo
+  // 1. LIMPEZA BÁSICA - Remove caracteres não-alfanuméricos e converte para maiúsculo
   let clean = text.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+  
+  // 2. REMOÇÃO DE RUÍDO DE BORDA (Ex: "BFC2846" -> "FC2846")
+  // Se tiver 8+ chars, e removendo o primeiro parece uma placa válida (3 letras no início)
+  if (clean.length > 7) {
+    const withoutFirst = clean.substring(1);
+    // Regex: 3 letras no começo (padrão de placa brasileira)
+    if (/^[A-Z]{3}/.test(withoutFirst)) {
+      console.log(`🔧 Ruído de borda removido: '${clean[0]}' (${clean} → ${withoutFirst})`);
+      clean = withoutFirst;
+    }
+  }
+  
+  // Garante tamanho máximo de 7 (corta o final se sobrar)
+  clean = clean.substring(0, 7);
   
   // Se muito curto, retornar como está
   if (clean.length < 3) return clean;
   
-  // 2. MAPEAMENTOS DE CORREÇÃO
+  // 3. MAPEAMENTOS DE CORREÇÃO (Homoglifos)
   // Número → Letra (para posições 0, 1, 2 que devem ser letras)
   const numToLetter: Record<string, string> = {
     '0': 'O', '1': 'I', '2': 'Z', '3': 'J', '4': 'A', '5': 'S', '6': 'G', '7': 'T', '8': 'B'
@@ -388,7 +403,7 @@ function heuristicCorrection(text: string): string {
   
   const chars = clean.split('');
   
-  // 3. CORREÇÃO BASEADA NA POSIÇÃO (Brasil: LLL-NLNN Mercosul ou LLL-NNNN antiga)
+  // 4. CORREÇÃO BASEADA NA POSIÇÃO (Brasil: LLL-NLNN Mercosul ou LLL-NNNN antiga)
   
   // Posições 0, 1, 2: SEMPRE letras
   for (let i = 0; i < 3 && i < chars.length; i++) {
@@ -404,36 +419,17 @@ function heuristicCorrection(text: string): string {
     chars[3] = letterToNum[chars[3]];
   }
   
-  // Detectar formato: Mercosul tem LETRA na posição 4, antiga tem NÚMERO
-  const isMercosul = chars.length > 4 && /[A-Z]/.test(chars[4]);
+  // Posição 4: Mercosul=Letra, Antiga=Número (deixamos o OCR decidir)
   
-  if (isMercosul) {
-    // Mercosul: ABC1D23 - posição 4 é LETRA, posições 5,6 são NÚMEROS
-    // Posição 4: manter como letra (converter número se necessário)
-    if (chars[4] && /[0-9]/.test(chars[4]) && numToLetter[chars[4]]) {
-      console.log(`🔧 Correção pos 4 (Mercosul): '${chars[4]}' → '${numToLetter[chars[4]]}' (número→letra)`);
-      chars[4] = numToLetter[chars[4]];
-    }
-    
-    // Posições 5, 6: SEMPRE números
-    for (let i = 5; i <= 6 && i < chars.length; i++) {
-      if (/[A-Z]/.test(chars[i]) && letterToNum[chars[i]]) {
-        console.log(`🔧 Correção pos ${i} (Mercosul): '${chars[i]}' → '${letterToNum[chars[i]]}' (letra→número)`);
-        chars[i] = letterToNum[chars[i]];
-      }
-    }
-  } else {
-    // Formato antigo: ABC-1234 - posições 3,4,5,6 são TODAS números
-    for (let i = 3; i <= 6 && i < chars.length; i++) {
-      if (/[A-Z]/.test(chars[i]) && letterToNum[chars[i]]) {
-        console.log(`🔧 Correção pos ${i} (antiga): '${chars[i]}' → '${letterToNum[chars[i]]}' (letra→número)`);
-        chars[i] = letterToNum[chars[i]];
-      }
+  // Posições 5, 6: SEMPRE números
+  for (let i = 5; i <= 6 && i < chars.length; i++) {
+    if (/[A-Z]/.test(chars[i]) && letterToNum[chars[i]]) {
+      console.log(`🔧 Correção pos ${i}: '${chars[i]}' → '${letterToNum[chars[i]]}' (letra→número)`);
+      chars[i] = letterToNum[chars[i]];
     }
   }
   
-  // 4. LIMITAR A 7 CARACTERES (ignorar ruído extra)
-  return chars.join('').substring(0, 7);
+  return chars.join('');
 }
 
 /**
@@ -1851,4 +1847,4 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 };
 
 // Notificar que o worker está carregado
-console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.23 - Padding Emagrecido + Heurística Homoglifos)');
+console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.24 - Remoção Ruído de Borda)');
