@@ -185,94 +185,35 @@ async function initONNX(): Promise<void> {
 }
 
 /**
- * Histogram Equalization Global v1.1.9
- * Garante que o pixel mais claro seja 255 antes da normalização
- * Resolve o problema de tensor muito escuro (max=0.18 ao invés de ~1.0)
+ * Gamma Correction v1.1.14
+ * Alternativa mais suave ao Histogram EQ
+ * gamma < 1.0 escurece midtones (realça letras pretas em fundo branco)
+ * gamma > 1.0 clareia midtones
  */
-function histogramEqualization(data: Uint8ClampedArray, width: number, height: number): Uint8ClampedArray {
+function gammaCorrection(data: Uint8ClampedArray, gamma: number = 0.8): Uint8ClampedArray {
   const result = new Uint8ClampedArray(data);
-  const numPixels = width * height;
   
-  // Calcular histograma (usando luminância)
-  const histogram = new Array(256).fill(0);
-  for (let i = 0; i < data.length; i += 4) {
-    const lum = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
-    histogram[lum]++;
-  }
-  
-  // Calcular CDF (Cumulative Distribution Function)
-  const cdf = new Array(256).fill(0);
-  cdf[0] = histogram[0];
-  for (let i = 1; i < 256; i++) {
-    cdf[i] = cdf[i - 1] + histogram[i];
-  }
-  
-  // Encontrar CDF mínimo (primeiro valor não-zero)
-  let cdfMin = 0;
+  // Criar lookup table para gamma (mais eficiente que calcular por pixel)
+  const lut = new Uint8Array(256);
+  const invGamma = 1.0 / gamma;
   for (let i = 0; i < 256; i++) {
-    if (cdf[i] > 0) {
-      cdfMin = cdf[i];
-      break;
-    }
+    lut[i] = Math.round(255 * Math.pow(i / 255, invGamma));
   }
   
-  // Criar lookup table para equalização
-  const lut = new Array(256);
-  for (let i = 0; i < 256; i++) {
-    lut[i] = Math.round(((cdf[i] - cdfMin) / (numPixels - cdfMin)) * 255);
-  }
-  
-  // Aplicar equalização mantendo proporção RGB
+  // Aplicar gamma a cada pixel
   for (let i = 0; i < data.length; i += 4) {
-    const r = data[i], g = data[i + 1], b = data[i + 2];
-    const lum = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
-    const newLum = lut[lum];
-    
-    // Escalar RGB proporcionalmente (evitar divisão por zero)
-    const scale = lum > 0 ? newLum / lum : 1;
-    result[i] = Math.min(255, Math.round(r * scale));
-    result[i + 1] = Math.min(255, Math.round(g * scale));
-    result[i + 2] = Math.min(255, Math.round(b * scale));
-    result[i + 3] = 255;
+    result[i] = lut[data[i]];         // R
+    result[i + 1] = lut[data[i + 1]]; // G
+    result[i + 2] = lut[data[i + 2]]; // B
+    result[i + 3] = 255;              // A
   }
   
-  console.log(`📊 Histogram EQ: lut[128]=${lut[128]}, lut[200]=${lut[200]}, lut[255]=${lut[255]}`);
+  console.log(`📊 Gamma Correction: γ=${gamma}, lut[128]=${lut[128]}, lut[200]=${lut[200]}`);
   return result;
 }
 
-/**
- * Sharpening leve para separar caracteres que estão "grudados"
- * Aplicado após resize para melhorar definição
- */
-function sharpenImage(data: Uint8ClampedArray, width: number, height: number): Uint8ClampedArray {
-  const result = new Uint8ClampedArray(data);
-  
-  // Kernel de sharpening leve (menos agressivo para evitar ruído)
-  // Centro 3, vizinhos -0.5 = realce moderado
-  const kernel = [
-    0, -0.5, 0,
-    -0.5, 3, -0.5,
-    0, -0.5, 0
-  ];
-  
-  for (let y = 1; y < height - 1; y++) {
-    for (let x = 1; x < width - 1; x++) {
-      for (let c = 0; c < 3; c++) {
-        let sum = 0;
-        for (let ky = -1; ky <= 1; ky++) {
-          for (let kx = -1; kx <= 1; kx++) {
-            const idx = ((y + ky) * width + (x + kx)) * 4 + c;
-            sum += data[idx] * kernel[(ky + 1) * 3 + (kx + 1)];
-          }
-        }
-        result[(y * width + x) * 4 + c] = Math.max(0, Math.min(255, Math.round(sum)));
-      }
-    }
-  }
-  
-  console.log(`🔪 Sharpen aplicado`);
-  return result;
-}
+// NOTA v1.1.14: Sharpen REMOVIDO - causava artefatos que confundiam F→E, 0→6
+// O stretch 320x48 já cria bordas suficientemente definidas
 
 /**
  * Resize direto usando OffscreenCanvas com interpolação de alta qualidade
@@ -310,10 +251,10 @@ function resizeToTensorDirect(
 }
 
 /**
- * Pré-processa imagem para PaddleOCR v1.1.13
- * - Histogram Equalization (força max=255)
+ * Pré-processa imagem para PaddleOCR v1.1.14
+ * - Gamma Correction (suave, sem over-sharpening)
  * - Resize ESTICADO para 320x48 (Stretch to Fill)
- * - Sharpen após resize
+ * - SEM Sharpen (causa artefatos F→E, 0→6)
  * - Normalização [0, 1] em ordem RGB (ONNX padrão)
  */
 function preprocessForONNX(
@@ -325,28 +266,26 @@ function preprocessForONNX(
   const targetWidth = 320;
   const targetHeight = OCR_INPUT_HEIGHT; // 48
   
-  // 2. HISTOGRAM EQUALIZATION antes do resize (força max=255)
-  const equalizedData = histogramEqualization(data, srcWidth, srcHeight);
+  // 2. GAMMA CORRECTION (γ=0.8 escurece midtones, realça letras)
+  // Substitui HistogramEQ que era muito agressivo
+  const correctedData = gammaCorrection(data, 0.8);
   
   // 3. STRETCH TO FILL - Esticar para ocupar TODO o tensor 320x48
-  // Isso distorce os caracteres para o olho humano, mas para o CTC é ideal
-  // pois cada caractere ocupa ~45px (320/7 = 45) em vez de ~12px
   console.log(`📐 Stretch to Fill: ${srcWidth}x${srcHeight} → ${targetWidth}x${targetHeight} (100% ocupação)`);
   
-  const resizedContent = resizeToTensorDirect(equalizedData, srcWidth, srcHeight, targetWidth, targetHeight);
+  const resizedContent = resizeToTensorDirect(correctedData, srcWidth, srcHeight, targetWidth, targetHeight);
   
-  // 4. SHARPEN após resize (separa caracteres)
-  const sharpenedContent = sharpenImage(resizedContent, targetWidth, targetHeight);
+  // 4. NOTA: Sharpen REMOVIDO em v1.1.14 (causava F→E, 0→6)
   
-  // 5. Criar tensor 320x48 e preencher com conteúdo (sem padding!)
+  // 5. Criar tensor 320x48 e preencher com conteúdo
   const pixels = targetWidth * targetHeight;
   const tensor = new Float32Array(3 * pixels);
   
   // Preencher direto (RGB order)
   for (let i = 0; i < pixels; i++) {
-    const r = sharpenedContent[i * 4] / 255.0;
-    const g = sharpenedContent[i * 4 + 1] / 255.0;
-    const b = sharpenedContent[i * 4 + 2] / 255.0;
+    const r = resizedContent[i * 4] / 255.0;
+    const g = resizedContent[i * 4 + 1] / 255.0;
+    const b = resizedContent[i * 4 + 2] / 255.0;
     
     tensor[i] = r;                     // Canal 0 = Red
     tensor[pixels + i] = g;            // Canal 1 = Green
@@ -1904,4 +1843,4 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 };
 
 // Notificar que o worker está carregado
-console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.13 - Stretch to Fill)');
+console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.14 - Gamma + No Sharpen)');
