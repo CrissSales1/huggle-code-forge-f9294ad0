@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { logger } from '@/react-app/utils/logger';
 import type {
   CadastroVisitanteType,
   VisitanteAtivo,
@@ -855,12 +856,35 @@ export function useLPRDetections() {
         },
         (payload) => {
           if (payload.eventType === 'INSERT') {
-            console.log('Nova detecção recebida via Realtime:', payload.new);
+            logger.log('Nova detecção recebida via Realtime:', payload.new);
             const novaDeteccao = mapDetectionData(payload.new);
             setLatestDetection(novaDeteccao);
-            setDetectionHistory(prev => [novaDeteccao, ...prev.slice(0, 9)]);
+            // v1.1.40: Deduplicação - verificar se já existe no histórico (evita duplicata com estado local)
+            setDetectionHistory(prev => {
+              // Verificar se já existe detecção com mesmo id OU (mesma placa + timestamp próximo)
+              const isDuplicate = prev.some(det => {
+                if (!det || !novaDeteccao) return false;
+                // Match por ID
+                if (det.id === novaDeteccao.id) return true;
+                // Match por placa + timestamp (dentro de 5 segundos)
+                if (det.placa === novaDeteccao.placa) {
+                  const timeDiff = Math.abs(
+                    new Date(det.timestamp).getTime() - new Date(novaDeteccao.timestamp).getTime()
+                  );
+                  if (timeDiff < 5000) return true;
+                }
+                return false;
+              });
+              
+              if (isDuplicate) {
+                logger.log('🔄 Realtime: Ignorando duplicata já no histórico:', novaDeteccao?.placa);
+                return prev;
+              }
+              
+              return [novaDeteccao, ...prev.slice(0, 9)];
+            });
           } else if (payload.eventType === 'UPDATE') {
-            console.log('Detecção atualizada via Realtime:', payload.new);
+            logger.log('Detecção atualizada via Realtime:', payload.new);
             const atualizada = mapDetectionData(payload.new);
             // Atualizar o item no histórico
             setDetectionHistory(prev => 
