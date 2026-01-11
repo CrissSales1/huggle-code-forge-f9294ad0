@@ -3,7 +3,7 @@
  * Move OCR (ONNX Runtime), detecção de placa e motion detection para thread separada
  * Evita bloqueio da UI durante processamento pesado
  * 
- * v1.1.30: Debounce Refetch + Fast-Track Auto-Reset
+ * v1.1.31: Filtro Anti-Falso-Positivo (bloqueia textos de câmera como "ENTRADA VEICULOS")
  */
 
 import * as ort from 'onnxruntime-web';
@@ -101,6 +101,43 @@ let modelFailed = false; // Marca falha permanente para evitar loop infinito
 const YOLO_INPUT_SIZE = 640;
 const YOLO_CONFIDENCE_THRESHOLD = 0.6;
 const YOLO_MIN_RAW_CONFIDENCE = 0.5;
+
+// ============ FILTRO ANTI-FALSO-POSITIVO ============
+
+// Palavras que indicam que o OCR leu texto da câmera/ambiente, não uma placa
+const FORBIDDEN_WORDS = [
+  'ENTRADA', 'SAIDA', 'VEICULO', 'VEICULOS', 'CAMERA', 'PORTARIA',
+  'ESTACIONAMENTO', 'CONDOMINIO', 'RESIDENCIAL', 'COMERCIAL', 'GARAGEM',
+  'PORTAO', 'ACESSO', 'VISITANTE', 'VISITANTES', 'MORADOR', 'MORADORES',
+  'PROIBIDO', 'PERMITIDO', 'VELOCIDADE', 'PARE', 'ATENCAO', 'CUIDADO',
+  'NTVEICU', 'NTVEICULOS', 'ENTVEICULOS', 'SAIDAVEICULOS'
+];
+
+/**
+ * Verifica se o texto OCR é um falso positivo (texto de câmera/ambiente)
+ * Retorna true se for texto proibido (não é placa)
+ */
+function isForbiddenText(rawText: string): boolean {
+  if (!rawText || rawText.length < 3) return false;
+  
+  const upperText = rawText.toUpperCase().replace(/[^A-Z]/g, '');
+  
+  // Verifica se contém palavras proibidas
+  for (const word of FORBIDDEN_WORDS) {
+    if (upperText.includes(word) || word.includes(upperText)) {
+      console.log(`🚫 OCR: Texto proibido detectado, ignorando: "${rawText}" (match: ${word})`);
+      return true;
+    }
+  }
+  
+  // Texto muito longo para ser placa (placas têm 7 caracteres)
+  if (upperText.length > 10) {
+    console.log(`🚫 OCR: Texto muito longo para ser placa, ignorando: "${rawText}" (${upperText.length} chars)`);
+    return true;
+  }
+  
+  return false;
+}
 
 // ============ FUNÇÕES ONNX OCR ============
 
@@ -1727,6 +1764,27 @@ async function processPlate(
     );
     
     self.postMessage({ type: 'PROGRESS', payload: { stage: 'Validando...', progress: 0.8 } });
+    
+    // 3.5. Filtrar falsos positivos (texto de câmera/ambiente)
+    if (isForbiddenText(rawText)) {
+      const processingTimeMs = performance.now() - startTime;
+      return {
+        success: false,
+        rawText,
+        validation: {
+          isValid: false,
+          original: rawText,
+          corrected: '',
+          formatted: '',
+          format: 'unknown',
+          confidence: 0,
+        },
+        ocrConfidence: 0,
+        processingTimeMs,
+        usedFallback: false,
+        usedYolo,
+      };
+    }
     
     // 4. Validar e corrigir placa
     const validation = validateAndCorrectPlate(rawText);
