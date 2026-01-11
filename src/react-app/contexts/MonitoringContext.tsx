@@ -390,6 +390,18 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       return { hasConsensus: false, matchCount: 0 };
     }
     
+    // v1.1.34: Se a placa for DIFERENTE da última validada, resetar buffer
+    // Isso resolve o problema de carros que saem e outros entram imediatamente sem queda de movimento
+    if (fastTrackValidatedRef.current && lastValidatedPlateRef.current) {
+      if (plateText !== lastValidatedPlateRef.current) {
+        console.log(`🔄 Fast-Track: Placa diferente detectada (${plateText} != ${lastValidatedPlateRef.current}), resetando buffer para novo veículo`);
+        ocrBufferRef.current = [];
+        fastTrackValidatedRef.current = false;
+        // NÃO reseta noMotionCounterRef - movimento continua
+        // NÃO reseta lastValidatedPlateRef - será atualizado quando o novo veículo for validado
+      }
+    }
+    
     // Adiciona ao buffer (FIFO)
     ocrBufferRef.current.push({ placa: plateText, confidence, timestamp: Date.now() });
     
