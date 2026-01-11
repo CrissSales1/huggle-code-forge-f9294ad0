@@ -184,36 +184,9 @@ async function initONNX(): Promise<void> {
   }
 }
 
-/**
- * Gamma Correction v1.1.14
- * Alternativa mais suave ao Histogram EQ
- * gamma < 1.0 escurece midtones (realça letras pretas em fundo branco)
- * gamma > 1.0 clareia midtones
- */
-function gammaCorrection(data: Uint8ClampedArray, gamma: number = 0.8): Uint8ClampedArray {
-  const result = new Uint8ClampedArray(data);
-  
-  // Criar lookup table para gamma (mais eficiente que calcular por pixel)
-  const lut = new Uint8Array(256);
-  const invGamma = 1.0 / gamma;
-  for (let i = 0; i < 256; i++) {
-    lut[i] = Math.round(255 * Math.pow(i / 255, invGamma));
-  }
-  
-  // Aplicar gamma a cada pixel
-  for (let i = 0; i < data.length; i += 4) {
-    result[i] = lut[data[i]];         // R
-    result[i + 1] = lut[data[i + 1]]; // G
-    result[i + 2] = lut[data[i + 2]]; // B
-    result[i + 3] = 255;              // A
-  }
-  
-  console.log(`📊 Gamma Correction: γ=${gamma}, lut[128]=${lut[128]}, lut[200]=${lut[200]}`);
-  return result;
-}
-
+// NOTA v1.1.16: Gamma Correction REMOVIDO - escurecia demais placas em sombra (F→B, Z→8)
 // NOTA v1.1.14: Sharpen REMOVIDO - causava artefatos que confundiam F→E, 0→6
-// O stretch 320x48 já cria bordas suficientemente definidas
+// O PaddleOCR é robusto o suficiente para lidar com imagens "cruas"
 
 /**
  * Resize direto usando OffscreenCanvas com interpolação de alta qualidade
@@ -251,10 +224,9 @@ function resizeToTensorDirect(
 }
 
 /**
- * Pré-processa imagem para PaddleOCR v1.1.15
- * - Gamma Correction (suave, sem over-sharpening)
+ * Pré-processa imagem para PaddleOCR v1.1.16
+ * - SEM filtros (Gamma/Sharpen removidos - atrapalhavam em sombras)
  * - Resize ESTICADO para 320x48 (Stretch to Fill)
- * - SEM Sharpen (causa artefatos F→E, 0→6)
  * - Normalização [-1, 1] em ordem RGB (PaddleOCR padrão)
  */
 function preprocessForONNX(
@@ -266,18 +238,14 @@ function preprocessForONNX(
   const targetWidth = 320;
   const targetHeight = OCR_INPUT_HEIGHT; // 48
   
-  // 2. GAMMA CORRECTION (γ=0.8 escurece midtones, realça letras)
-  // Substitui HistogramEQ que era muito agressivo
-  const correctedData = gammaCorrection(data, 0.8);
+  // v1.1.16: SEM GAMMA - imagem crua funciona melhor para sombras
+  // O PaddleOCR foi treinado com imagens reais (ruído, sombra, etc)
+  console.log(`📐 Stretch to Fill (Clean): ${srcWidth}x${srcHeight} → ${targetWidth}x${targetHeight}`);
   
-  // 3. STRETCH TO FILL - Esticar para ocupar TODO o tensor 320x48
-  console.log(`📐 Stretch to Fill: ${srcWidth}x${srcHeight} → ${targetWidth}x${targetHeight} (100% ocupação)`);
+  // STRETCH TO FILL direto da imagem original (sem filtros)
+  const resizedContent = resizeToTensorDirect(data, srcWidth, srcHeight, targetWidth, targetHeight);
   
-  const resizedContent = resizeToTensorDirect(correctedData, srcWidth, srcHeight, targetWidth, targetHeight);
-  
-  // 4. NOTA: Sharpen REMOVIDO em v1.1.14 (causava F→E, 0→6)
-  
-  // 5. Criar tensor 320x48 e preencher com conteúdo
+  // Criar tensor 320x48 e preencher com conteúdo
   const pixels = targetWidth * targetHeight;
   const tensor = new Float32Array(3 * pixels);
   
@@ -1844,4 +1812,4 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 };
 
 // Notificar que o worker está carregado
-console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.15 - Norm [-1,1])');
+console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.16 - Clean)');
