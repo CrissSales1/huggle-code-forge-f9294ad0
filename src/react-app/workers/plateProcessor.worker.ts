@@ -184,65 +184,82 @@ async function initONNX(): Promise<void> {
 }
 
 /**
- * Pré-processa imagem para PaddleOCR
- * Input: ImageData RGBA
- * Output: Float32Array em formato CHW normalizado [-1, 1]
+ * Resize direto usando OffscreenCanvas com interpolação de alta qualidade
+ * Evita o problema de aliasing por duplo resize
+ */
+function resizeToTensorDirect(
+  data: Uint8ClampedArray,
+  srcWidth: number,
+  srcHeight: number,
+  targetWidth: number,
+  targetHeight: number
+): Uint8ClampedArray {
+  // Criar OffscreenCanvas para resize de alta qualidade
+  const srcCanvas = new OffscreenCanvas(srcWidth, srcHeight);
+  const srcCtx = srcCanvas.getContext('2d', { alpha: false })!;
+  
+  // Desenhar dados de origem
+  const srcImageData = new ImageData(new Uint8ClampedArray(data), srcWidth, srcHeight);
+  srcCtx.putImageData(srcImageData, 0, 0);
+  
+  // Canvas de destino com interpolação alta
+  const dstCanvas = new OffscreenCanvas(targetWidth, targetHeight);
+  const dstCtx = dstCanvas.getContext('2d', { alpha: false })!;
+  
+  // CRÍTICO: Usar interpolação de alta qualidade do browser
+  dstCtx.imageSmoothingEnabled = true;
+  dstCtx.imageSmoothingQuality = 'high';
+  
+  // Desenhar DIRETO do original para o target - sem resize intermediário
+  dstCtx.drawImage(srcCanvas, 0, 0, srcWidth, srcHeight, 0, 0, targetWidth, targetHeight);
+  
+  // Extrair dados
+  const dstImageData = dstCtx.getImageData(0, 0, targetWidth, targetHeight);
+  return new Uint8ClampedArray(dstImageData.data);
+}
+
+/**
+ * Pré-processa imagem para PaddleOCR v1.1.8
+ * - Resize DIRETO usando OffscreenCanvas (evita aliasing)
+ * - Normalização PaddleOCR padrão: [-1, 1]
  */
 function preprocessForONNX(
   data: Uint8ClampedArray,
   srcWidth: number,
   srcHeight: number
 ): { tensor: Float32Array; width: number; height: number } {
-  // Calcular novo tamanho mantendo proporção
-  const aspectRatio = srcWidth / srcHeight;
-  const targetHeight = OCR_INPUT_HEIGHT;
-  let targetWidth = Math.round(targetHeight * aspectRatio);
+  const targetHeight = OCR_INPUT_HEIGHT; // 48
+  const targetWidth = OCR_MIN_WIDTH;     // 320
   
-  // Garantir largura mínima de 320px para Seq Len adequado
-  if (targetWidth < OCR_MIN_WIDTH) {
-    targetWidth = OCR_MIN_WIDTH;
-  }
+  console.log(`📐 Resize direto: ${srcWidth}x${srcHeight} → ${targetWidth}x${targetHeight}`);
   
-  // Largura deve ser múltiplo de 32 para PaddleOCR (layers de pooling)
-  targetWidth = Math.ceil(targetWidth / 32) * 32;
+  // 1. Resize direto usando interpolação de alta qualidade do browser
+  const resizedRGBA = resizeToTensorDirect(data, srcWidth, srcHeight, targetWidth, targetHeight);
   
-  // Redimensionar imagem (bilinear simples)
-  const resizedRGBA = new Uint8ClampedArray(targetWidth * targetHeight * 4);
-  const xRatio = srcWidth / targetWidth;
-  const yRatio = srcHeight / targetHeight;
-  
-  for (let y = 0; y < targetHeight; y++) {
-    for (let x = 0; x < targetWidth; x++) {
-      const srcX = Math.min(Math.floor(x * xRatio), srcWidth - 1);
-      const srcY = Math.min(Math.floor(y * yRatio), srcHeight - 1);
-      const srcIdx = (srcY * srcWidth + srcX) * 4;
-      const dstIdx = (y * targetWidth + x) * 4;
-      
-      resizedRGBA[dstIdx] = data[srcIdx];
-      resizedRGBA[dstIdx + 1] = data[srcIdx + 1];
-      resizedRGBA[dstIdx + 2] = data[srcIdx + 2];
-      resizedRGBA[dstIdx + 3] = 255;
-    }
-  }
-  
-  // Converter para tensor CHW com normalização ImageNet (padrão PaddleOCR)
+  // 2. Converter para tensor CHW com normalização PaddleOCR padrão [-1, 1]
   const pixels = targetWidth * targetHeight;
   const tensor = new Float32Array(3 * pixels);
   
-  // Médias e desvios padrão ImageNet usados pelo PaddleOCR
-  const mean = [0.485, 0.456, 0.406];
-  const std = [0.229, 0.224, 0.225];
-  
+  // Normalização simples: (pixel/255 - 0.5) / 0.5 = pixel/127.5 - 1
+  // Resultado: valores entre -1 e +1
   for (let i = 0; i < pixels; i++) {
     const r = resizedRGBA[i * 4] / 255.0;
     const g = resizedRGBA[i * 4 + 1] / 255.0;
     const b = resizedRGBA[i * 4 + 2] / 255.0;
     
-    // Normalização ImageNet: (x - mean) / std
-    tensor[i] = (r - mean[0]) / std[0];                    // R channel
-    tensor[pixels + i] = (g - mean[1]) / std[1];           // G channel
-    tensor[2 * pixels + i] = (b - mean[2]) / std[2];       // B channel
+    // Normalização PaddleOCR: (x - 0.5) / 0.5
+    tensor[i] = (r - 0.5) / 0.5;
+    tensor[pixels + i] = (g - 0.5) / 0.5;
+    tensor[2 * pixels + i] = (b - 0.5) / 0.5;
   }
+  
+  // Debug: mostrar range do tensor
+  let minVal = Infinity, maxVal = -Infinity;
+  for (let i = 0; i < tensor.length; i++) {
+    if (tensor[i] < minVal) minVal = tensor[i];
+    if (tensor[i] > maxVal) maxVal = tensor[i];
+  }
+  console.log(`📊 Tensor normalizado [-1, 1]: min=${minVal.toFixed(2)}, max=${maxVal.toFixed(2)}`);
   
   return { tensor, width: targetWidth, height: targetHeight };
 }
@@ -818,18 +835,19 @@ function applyCLAHE(
 }
 
 /**
- * Adiciona padding (margem) em volta da imagem
- * Evita que caracteres fiquem muito próximos das bordas - melhora OCR
+ * Adiciona padding assimétrico (margem) em volta da imagem
+ * Mais lateral para caracteres respirarem, menos vertical para texto ocupar mais altura
  */
 function addPadding(
   data: Uint8ClampedArray,
   width: number,
   height: number,
-  padSize: number = 10,
+  padHorizontal: number = 12,
+  padVertical: number = 4,
   padColor: [number, number, number] = [0, 0, 0]
 ): { data: Uint8ClampedArray; width: number; height: number } {
-  const newWidth = width + padSize * 2;
-  const newHeight = height + padSize * 2;
+  const newWidth = width + padHorizontal * 2;
+  const newHeight = height + padVertical * 2;
   const result = new Uint8ClampedArray(newWidth * newHeight * 4);
   
   // Preencher com cor de padding
@@ -844,7 +862,7 @@ function addPadding(
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const srcIdx = (y * width + x) * 4;
-      const dstIdx = ((y + padSize) * newWidth + (x + padSize)) * 4;
+      const dstIdx = ((y + padVertical) * newWidth + (x + padHorizontal)) * 4;
       result[dstIdx] = data[srcIdx];
       result[dstIdx + 1] = data[srcIdx + 1];
       result[dstIdx + 2] = data[srcIdx + 2];
@@ -853,96 +871,6 @@ function addPadding(
   }
   
   return { data: result, width: newWidth, height: newHeight };
-}
-
-/**
- * Kernel Lanczos para upscale de alta qualidade
- */
-function lanczos(x: number, a: number = 3): number {
-  if (x === 0) return 1;
-  if (Math.abs(x) >= a) return 0;
-  const pix = Math.PI * x;
-  return (a * Math.sin(pix) * Math.sin(pix / a)) / (pix * pix);
-}
-
-/**
- * Resize com interpolação Lanczos - mantém nitidez em upscale
- */
-function lanczosResize(
-  data: Uint8ClampedArray,
-  srcW: number,
-  srcH: number,
-  dstW: number,
-  dstH: number,
-  a: number = 3
-): { data: Uint8ClampedArray; width: number; height: number } {
-  const result = new Uint8ClampedArray(dstW * dstH * 4);
-  
-  const scaleX = srcW / dstW;
-  const scaleY = srcH / dstH;
-  
-  for (let dstY = 0; dstY < dstH; dstY++) {
-    for (let dstX = 0; dstX < dstW; dstX++) {
-      const srcX = (dstX + 0.5) * scaleX - 0.5;
-      const srcY = (dstY + 0.5) * scaleY - 0.5;
-      
-      let r = 0, g = 0, b = 0, weightSum = 0;
-      
-      const startKY = Math.floor(srcY) - a + 1;
-      const endKY = Math.floor(srcY) + a;
-      const startKX = Math.floor(srcX) - a + 1;
-      const endKX = Math.floor(srcX) + a;
-      
-      for (let ky = startKY; ky <= endKY; ky++) {
-        for (let kx = startKX; kx <= endKX; kx++) {
-          const clampedX = Math.max(0, Math.min(srcW - 1, kx));
-          const clampedY = Math.max(0, Math.min(srcH - 1, ky));
-          
-          const weight = lanczos(srcX - kx, a) * lanczos(srcY - ky, a);
-          const srcIdx = (clampedY * srcW + clampedX) * 4;
-          
-          r += data[srcIdx] * weight;
-          g += data[srcIdx + 1] * weight;
-          b += data[srcIdx + 2] * weight;
-          weightSum += weight;
-        }
-      }
-      
-      const dstIdx = (dstY * dstW + dstX) * 4;
-      if (weightSum > 0) {
-        result[dstIdx] = Math.max(0, Math.min(255, Math.round(r / weightSum)));
-        result[dstIdx + 1] = Math.max(0, Math.min(255, Math.round(g / weightSum)));
-        result[dstIdx + 2] = Math.max(0, Math.min(255, Math.round(b / weightSum)));
-      }
-      result[dstIdx + 3] = 255;
-    }
-  }
-  
-  return { data: result, width: dstW, height: dstH };
-}
-
-/**
- * Resize inteligente - SEMPRE normaliza para altura 48px (upscale ou downscale)
- */
-function smartResize(
-  data: Uint8ClampedArray,
-  width: number,
-  height: number,
-  targetHeight: number = 48
-): { data: Uint8ClampedArray; width: number; height: number } {
-  // Sempre redimensionar para altura alvo (±2px tolerância)
-  if (Math.abs(height - targetHeight) < 2) {
-    return { data, width, height }; // Já está no tamanho certo
-  }
-  
-  const scale = targetHeight / height;
-  const newWidth = Math.max(48, Math.round(width * scale));
-  const newHeight = targetHeight;
-  
-  console.log(`📏 SmartResize: ${width}x${height} → ${newWidth}x${newHeight} (scale: ${scale.toFixed(2)}x)`);
-  
-  // Usar Lanczos para resize de alta qualidade
-  return lanczosResize(data, width, height, newWidth, newHeight);
 }
 
 /**
@@ -981,27 +909,24 @@ function optimizeImageForOCR(
   width: number,
   height: number
 ): { data: Uint8ClampedArray; width: number; height: number } {
-  console.log(`🔄 Pipeline v1.1.7 iniciado: ${width}x${height}px`);
+  console.log(`🔄 Pipeline v1.1.8 iniciado: ${width}x${height}px`);
   
   // 1. Correção de perspectiva (placeholder para versão futura)
   let result = unwarpPlate(data, width, height);
   
-  // 2. CLAHE no espaço LAB - pode ser habilitado/desabilitado para debug
-  const ENABLE_CLAHE = false; // Desabilitado em v1.1.7 para isolar variáveis
-  if (ENABLE_CLAHE) {
-    result.data = applyCLAHE(result.data, result.width, result.height, 2.5, 8);
-    console.log(`💡 CLAHE LAB aplicado`);
-  } else {
-    console.log(`⏭️ CLAHE desabilitado (debug v1.1.7)`);
-  }
+  // 2. CLAHE no espaço LAB - REATIVADO para melhorar contraste em sombras
+  // clipLimit reduzido para 2.0 para evitar ruído branco
+  result.data = applyCLAHE(result.data, result.width, result.height, 2.0, 8);
+  console.log(`💡 CLAHE aplicado (clipLimit=2.0)`);
   
-  // 3. Adicionar padding (8px preto)
-  result = addPadding(result.data, result.width, result.height, 8, [0, 0, 0]);
+  // 3. Padding assimétrico: mais lateral (12px), menos vertical (4px)
+  // Texto ocupa maior porcentagem da altura final
+  result = addPadding(result.data, result.width, result.height, 12, 4, [0, 0, 0]);
   console.log(`🔲 Padding: ${result.width}x${result.height}px`);
   
-  // 4. Resize inteligente (SEMPRE altura 48px - upscale ou downscale)
-  result = smartResize(result.data, result.width, result.height, 48);
-  console.log(`📏 Final: ${result.width}x${result.height}px`);
+  // 4. NÃO fazer smartResize aqui - deixar preprocessForONNX fazer resize direto
+  // Isso evita o problema de aliasing por duplo resize
+  console.log(`📏 Otimização concluída: ${result.width}x${result.height}px (resize direto no tensor)`);
   
   return result;
 }
@@ -1883,4 +1808,4 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 };
 
 // Notificar que o worker está carregado
-console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.7 - ImageNet norm + 320px)');
+console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.8 - Resize direto + Norm [-1,1])');
