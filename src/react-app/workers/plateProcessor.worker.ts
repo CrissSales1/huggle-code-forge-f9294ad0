@@ -184,6 +184,96 @@ async function initONNX(): Promise<void> {
 }
 
 /**
+ * Histogram Equalization Global v1.1.9
+ * Garante que o pixel mais claro seja 255 antes da normalização
+ * Resolve o problema de tensor muito escuro (max=0.18 ao invés de ~1.0)
+ */
+function histogramEqualization(data: Uint8ClampedArray, width: number, height: number): Uint8ClampedArray {
+  const result = new Uint8ClampedArray(data);
+  const numPixels = width * height;
+  
+  // Calcular histograma (usando luminância)
+  const histogram = new Array(256).fill(0);
+  for (let i = 0; i < data.length; i += 4) {
+    const lum = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+    histogram[lum]++;
+  }
+  
+  // Calcular CDF (Cumulative Distribution Function)
+  const cdf = new Array(256).fill(0);
+  cdf[0] = histogram[0];
+  for (let i = 1; i < 256; i++) {
+    cdf[i] = cdf[i - 1] + histogram[i];
+  }
+  
+  // Encontrar CDF mínimo (primeiro valor não-zero)
+  let cdfMin = 0;
+  for (let i = 0; i < 256; i++) {
+    if (cdf[i] > 0) {
+      cdfMin = cdf[i];
+      break;
+    }
+  }
+  
+  // Criar lookup table para equalização
+  const lut = new Array(256);
+  for (let i = 0; i < 256; i++) {
+    lut[i] = Math.round(((cdf[i] - cdfMin) / (numPixels - cdfMin)) * 255);
+  }
+  
+  // Aplicar equalização mantendo proporção RGB
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i], g = data[i + 1], b = data[i + 2];
+    const lum = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+    const newLum = lut[lum];
+    
+    // Escalar RGB proporcionalmente (evitar divisão por zero)
+    const scale = lum > 0 ? newLum / lum : 1;
+    result[i] = Math.min(255, Math.round(r * scale));
+    result[i + 1] = Math.min(255, Math.round(g * scale));
+    result[i + 2] = Math.min(255, Math.round(b * scale));
+    result[i + 3] = 255;
+  }
+  
+  console.log(`📊 Histogram EQ: lut[128]=${lut[128]}, lut[200]=${lut[200]}, lut[255]=${lut[255]}`);
+  return result;
+}
+
+/**
+ * Sharpening leve para separar caracteres que estão "grudados"
+ * Aplicado após resize para melhorar definição
+ */
+function sharpenImage(data: Uint8ClampedArray, width: number, height: number): Uint8ClampedArray {
+  const result = new Uint8ClampedArray(data);
+  
+  // Kernel de sharpening leve (menos agressivo para evitar ruído)
+  // Centro 3, vizinhos -0.5 = realce moderado
+  const kernel = [
+    0, -0.5, 0,
+    -0.5, 3, -0.5,
+    0, -0.5, 0
+  ];
+  
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      for (let c = 0; c < 3; c++) {
+        let sum = 0;
+        for (let ky = -1; ky <= 1; ky++) {
+          for (let kx = -1; kx <= 1; kx++) {
+            const idx = ((y + ky) * width + (x + kx)) * 4 + c;
+            sum += data[idx] * kernel[(ky + 1) * 3 + (kx + 1)];
+          }
+        }
+        result[(y * width + x) * 4 + c] = Math.max(0, Math.min(255, Math.round(sum)));
+      }
+    }
+  }
+  
+  console.log(`🔪 Sharpen aplicado`);
+  return result;
+}
+
+/**
  * Resize direto usando OffscreenCanvas com interpolação de alta qualidade
  * Evita o problema de aliasing por duplo resize
  */
@@ -219,9 +309,11 @@ function resizeToTensorDirect(
 }
 
 /**
- * Pré-processa imagem para PaddleOCR v1.1.8
- * - Resize DIRETO usando OffscreenCanvas (evita aliasing)
- * - Normalização PaddleOCR padrão: [-1, 1]
+ * Pré-processa imagem para PaddleOCR v1.1.9
+ * - Histogram Equalization (força max=255)
+ * - Resize PROPORCIONAL + padding centralizado (evita stretch)
+ * - Sharpen após resize
+ * - Normalização simples [0, 1]
  */
 function preprocessForONNX(
   data: Uint8ClampedArray,
@@ -229,28 +321,61 @@ function preprocessForONNX(
   srcHeight: number
 ): { tensor: Float32Array; width: number; height: number } {
   const targetHeight = OCR_INPUT_HEIGHT; // 48
-  const targetWidth = OCR_MIN_WIDTH;     // 320
+  const minWidth = OCR_MIN_WIDTH;        // 320
   
-  console.log(`📐 Resize direto: ${srcWidth}x${srcHeight} → ${targetWidth}x${targetHeight}`);
+  // 1. Calcular largura mantendo proporção
+  const aspectRatio = srcWidth / srcHeight;
+  let contentWidth = Math.round(targetHeight * aspectRatio);
   
-  // 1. Resize direto usando interpolação de alta qualidade do browser
-  const resizedRGBA = resizeToTensorDirect(data, srcWidth, srcHeight, targetWidth, targetHeight);
+  // 2. Largura final: mínimo 320px, múltiplo de 32
+  let tensorWidth = Math.max(minWidth, contentWidth);
+  tensorWidth = Math.ceil(tensorWidth / 32) * 32;
   
-  // 2. Converter para tensor CHW com normalização PaddleOCR padrão [-1, 1]
-  const pixels = targetWidth * targetHeight;
+  console.log(`📐 Resize com padding: ${srcWidth}x${srcHeight} → conteúdo ${contentWidth}x${targetHeight} → tensor ${tensorWidth}x${targetHeight}`);
+  
+  // 3. HISTOGRAM EQUALIZATION antes do resize (força max=255)
+  const equalizedData = histogramEqualization(data, srcWidth, srcHeight);
+  
+  // 4. Redimensionar conteúdo mantendo proporção
+  const resizedContent = resizeToTensorDirect(equalizedData, srcWidth, srcHeight, contentWidth, targetHeight);
+  
+  // 5. SHARPEN após resize (separa caracteres)
+  const sharpenedContent = sharpenImage(resizedContent, contentWidth, targetHeight);
+  
+  // 6. Criar buffer final com padding preto centralizado
+  const finalRGBA = new Uint8ClampedArray(tensorWidth * targetHeight * 4);
+  for (let i = 0; i < finalRGBA.length; i += 4) {
+    finalRGBA[i] = 0;
+    finalRGBA[i + 1] = 0;
+    finalRGBA[i + 2] = 0;
+    finalRGBA[i + 3] = 255;
+  }
+  
+  // 7. Centralizar o conteúdo no buffer
+  const padLeft = Math.floor((tensorWidth - contentWidth) / 2);
+  
+  for (let y = 0; y < targetHeight; y++) {
+    for (let x = 0; x < contentWidth; x++) {
+      const srcIdx = (y * contentWidth + x) * 4;
+      const dstX = x + padLeft;
+      const dstIdx = (y * tensorWidth + dstX) * 4;
+      
+      finalRGBA[dstIdx] = sharpenedContent[srcIdx];
+      finalRGBA[dstIdx + 1] = sharpenedContent[srcIdx + 1];
+      finalRGBA[dstIdx + 2] = sharpenedContent[srcIdx + 2];
+      finalRGBA[dstIdx + 3] = 255;
+    }
+  }
+  
+  // 8. Converter para tensor CHW com normalização SIMPLES [0, 1]
+  const pixels = tensorWidth * targetHeight;
   const tensor = new Float32Array(3 * pixels);
   
-  // Normalização simples: (pixel/255 - 0.5) / 0.5 = pixel/127.5 - 1
-  // Resultado: valores entre -1 e +1
   for (let i = 0; i < pixels; i++) {
-    const r = resizedRGBA[i * 4] / 255.0;
-    const g = resizedRGBA[i * 4 + 1] / 255.0;
-    const b = resizedRGBA[i * 4 + 2] / 255.0;
-    
-    // Normalização PaddleOCR: (x - 0.5) / 0.5
-    tensor[i] = (r - 0.5) / 0.5;
-    tensor[pixels + i] = (g - 0.5) / 0.5;
-    tensor[2 * pixels + i] = (b - 0.5) / 0.5;
+    // Normalização simples: apenas dividir por 255 (range 0 a 1)
+    tensor[i] = finalRGBA[i * 4] / 255.0;
+    tensor[pixels + i] = finalRGBA[i * 4 + 1] / 255.0;
+    tensor[2 * pixels + i] = finalRGBA[i * 4 + 2] / 255.0;
   }
   
   // Debug: mostrar range do tensor
@@ -259,9 +384,9 @@ function preprocessForONNX(
     if (tensor[i] < minVal) minVal = tensor[i];
     if (tensor[i] > maxVal) maxVal = tensor[i];
   }
-  console.log(`📊 Tensor normalizado [-1, 1]: min=${minVal.toFixed(2)}, max=${maxVal.toFixed(2)}`);
+  console.log(`📊 Tensor normalizado [0, 1]: min=${minVal.toFixed(2)}, max=${maxVal.toFixed(2)}`);
   
-  return { tensor, width: targetWidth, height: targetHeight };
+  return { tensor, width: tensorWidth, height: targetHeight };
 }
 
 /**
@@ -730,8 +855,9 @@ function labToRgb(L: number, A: number, B: number): [number, number, number] {
 /**
  * Aplica CLAHE (Contrast Limited Adaptive Histogram Equalization) apenas no canal L
  * Preserva cores originais - essencial para PaddleOCR que foi treinado com RGB
- * NOTA: Temporariamente desabilitado em v1.1.7 para debug
+ * NOTA: Desabilitado em v1.1.9 - usando Histogram EQ global no preprocessForONNX
  */
+// @ts-ignore - Mantido para uso futuro, desabilitado em v1.1.9
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function applyCLAHE(
   data: Uint8ClampedArray,
@@ -909,24 +1035,25 @@ function optimizeImageForOCR(
   width: number,
   height: number
 ): { data: Uint8ClampedArray; width: number; height: number } {
-  console.log(`🔄 Pipeline v1.1.8 iniciado: ${width}x${height}px`);
+  console.log(`🔄 Pipeline v1.1.9 iniciado: ${width}x${height}px`);
   
   // 1. Correção de perspectiva (placeholder para versão futura)
   let result = unwarpPlate(data, width, height);
   
-  // 2. CLAHE no espaço LAB - REATIVADO para melhorar contraste em sombras
-  // clipLimit reduzido para 2.0 para evitar ruído branco
-  result.data = applyCLAHE(result.data, result.width, result.height, 2.0, 8);
-  console.log(`💡 CLAHE aplicado (clipLimit=2.0)`);
+  // 2. CLAHE DESABILITADO - usando Histogram EQ global no preprocessForONNX
+  // O CLAHE estava criando imagens muito escuras (max=0.18 ao invés de ~1.0)
+  console.log(`⏭️ CLAHE desabilitado (usando Histogram EQ global)`);
   
   // 3. Padding assimétrico: mais lateral (12px), menos vertical (4px)
   // Texto ocupa maior porcentagem da altura final
   result = addPadding(result.data, result.width, result.height, 12, 4, [0, 0, 0]);
   console.log(`🔲 Padding: ${result.width}x${result.height}px`);
   
-  // 4. NÃO fazer smartResize aqui - deixar preprocessForONNX fazer resize direto
-  // Isso evita o problema de aliasing por duplo resize
-  console.log(`📏 Otimização concluída: ${result.width}x${result.height}px (resize direto no tensor)`);
+  // 4. NÃO fazer resize aqui - deixar preprocessForONNX fazer:
+  //    - Histogram EQ (força max=255)
+  //    - Resize proporcional + padding centralizado
+  //    - Sharpen
+  console.log(`📏 Otimização concluída: ${result.width}x${result.height}px`);
   
   return result;
 }
@@ -1808,4 +1935,4 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 };
 
 // Notificar que o worker está carregado
-console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.8 - Resize direto + Norm [-1,1])');
+console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.9 - HistEQ + Sharpen + Norm [0,1])');
