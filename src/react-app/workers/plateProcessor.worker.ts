@@ -3,7 +3,7 @@
  * Move OCR (ONNX Runtime), detecção de placa e motion detection para thread separada
  * Evita bloqueio da UI durante processamento pesado
  * 
- * v1.1.39: Anti-Duplicata Atômico + Variações OCR Melhoradas (0↔6)
+ * v1.1.40: Placa Cadastrada em Fuzzy Match + Logs Condicionais
  */
 
 import * as ort from 'onnxruntime-web';
@@ -1956,4 +1956,4 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 };
 
 // Notificar que o worker está carregado
-console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.39 - Anti-Duplicata Atômico)');
+console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.40 - Placa Cadastrada)');

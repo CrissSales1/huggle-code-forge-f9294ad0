@@ -236,7 +236,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   // Carregar modelo YOLO quando monitoramento iniciar (apenas uma vez)
   useEffect(() => {
     if (isActive && workerReady && !modelLoaded && !modelLoading && !modelFailed) {
-      console.log('🧠 Tentando carregar modelo YOLO...');
+      logger.log('🧠 Tentando carregar modelo YOLO...');
       loadYoloModel();
     }
   }, [isActive, workerReady, modelLoaded, modelLoading, modelFailed, loadYoloModel]);
@@ -406,7 +406,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     recentPlatesRef.current.set(placa, now);
     
     if (wasRecent) {
-      console.log(`⏳ Anti-Duplicata Atômico: ${placa} detectada há ${((now - lastTime!) / 1000).toFixed(1)}s (cooldown: ${COOLDOWN_MS / 1000}s)`);
+      logger.log(`⏳ Anti-Duplicata Atômico: ${placa} detectada há ${((now - lastTime!) / 1000).toFixed(1)}s (cooldown: ${COOLDOWN_MS / 1000}s)`);
     }
     
     return wasRecent;
@@ -417,7 +417,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   const checkOcrConsistency = useCallback((plateText: string, confidence: number): { hasConsensus: boolean; matchCount: number } => {
     // Só aceita leituras com confiança mínima para o buffer
     if (confidence < MIN_CONFIDENCE_FOR_BUFFER) {
-      console.log(`⚠️ Fast-Track: Confiança ${(confidence * 100).toFixed(1)}% abaixo do mínimo (${(MIN_CONFIDENCE_FOR_BUFFER * 100).toFixed(0)}%), ignorando leitura`);
+      logger.log(`⚠️ Fast-Track: Confiança ${(confidence * 100).toFixed(1)}% abaixo do mínimo (${(MIN_CONFIDENCE_FOR_BUFFER * 100).toFixed(0)}%), ignorando leitura`);
       return { hasConsensus: false, matchCount: 0 };
     }
     
@@ -425,7 +425,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     // Isso resolve o problema de carros que saem e outros entram imediatamente sem queda de movimento
     if (fastTrackValidatedRef.current && lastValidatedPlateRef.current) {
       if (plateText !== lastValidatedPlateRef.current) {
-        console.log(`🔄 Fast-Track: Placa diferente detectada (${plateText} != ${lastValidatedPlateRef.current}), resetando buffer para novo veículo`);
+        logger.log(`🔄 Fast-Track: Placa diferente detectada (${plateText} != ${lastValidatedPlateRef.current}), resetando buffer para novo veículo`);
         ocrBufferRef.current = [];
         fastTrackValidatedRef.current = false;
         // NÃO reseta noMotionCounterRef - movimento continua
@@ -462,7 +462,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       const avgConf = votes.totalConf / votes.count;
       const score = votes.count * avgConf;
       
-      console.log(`   📊 ${plate}: ${votes.count}x, avg=${(avgConf * 100).toFixed(1)}%, max=${(votes.maxConf * 100).toFixed(1)}%, score=${score.toFixed(2)}`);
+      logger.log(`   📊 ${plate}: ${votes.count}x, avg=${(avgConf * 100).toFixed(1)}%, max=${(votes.maxConf * 100).toFixed(1)}%, score=${score.toFixed(2)}`);
       
       if (score > bestScore) {
         bestScore = score;
@@ -475,7 +475,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     const matchCount = currentVotes?.count || 0;
     const hasConsensus = plateText === bestPlate && matchCount >= CONSISTENCY_THRESHOLD;
     
-    console.log(`🔄 Fast-Track Buffer: "${plateText}" bestScore=${bestScore.toFixed(2)} (consenso=${hasConsensus ? '✅' : '❌'})`);
+    logger.log(`🔄 Fast-Track Buffer: "${plateText}" bestScore=${bestScore.toFixed(2)} (consenso=${hasConsensus ? '✅' : '❌'})`);
     
     return { hasConsensus, matchCount };
   }, []);
@@ -483,7 +483,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   // Fast-Track: Limpar buffer quando veículo sai da área ou é validado
   const resetOcrBuffer = useCallback(() => {
     if (ocrBufferRef.current.length > 0 || fastTrackValidatedRef.current) {
-      console.log('🧹 Fast-Track: Buffer OCR limpo');
+      logger.log('🧹 Fast-Track: Buffer OCR limpo');
     }
     ocrBufferRef.current = [];
     fastTrackValidatedRef.current = false;
@@ -516,7 +516,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       // Combinar e remover duplicatas
       const todasVariacoes = [...new Set([...variacoesSimples, ...variacoesAgressivas])];
       
-      console.log(`🔍 Buscando morador com ${todasVariacoes.length} variações de "${placaLimpa}":`, todasVariacoes.slice(0, 8));
+      logger.log(`🔍 Buscando morador com ${todasVariacoes.length} variações de "${placaLimpa}":`, todasVariacoes.slice(0, 8));
       
       if (todasVariacoes.length > 1) {
         const { data: fuzzyMatch, error: fuzzyError } = await supabase
@@ -636,7 +636,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       
       // Reset automático após timeout (veículo já passou)
       if (timeSinceValidation >= VALIDATION_TIMEOUT_MS) {
-        console.log(`⏱️ Fast-Track: Timeout ${VALIDATION_TIMEOUT_MS/1000}s - permitindo novo veículo`);
+        logger.log(`⏱️ Fast-Track: Timeout ${VALIDATION_TIMEOUT_MS/1000}s - permitindo novo veículo`);
         resetOcrBuffer();
         // Continua para processar novo OCR
       } else {
@@ -714,14 +714,14 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         }
         
         // ========== CONSENSO ATINGIDO - Fast-Track Validação! ==========
-        console.log(`🚀 Fast-Track: Placa ${placa} validada por consistência (${matchCount}/${OCR_BUFFER_SIZE})`);
+        logger.log(`🚀 Fast-Track: Placa ${placa} validada por consistência (${matchCount}/${OCR_BUFFER_SIZE})`);
         
         // v1.1.38: Verificar se é a mesma placa validada recentemente (anti-duplicatas)
         if (placa === lastValidatedPlateRef.current) {
           const timeSinceLastValidation = Date.now() - lastValidationTimeRef.current;
           
           if (timeSinceLastValidation < MIN_REDETECTION_INTERVAL) {
-            console.log(`🔁 Fast-Track: Mesma placa ${placa} detectada após ${(timeSinceLastValidation/1000).toFixed(1)}s - ignorando (mín: ${MIN_REDETECTION_INTERVAL/1000}s)`);
+            logger.log(`🔁 Fast-Track: Mesma placa ${placa} detectada após ${(timeSinceLastValidation/1000).toFixed(1)}s - ignorando (mín: ${MIN_REDETECTION_INTERVAL/1000}s)`);
             finishProcessingTimer();
             setStatus('monitoring');
             setStatusMessage('🟢 Monitorando...');
@@ -745,11 +745,13 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
           return true;
         }
         
-        const { isMorador, casa } = await checkIfMorador(placa);
+        // v1.1.40: Capturar placaCadastrada do fuzzy match
+        const { isMorador, casa, placaCadastrada } = await checkIfMorador(placa);
         
         let isVisitante = false;
         let nomeVisitante: string | undefined;
         let casaFinal = casa;
+        let placaFinal = placaCadastrada || placa; // Usar placa cadastrada se encontrada
         
         if (!isMorador) {
           const visitanteResult = await checkIfVisitanteAtivo(placa);
@@ -757,13 +759,14 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
             isVisitante = true;
             nomeVisitante = visitanteResult.nome;
             casaFinal = visitanteResult.casa;
+            placaFinal = visitanteResult.placaCadastrada || placa;
           }
         }
         
         const fallbackUsed = result.usedFallback || false;
         const fonteDeteccao = fallbackUsed ? 'api' : 'local';
         const detection: Detection = {
-          placa,
+          placa: placaFinal, // v1.1.40: Usar placa cadastrada
           timestamp: new Date().toISOString(),
           isMorador,
           isVisitante,
@@ -777,17 +780,19 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         setLastDetection(detection);
         setRecentDetections(prev => [detection, ...prev.slice(0, 9)]);
         
-        await saveDetection(placa, isMorador, casaFinal, result.validation.confidence, fonteDeteccao, isVisitante, nomeVisitante);
+        // v1.1.40: Salvar com placa cadastrada
+        await saveDetection(placaFinal, isMorador, casaFinal, result.validation.confidence, fonteDeteccao, isVisitante, nomeVisitante);
         
         finishProcessingTimer();
         motionDetectorRef.current.markOcrSuccess();
         
+        // v1.1.40: Exibir placa cadastrada para moradores/visitantes
         if (isMorador) {
-          setStatusMessage(`✅ Morador: ${placa} - Casa ${casa} (Fast-Track)`);
+          setStatusMessage(`✅ Morador: ${placaFinal} - Casa ${casa} (Fast-Track)`);
         } else if (isVisitante) {
           setStatusMessage(`🧑 Visitante: ${nomeVisitante} - Casa ${casaFinal} (Fast-Track)`);
         } else {
-          setStatusMessage(`⚠️ Não cadastrado: ${placa}`);
+          setStatusMessage(`⚠️ Não cadastrado: ${placa}`); // Desconhecidos usam placa do OCR
         }
         
         return true;
