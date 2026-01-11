@@ -147,7 +147,7 @@ const FRAME_INTERVAL_MS = 350;
 // Fast-Track: Constantes de Consistência Temporal
 const CONSISTENCY_THRESHOLD = 3;       // Precisa de 3 leituras iguais para validar
 const OCR_BUFFER_SIZE = 5;             // Janela deslizante de últimas 5 leituras
-const MIN_CONFIDENCE_FOR_BUFFER = 70;  // Confiança mínima para entrar no buffer (70%)
+const MIN_CONFIDENCE_FOR_BUFFER = 0.70;  // Confiança mínima 70% (escala 0-1 do Worker)
 
 export function MonitoringProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<MonitoringStatus>('idle');
@@ -383,7 +383,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   const checkOcrConsistency = useCallback((plateText: string, confidence: number): { hasConsensus: boolean; matchCount: number } => {
     // Só aceita leituras com confiança mínima para o buffer
     if (confidence < MIN_CONFIDENCE_FOR_BUFFER) {
-      console.log(`⚠️ Fast-Track: Confiança ${confidence.toFixed(0)}% abaixo do mínimo (${MIN_CONFIDENCE_FOR_BUFFER}%), ignorando leitura`);
+      console.log(`⚠️ Fast-Track: Confiança ${(confidence * 100).toFixed(1)}% abaixo do mínimo (${(MIN_CONFIDENCE_FOR_BUFFER * 100).toFixed(0)}%), ignorando leitura`);
       return { hasConsensus: false, matchCount: 0 };
     }
     
@@ -399,7 +399,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     const matchCount = ocrBufferRef.current.filter(entry => entry.placa === plateText).length;
     const hasConsensus = matchCount >= CONSISTENCY_THRESHOLD;
     
-    console.log(`🔄 Fast-Track Buffer: "${plateText}" aparece ${matchCount}/${OCR_BUFFER_SIZE} vezes (consenso=${hasConsensus ? '✅' : '❌'})`);
+    console.log(`🔄 Fast-Track Buffer: "${plateText}" (${(confidence * 100).toFixed(1)}%) aparece ${matchCount}/${OCR_BUFFER_SIZE} vezes (consenso=${hasConsensus ? '✅' : '❌'})`);
     
     return { hasConsensus, matchCount };
   }, []);
