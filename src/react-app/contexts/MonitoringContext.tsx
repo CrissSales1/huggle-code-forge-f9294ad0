@@ -141,13 +141,17 @@ interface MonitoringContextType {
 
 const MonitoringContext = createContext<MonitoringContextType | null>(null);
 
-const COOLDOWN_MS = 30000;
+// v1.1.38: Cooldown aumentado para evitar detecções duplicadas
+const COOLDOWN_MS = 15000;  // 15 segundos - maior que VALIDATION_TIMEOUT_MS (8s)
 const FRAME_INTERVAL_MS = 350;
 
 // Fast-Track: Constantes de Consistência Temporal
 const CONSISTENCY_THRESHOLD = 3;       // Precisa de 3 leituras iguais para validar
 const OCR_BUFFER_SIZE = 5;             // Janela deslizante de últimas 5 leituras
 const MIN_CONFIDENCE_FOR_BUFFER = 0.70;  // Confiança mínima 70% (escala 0-1 do Worker)
+
+// v1.1.38: Intervalo mínimo de re-detecção da mesma placa (evita duplicatas)
+const MIN_REDETECTION_INTERVAL = 30000; // 30 segundos mínimo entre mesma placa
 
 export function MonitoringProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<MonitoringStatus>('idle');
@@ -460,6 +464,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     noMotionCounterRef.current = 0;
   }, []);
   
+  // v1.1.38: checkIfMorador com variações agressivas (confusões 0↔6, E↔B, etc.)
   const checkIfMorador = useCallback(async (placa: string): Promise<{ isMorador: boolean; casa?: string; placaCadastrada?: string }> => {
     try {
       const placaLimpa = placa.toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -477,22 +482,28 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         return { isMorador: true, casa: exactMatch.casa, placaCadastrada: exactMatch.placa_veiculo };
       }
       
-      // 2. Segundo: busca com variações (fuzzy matching para OCR)
-      const { generateVariations } = await import('@/react-app/utils/plateValidator');
-      const variacoes = generateVariations(placaLimpa);
+      // 2. v1.1.38: Busca com variações simples + agressivas (0↔6, E↔B, etc.)
+      const { generateVariations, generateAggressiveVariations } = await import('@/react-app/utils/plateValidator');
+      const variacoesSimples = generateVariations(placaLimpa);
+      const variacoesAgressivas = generateAggressiveVariations(placaLimpa);
       
-      if (variacoes.length > 1) {
+      // Combinar e remover duplicatas
+      const todasVariacoes = [...new Set([...variacoesSimples, ...variacoesAgressivas])];
+      
+      console.log(`🔍 Buscando morador com ${todasVariacoes.length} variações de "${placaLimpa}":`, todasVariacoes.slice(0, 8));
+      
+      if (todasVariacoes.length > 1) {
         const { data: fuzzyMatch, error: fuzzyError } = await supabase
           .from('veiculos_moradores')
           .select('casa, placa_veiculo')
-          .in('placa_veiculo', variacoes)
+          .in('placa_veiculo', todasVariacoes)
           .limit(1)
           .maybeSingle();
         
         if (fuzzyError) throw fuzzyError;
         
         if (fuzzyMatch) {
-          logger.log(`🔄 Match fuzzy: ${placaLimpa} → ${fuzzyMatch.placa_veiculo}`);
+          logger.log(`🔄 Match fuzzy v1.1.38: ${placaLimpa} → ${fuzzyMatch.placa_veiculo} (Casa ${fuzzyMatch.casa})`);
           return { isMorador: true, casa: fuzzyMatch.casa, placaCadastrada: fuzzyMatch.placa_veiculo };
         }
       }
@@ -678,6 +689,20 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         
         // ========== CONSENSO ATINGIDO - Fast-Track Validação! ==========
         console.log(`🚀 Fast-Track: Placa ${placa} validada por consistência (${matchCount}/${OCR_BUFFER_SIZE})`);
+        
+        // v1.1.38: Verificar se é a mesma placa validada recentemente (anti-duplicatas)
+        if (placa === lastValidatedPlateRef.current) {
+          const timeSinceLastValidation = Date.now() - lastValidationTimeRef.current;
+          
+          if (timeSinceLastValidation < MIN_REDETECTION_INTERVAL) {
+            console.log(`🔁 Fast-Track: Mesma placa ${placa} detectada após ${(timeSinceLastValidation/1000).toFixed(1)}s - ignorando (mín: ${MIN_REDETECTION_INTERVAL/1000}s)`);
+            finishProcessingTimer();
+            setStatus('monitoring');
+            setStatusMessage('🟢 Monitorando...');
+            return true;
+          }
+        }
+        
         fastTrackValidatedRef.current = true;
         lastValidationTimeRef.current = Date.now();
         lastValidatedPlateRef.current = placa;
