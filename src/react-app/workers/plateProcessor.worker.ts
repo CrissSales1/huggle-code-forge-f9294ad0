@@ -3,7 +3,7 @@
  * Move OCR (ONNX Runtime), detecção de placa e motion detection para thread separada
  * Evita bloqueio da UI durante processamento pesado
  * 
- * v1.1.35: Unwarp v2 - Usa Hough Transform para detectar e corrigir inclinação de placas
+ * v1.1.36: Upscale 2x para imagens pequenas (melhora leitura OCR) + Remoção do Unwarp
  */
 
 import * as ort from 'onnxruntime-web';
@@ -139,331 +139,10 @@ function isForbiddenText(rawText: string): boolean {
   return false;
 }
 
-// ============ PERSPECTIVE UNWARP v2 (HOUGH TRANSFORM) ============
-
-// @ts-ignore - Interface reservada para futuras implementações
-interface Point {
-  x: number;
-  y: number;
-}
-
-interface HoughLine {
-  rho: number;      // Distância da origem
-  theta: number;    // Ângulo em radianos
-  votes: number;    // Número de votos
-  angle: number;    // Ângulo em graus (para facilitar)
-}
-
-/**
- * Detecta bordas usando Sobel com threshold adaptativo
- */
-function detectEdgesForHough(data: Uint8ClampedArray, width: number, height: number): Uint8ClampedArray {
-  const edges = new Uint8ClampedArray(width * height);
-  const gradients = new Float32Array(width * height);
-  
-  // Calcular gradientes
-  let maxGradient = 0;
-  for (let y = 1; y < height - 1; y++) {
-    for (let x = 1; x < width - 1; x++) {
-      const idx = y * width + x;
-      
-      // Vizinhos para Sobel 3x3
-      const getGray = (px: number, py: number) => {
-        const i = (py * width + px) * 4;
-        return 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-      };
-      
-      // Sobel X
-      const gx = (
-        -getGray(x-1, y-1) + getGray(x+1, y-1) +
-        -2*getGray(x-1, y) + 2*getGray(x+1, y) +
-        -getGray(x-1, y+1) + getGray(x+1, y+1)
-      );
-      
-      // Sobel Y
-      const gy = (
-        -getGray(x-1, y-1) - 2*getGray(x, y-1) - getGray(x+1, y-1) +
-        getGray(x-1, y+1) + 2*getGray(x, y+1) + getGray(x+1, y+1)
-      );
-      
-      const gradient = Math.sqrt(gx * gx + gy * gy);
-      gradients[idx] = gradient;
-      maxGradient = Math.max(maxGradient, gradient);
-    }
-  }
-  
-  // Threshold adaptativo (Otsu simplificado)
-  const threshold = maxGradient * 0.3;
-  
-  for (let i = 0; i < gradients.length; i++) {
-    edges[i] = gradients[i] > threshold ? 255 : 0;
-  }
-  
-  return edges;
-}
-
-/**
- * Hough Transform para detecção de linhas
- * Foca em linhas horizontais/quase-horizontais (θ próximo de 0° ou 180°)
- */
-function houghTransformLines(
-  edges: Uint8ClampedArray, 
-  width: number, 
-  height: number
-): HoughLine[] {
-  // Parâmetros do acumulador
-  const thetaResolution = 1 * Math.PI / 180;  // 1 grau (rhoResolution = 1 pixel implícito)
-  
-  // Foco em ângulos quase-horizontais: -20° a +20°
-  const thetaMin = -20 * Math.PI / 180;
-  const thetaMax = 20 * Math.PI / 180;
-  const thetaSteps = Math.ceil((thetaMax - thetaMin) / thetaResolution);
-  
-  const diagonal = Math.sqrt(width * width + height * height);
-  const rhoMax = Math.ceil(diagonal);
-  const rhoSteps = 2 * rhoMax + 1;
-  
-  // Acumulador
-  const accumulator = new Int32Array(rhoSteps * thetaSteps);
-  
-  // Pré-calcular senos e cossenos
-  const cosTheta: number[] = [];
-  const sinTheta: number[] = [];
-  for (let t = 0; t < thetaSteps; t++) {
-    const theta = thetaMin + t * thetaResolution;
-    cosTheta.push(Math.cos(theta));
-    sinTheta.push(Math.sin(theta));
-  }
-  
-  // Votar
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      if (edges[y * width + x] > 0) {
-        for (let t = 0; t < thetaSteps; t++) {
-          const rho = Math.round(x * cosTheta[t] + y * sinTheta[t]);
-          const rhoIndex = rho + rhoMax;
-          if (rhoIndex >= 0 && rhoIndex < rhoSteps) {
-            accumulator[rhoIndex * thetaSteps + t]++;
-          }
-        }
-      }
-    }
-  }
-  
-  // Encontrar picos (linhas dominantes)
-  const lines: HoughLine[] = [];
-  const minVotes = Math.max(20, Math.min(width, height) * 0.15);  // 15% da menor dimensão
-  
-  for (let r = 0; r < rhoSteps; r++) {
-    for (let t = 0; t < thetaSteps; t++) {
-      const votes = accumulator[r * thetaSteps + t];
-      if (votes >= minVotes) {
-        const theta = thetaMin + t * thetaResolution;
-        const rho = r - rhoMax;
-        lines.push({
-          rho,
-          theta,
-          votes,
-          angle: theta * 180 / Math.PI
-        });
-      }
-    }
-  }
-  
-  // Ordenar por votos (linhas mais fortes primeiro)
-  lines.sort((a, b) => b.votes - a.votes);
-  
-  // Retornar top 10 linhas (evitar duplicatas próximas)
-  const filteredLines: HoughLine[] = [];
-  for (const line of lines) {
-    const isDuplicate = filteredLines.some(existing => 
-      Math.abs(existing.rho - line.rho) < 10 && 
-      Math.abs(existing.angle - line.angle) < 3
-    );
-    if (!isDuplicate) {
-      filteredLines.push(line);
-      if (filteredLines.length >= 10) break;
-    }
-  }
-  
-  return filteredLines;
-}
-
-/**
- * Calcula ângulo de inclinação dominante a partir das linhas detectadas
- */
-function calculateDominantAngle(lines: HoughLine[]): number | null {
-  if (lines.length === 0) return null;
-  
-  // Média ponderada dos ângulos (peso = votos)
-  let totalWeight = 0;
-  let weightedSum = 0;
-  
-  for (const line of lines) {
-    // Ignorar linhas muito verticais (ângulo > 15°)
-    if (Math.abs(line.angle) > 15) continue;
-    
-    weightedSum += line.angle * line.votes;
-    totalWeight += line.votes;
-  }
-  
-  if (totalWeight === 0) return null;
-  
-  return weightedSum / totalWeight;
-}
-
-/**
- * Aplica rotação simples para corrigir inclinação
- * Mais robusto que transformação de perspectiva completa
- */
-function rotateImage(
-  data: Uint8ClampedArray,
-  width: number,
-  height: number,
-  angleDegrees: number
-): { data: Uint8ClampedArray; width: number; height: number } {
-  const angleRad = -angleDegrees * Math.PI / 180;  // Negativo para corrigir
-  const cos = Math.cos(angleRad);
-  const sin = Math.sin(angleRad);
-  
-  // Centro da imagem
-  const cx = width / 2;
-  const cy = height / 2;
-  
-  // Calcular dimensões da imagem rotacionada
-  const corners = [
-    { x: 0, y: 0 },
-    { x: width, y: 0 },
-    { x: width, y: height },
-    { x: 0, y: height }
-  ];
-  
-  let minX = Infinity, maxX = -Infinity;
-  let minY = Infinity, maxY = -Infinity;
-  
-  for (const corner of corners) {
-    const rx = (corner.x - cx) * cos - (corner.y - cy) * sin + cx;
-    const ry = (corner.x - cx) * sin + (corner.y - cy) * cos + cy;
-    minX = Math.min(minX, rx);
-    maxX = Math.max(maxX, rx);
-    minY = Math.min(minY, ry);
-    maxY = Math.max(maxY, ry);
-  }
-  
-  const newWidth = Math.ceil(maxX - minX);
-  const newHeight = Math.ceil(maxY - minY);
-  // offsetX e offsetY calculados mas não usados - coordenadas recalculadas na rotação inversa
-  
-  // Nova imagem
-  const result = new Uint8ClampedArray(newWidth * newHeight * 4);
-  result.fill(255);  // Fundo branco
-  
-  // Rotação inversa para mapear destino → origem
-  const cosInv = Math.cos(-angleRad);
-  const sinInv = Math.sin(-angleRad);
-  const newCx = newWidth / 2;
-  const newCy = newHeight / 2;
-  
-  for (let dy = 0; dy < newHeight; dy++) {
-    for (let dx = 0; dx < newWidth; dx++) {
-      // Coordenada relativa ao centro da nova imagem
-      const rx = dx - newCx;
-      const ry = dy - newCy;
-      
-      // Rotação inversa + offset para coordenada na imagem original
-      const srcX = rx * cosInv - ry * sinInv + cx;
-      const srcY = rx * sinInv + ry * cosInv + cy;
-      
-      // Interpolação bilinear
-      const x0 = Math.floor(srcX);
-      const y0 = Math.floor(srcY);
-      const x1 = x0 + 1;
-      const y1 = y0 + 1;
-      
-      if (x0 >= 0 && y0 >= 0 && x1 < width && y1 < height) {
-        const fx = srcX - x0;
-        const fy = srcY - y0;
-        
-        const dstIdx = (dy * newWidth + dx) * 4;
-        
-        for (let c = 0; c < 4; c++) {
-          const v00 = data[(y0 * width + x0) * 4 + c];
-          const v10 = data[(y0 * width + x1) * 4 + c];
-          const v01 = data[(y1 * width + x0) * 4 + c];
-          const v11 = data[(y1 * width + x1) * 4 + c];
-          
-          result[dstIdx + c] = Math.round(
-            v00 * (1 - fx) * (1 - fy) +
-            v10 * fx * (1 - fy) +
-            v01 * (1 - fx) * fy +
-            v11 * fx * fy
-          );
-        }
-      }
-    }
-  }
-  
-  return { data: result, width: newWidth, height: newHeight };
-}
-
-/**
- * Unwarp v2: Usa Hough Transform para detectar inclinação e aplica rotação simples
- * Mais robusto que a versão anterior baseada em detecção de cantos
- */
-function unwarpPlateV2(
-  data: Uint8ClampedArray,
-  width: number,
-  height: number
-): { data: Uint8ClampedArray; width: number; height: number; wasUnwarped: boolean; angle: number } {
-  // Imagem muito pequena não precisa de unwarp
-  if (width < 60 || height < 20) {
-    console.log('📐 Unwarp v2: Imagem muito pequena, pulando');
-    return { data, width, height, wasUnwarped: false, angle: 0 };
-  }
-  
-  // 1. Detectar bordas
-  const edges = detectEdgesForHough(data, width, height);
-  
-  // 2. Hough Transform para encontrar linhas horizontais dominantes
-  const lines = houghTransformLines(edges, width, height);
-  
-  if (lines.length === 0) {
-    console.log('📐 Unwarp v2: Nenhuma linha detectada');
-    return { data, width, height, wasUnwarped: false, angle: 0 };
-  }
-  
-  // 3. Calcular ângulo dominante
-  const dominantAngle = calculateDominantAngle(lines);
-  
-  if (dominantAngle === null) {
-    console.log('📐 Unwarp v2: Não foi possível calcular ângulo dominante');
-    return { data, width, height, wasUnwarped: false, angle: 0 };
-  }
-  
-  // 4. Se inclinação < 2°, não vale a pena corrigir
-  if (Math.abs(dominantAngle) < 2) {
-    console.log(`📐 Unwarp v2: Inclinação mínima (${dominantAngle.toFixed(2)}°), pulando`);
-    return { data, width, height, wasUnwarped: false, angle: dominantAngle };
-  }
-  
-  // 5. Limitar correção a ±15° (evitar correções absurdas)
-  const correctionAngle = Math.max(-15, Math.min(15, dominantAngle));
-  
-  console.log(`📐 Unwarp v2: ${lines.length} linhas detectadas, ângulo dominante: ${dominantAngle.toFixed(2)}°, corrigindo ${correctionAngle.toFixed(2)}°`);
-  
-  // 6. Aplicar rotação
-  const rotated = rotateImage(data, width, height, correctionAngle);
-  
-  console.log(`✅ Unwarp v2: ${width}x${height} → ${rotated.width}x${rotated.height} (rotação: ${correctionAngle.toFixed(2)}°)`);
-  
-  return { 
-    data: rotated.data, 
-    width: rotated.width, 
-    height: rotated.height, 
-    wasUnwarped: true,
-    angle: correctionAngle
-  };
-}
+// ============ v1.1.36: UNWARP REMOVIDO ============
+// O Unwarp v2 (Hough Transform) foi removido pois estava introduzindo artefatos
+// em imagens pequenas, causando erros de OCR como E↔B e 0↔6.
+// Substituído por upscale 2x para preservar detalhes dos caracteres.
 
 // ============ FUNÇÕES ONNX OCR ============
 
@@ -1321,13 +1000,46 @@ function optimizeImageForOCR(
   width: number,
   height: number
 ): { data: Uint8ClampedArray; width: number; height: number } {
-  console.log(`🔄 Pipeline v1.1.10 iniciado: ${width}x${height}px`);
+  console.log(`🔄 Pipeline v1.1.36 iniciado: ${width}x${height}px`);
   
-  // v1.1.10: Simplificado - todo processamento no preprocessForONNX
-  // - Sem CLAHE (usando Histogram EQ global)
-  // - Sem padding (resize direto para tensor dinâmico)
-  // - Apenas passar os dados da região da placa
+  // v1.1.36: Upscale 2x para imagens pequenas (< 200px largura)
+  // Melhora detalhes dos caracteres antes do resize para tensor
+  // Resolve confusões como 0↔6, E↔B em placas distantes/pequenas
+  const MIN_WIDTH_FOR_OCR = 200;
+  const UPSCALE_FACTOR = 2;
   
+  if (width < MIN_WIDTH_FOR_OCR) {
+    const newWidth = width * UPSCALE_FACTOR;
+    const newHeight = height * UPSCALE_FACTOR;
+    
+    console.log(`📏 Upscale ${UPSCALE_FACTOR}x: ${width}x${height} → ${newWidth}x${newHeight}px`);
+    
+    // Criar canvas source com os dados originais
+    const srcCanvas = new OffscreenCanvas(width, height);
+    const srcCtx = srcCanvas.getContext('2d', { alpha: false })!;
+    const srcImageData = srcCtx.createImageData(width, height);
+    srcImageData.data.set(data);
+    srcCtx.putImageData(srcImageData, 0, 0);
+    
+    // Criar canvas destino com upscale e interpolação de alta qualidade
+    const dstCanvas = new OffscreenCanvas(newWidth, newHeight);
+    const dstCtx = dstCanvas.getContext('2d', { alpha: false })!;
+    dstCtx.imageSmoothingEnabled = true;
+    dstCtx.imageSmoothingQuality = 'high'; // Interpolação bilinear de alta qualidade
+    dstCtx.drawImage(srcCanvas, 0, 0, newWidth, newHeight);
+    
+    const upscaledData = dstCtx.getImageData(0, 0, newWidth, newHeight);
+    
+    console.log(`📏 Passando para tensor dinâmico (BGR + resize direto)`);
+    
+    return { 
+      data: new Uint8ClampedArray(upscaledData.data), 
+      width: newWidth, 
+      height: newHeight 
+    };
+  }
+  
+  console.log(`📏 Tamanho adequado (>=${MIN_WIDTH_FOR_OCR}px), sem upscale`);
   console.log(`📏 Passando para tensor dinâmico (BGR + resize direto)`);
   
   return { data: new Uint8ClampedArray(data), width, height };
@@ -2080,12 +1792,8 @@ async function processPlate(
     // Otimizar imagem com pipeline avançado v1.1.6 (CLAHE LAB + Padding + Lanczos)
     let optimized = optimizeImageForOCR(processData, processWidth, processHeight);
     
-    // v1.1.35: Unwarp v2 - Corrigir inclinação APÓS otimização (imagem mais limpa para Hough)
-    const unwarpResult = unwarpPlateV2(optimized.data, optimized.width, optimized.height);
-    if (unwarpResult.wasUnwarped) {
-      // Re-otimizar se houve rotação (para garantir dimensões corretas para OCR)
-      optimized = optimizeImageForOCR(unwarpResult.data, unwarpResult.width, unwarpResult.height);
-    }
+    // v1.1.36: Unwarp removido - estava introduzindo artefatos em imagens pequenas
+    // O upscale 2x em optimizeImageForOCR compensa a perda de detalhes
     
     self.postMessage({ type: 'PROGRESS', payload: { stage: 'Executando OCR ONNX...', progress: 0.4 } });
     
