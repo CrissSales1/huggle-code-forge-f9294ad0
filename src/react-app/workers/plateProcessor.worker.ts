@@ -184,15 +184,16 @@ async function initONNX(): Promise<void> {
   }
 }
 
-// v1.1.20: Center Crop + BGR + Stretch to Fill
-// - Center Crop vertical: remove 20% do topo e 10% da base (para-choque/grade)
-// - Stretch to Fill (320x48) para máxima resolução
+// v1.1.21: Center Crop + Padding Horizontal + BGR
+// - Center Crop vertical: remove 15% do topo e 10% da base (para-choque/grade)
+// - Padding horizontal: 280px útil centralizado em 320px (20px margem cada lado)
+// - Fundo cinza neutro (#7f7f7f) para padding
 // - Mantém BGR e normalização [-1, 1] corretas
 
 /**
- * Pré-processa imagem para PaddleOCR v1.1.20 - Center Crop + Stretch
- * - Tight Crop: Remove margem vertical (20% topo, 10% base)
- * - Stretch to Fill (320x48) para máxima resolução horizontal
+ * Pré-processa imagem para PaddleOCR v1.1.21 - Center Crop + Padding
+ * - Tight Crop: Remove margem vertical (15% topo, 10% base)
+ * - Padding Horizontal: 280px útil centralizado (20px margem cada lado)
  * - Ordem BGR (padrão OpenCV/PaddleOCR)
  * - Normalização [-1, 1]: (pixel/255 - 0.5) / 0.5
  */
@@ -203,10 +204,12 @@ function preprocessForONNX(
 ): { tensor: Float32Array; width: number; height: number } {
   const targetWidth = 320;
   const targetHeight = OCR_INPUT_HEIGHT; // 48
+  const drawWidth = 280;  // Largura útil (deixa 20px margem cada lado)
+  const drawX = (targetWidth - drawWidth) / 2; // Centraliza (x=20)
   
   // 1. TIGHT CROP VERTICAL (O Pulo do Gato)
   // Remove o "lixo" vertical (para-choque, grade) para dar zoom no texto
-  const cropTopRatio = 0.20;  // Remove 20% do topo
+  const cropTopRatio = 0.15;  // Remove 15% do topo (ajustado para segurança)
   const cropBottomRatio = 0.10; // Remove 10% da base
   
   const cropTop = Math.round(srcHeight * cropTopRatio);
@@ -214,7 +217,7 @@ function preprocessForONNX(
   const usefulHeight = srcHeight - cropTop - cropBottom;
   
   console.log(`📐 Center Crop: ${srcWidth}x${srcHeight} → crop top=${cropTop}px, bottom=${cropBottom}px → útil=${srcWidth}x${usefulHeight}px`);
-  console.log(`📐 Stretch to Fill: ${srcWidth}x${usefulHeight} → ${targetWidth}x${targetHeight}`);
+  console.log(`📐 Stretch+Padding: ${srcWidth}x${usefulHeight} → ${drawWidth}x${targetHeight} centralizado em ${targetWidth}x${targetHeight}`);
   
   // 2. CRIAR CANVAS TEMPORÁRIO COM IMAGEM ORIGINAL
   const srcCanvas = new OffscreenCanvas(srcWidth, srcHeight);
@@ -223,28 +226,32 @@ function preprocessForONNX(
   srcImageData.data.set(data);
   srcCtx.putImageData(srcImageData, 0, 0);
   
-  // 3. CRIAR CANVAS DE DESTINO E APLICAR CROP + STRETCH
+  // 3. CRIAR CANVAS DE DESTINO COM FUNDO NEUTRO
   const processCanvas = new OffscreenCanvas(targetWidth, targetHeight);
   const ctx = processCanvas.getContext('2d', { alpha: false })!;
+  
+  // Preencher com cinza neutro (#7f7f7f) para padding
+  ctx.fillStyle = "#7f7f7f";
+  ctx.fillRect(0, 0, targetWidth, targetHeight);
   
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   
-  // Desenhar apenas a parte útil da imagem (sem para-choque)
+  // 4. DESENHAR IMAGEM CENTRALIZADA COM PADDING
   // Source: Pega só o miolo da placa (y=cropTop, height=usefulHeight)
-  // Destino: Enche o tensor 320x48
+  // Destino: 280x48 centralizado (com 20px de margem em cada lado)
   ctx.drawImage(
     srcCanvas, 
     0, cropTop, srcWidth, usefulHeight,  // Source: área útil
-    0, 0, targetWidth, targetHeight       // Destino: 320x48
+    drawX, 0, drawWidth, targetHeight     // Destino: 280x48 em x=20
   );
   
-  // 4. EXTRAIR DADOS E CRIAR TENSOR
+  // 5. EXTRAIR DADOS E CRIAR TENSOR
   const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
   const pixels = targetWidth * targetHeight;
   const tensor = new Float32Array(3 * pixels);
   
-  // 5. NORMALIZAÇÃO [-1, 1] COM ORDEM BGR (não RGB!)
+  // 6. NORMALIZAÇÃO [-1, 1] COM ORDEM BGR (não RGB!)
   // Fórmula: (pixel/255 - 0.5) / 0.5
   for (let i = 0; i < pixels; i++) {
     const r = imageData.data[i * 4];
@@ -266,7 +273,7 @@ function preprocessForONNX(
     if (tensor[j] > maxVal) maxVal = tensor[j];
   }
   console.log(`📊 Tensor BGR [-1, 1]: min=${minVal.toFixed(2)}, max=${maxVal.toFixed(2)}`);
-  console.log(`📊 Seq Len: 40 (320px / 8px por passo) - Full resolution`);
+  console.log(`📊 Layout: 20px padding | 280px conteúdo | 20px padding`);
   
   return { tensor, width: targetWidth, height: targetHeight };
 }
@@ -437,7 +444,7 @@ async function runONNXOCR(
     // Decodificar CTC
     const { text, confidence } = decodeCTC(outputData, outputShape);
     
-    console.log(`🔤 ONNX OCR: "${text}" (conf: ${(confidence * 100).toFixed(1)}%)`);
+    console.log(`🔤 ONNX OCR: "${text}" (Conf: ${(confidence * 100).toFixed(1)}%)`);
     
     return { text, confidence };
   } catch (error) {
@@ -1810,4 +1817,4 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 };
 
 // Notificar que o worker está carregado
-console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.20 - Center Crop + Stretch)');
+console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.21 - Center Crop + Padding)');
