@@ -310,11 +310,10 @@ function resizeToTensorDirect(
 }
 
 /**
- * Pré-processa imagem para PaddleOCR v1.1.12
+ * Pré-processa imagem para PaddleOCR v1.1.13
  * - Histogram Equalization (força max=255)
- * - Resize PROPORCIONAL (mantém aspect ratio original)
+ * - Resize ESTICADO para 320x48 (Stretch to Fill)
  * - Sharpen após resize
- * - Padding cinza centralizado em tensor 320x48
  * - Normalização [0, 1] em ordem RGB (ONNX padrão)
  */
 function preprocessForONNX(
@@ -322,70 +321,36 @@ function preprocessForONNX(
   srcWidth: number,
   srcHeight: number
 ): { tensor: Float32Array; width: number; height: number } {
-  // 1. LARGURA FIXA 320px para Seq Len = 40 (suficiente para 7+ caracteres)
+  // 1. LARGURA FIXA 320px para Seq Len = 40
   const targetWidth = 320;
   const targetHeight = OCR_INPUT_HEIGHT; // 48
   
   // 2. HISTOGRAM EQUALIZATION antes do resize (força max=255)
   const equalizedData = histogramEqualization(data, srcWidth, srcHeight);
   
-  // 3. Calcular dimensões MANTENDO PROPORÇÃO
-  const srcAspect = srcWidth / srcHeight;
-  let resizeWidth: number;
-  let resizeHeight: number;
+  // 3. STRETCH TO FILL - Esticar para ocupar TODO o tensor 320x48
+  // Isso distorce os caracteres para o olho humano, mas para o CTC é ideal
+  // pois cada caractere ocupa ~45px (320/7 = 45) em vez de ~12px
+  console.log(`📐 Stretch to Fill: ${srcWidth}x${srcHeight} → ${targetWidth}x${targetHeight} (100% ocupação)`);
   
-  // Ajustar para caber na altura de 48px mantendo proporção
-  resizeHeight = targetHeight;
-  resizeWidth = Math.round(targetHeight * srcAspect);
+  const resizedContent = resizeToTensorDirect(equalizedData, srcWidth, srcHeight, targetWidth, targetHeight);
   
-  // Se ficou maior que 320px, reduzir para caber
-  if (resizeWidth > targetWidth) {
-    resizeWidth = targetWidth;
-    resizeHeight = Math.round(targetWidth / srcAspect);
-  }
+  // 4. SHARPEN após resize (separa caracteres)
+  const sharpenedContent = sharpenImage(resizedContent, targetWidth, targetHeight);
   
-  console.log(`📐 Proporção preservada: ${srcWidth}x${srcHeight} → ${resizeWidth}x${resizeHeight} em tensor ${targetWidth}x${targetHeight}`);
-  
-  // 4. Resize MANTENDO PROPORÇÃO
-  const resizedContent = resizeToTensorDirect(equalizedData, srcWidth, srcHeight, resizeWidth, resizeHeight);
-  
-  // 5. SHARPEN após resize (separa caracteres)
-  const sharpenedContent = sharpenImage(resizedContent, resizeWidth, resizeHeight);
-  
-  // 6. Criar tensor 320x48 com PADDING CINZA (valor 0.5 normalizado = background neutro)
+  // 5. Criar tensor 320x48 e preencher com conteúdo (sem padding!)
   const pixels = targetWidth * targetHeight;
   const tensor = new Float32Array(3 * pixels);
   
-  // Preencher com cinza (valor 0.5 normalizado)
-  const grayValue = 0.5;
+  // Preencher direto (RGB order)
   for (let i = 0; i < pixels; i++) {
-    tensor[i] = grayValue;              // Canal 0 = Red
-    tensor[pixels + i] = grayValue;     // Canal 1 = Green
-    tensor[2 * pixels + i] = grayValue; // Canal 2 = Blue
-  }
-  
-  // 7. Calcular offset para CENTRALIZAR o conteúdo
-  const offsetX = Math.floor((targetWidth - resizeWidth) / 2);
-  const offsetY = Math.floor((targetHeight - resizeHeight) / 2);
-  
-  console.log(`📍 Conteúdo centralizado: offset (${offsetX}, ${offsetY})`);
-  
-  // 8. Copiar conteúdo para o centro do tensor (RGB order)
-  for (let y = 0; y < resizeHeight; y++) {
-    for (let x = 0; x < resizeWidth; x++) {
-      const srcIdx = (y * resizeWidth + x) * 4;
-      const dstX = offsetX + x;
-      const dstY = offsetY + y;
-      const dstIdx = dstY * targetWidth + dstX;
-      
-      const r = sharpenedContent[srcIdx] / 255.0;
-      const g = sharpenedContent[srcIdx + 1] / 255.0;
-      const b = sharpenedContent[srcIdx + 2] / 255.0;
-      
-      tensor[dstIdx] = r;                     // Canal 0 = Red
-      tensor[pixels + dstIdx] = g;            // Canal 1 = Green
-      tensor[2 * pixels + dstIdx] = b;        // Canal 2 = Blue
-    }
+    const r = sharpenedContent[i * 4] / 255.0;
+    const g = sharpenedContent[i * 4 + 1] / 255.0;
+    const b = sharpenedContent[i * 4 + 2] / 255.0;
+    
+    tensor[i] = r;                     // Canal 0 = Red
+    tensor[pixels + i] = g;            // Canal 1 = Green
+    tensor[2 * pixels + i] = b;        // Canal 2 = Blue
   }
   
   // Debug: mostrar range do tensor
@@ -395,7 +360,7 @@ function preprocessForONNX(
     if (tensor[j] > maxVal) maxVal = tensor[j];
   }
   console.log(`📊 Tensor RGB [0, 1]: min=${minVal.toFixed(2)}, max=${maxVal.toFixed(2)}`);
-  console.log(`📊 Seq Len: ${targetWidth / 8} = 40 (ideal para 7 caracteres)`);
+  console.log(`📊 Seq Len: 40 (ideal para 7 caracteres)`);
   
   return { tensor, width: targetWidth, height: targetHeight };
 }
@@ -1939,4 +1904,4 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 };
 
 // Notificar que o worker está carregado
-console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.9 - HistEQ + Sharpen + Norm [0,1])');
+console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.13 - Stretch to Fill)');
