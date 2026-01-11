@@ -311,7 +311,9 @@ function unwarpPlate(
 /**
  * Tenta desentortar a placa se detectar inclinação significativa
  * Retorna os dados originais se não conseguir detectar cantos ou inclinação < 3°
+ * v1.1.34: Função desabilitada temporariamente - será reimplementada com Hough Transform
  */
+// @ts-ignore - Função desabilitada temporariamente em v1.1.34, será reativada com Unwarp v2
 function tryUnwarpPlate(
   data: Uint8ClampedArray,
   width: number,
@@ -1958,13 +1960,15 @@ async function processPlate(
       
       console.log(`🔲 Região recortada: ${processWidth}x${processHeight}px`);
       
-      // Tentar desentortar a placa se estiver inclinada
-      const unwarpResult = tryUnwarpPlate(processData, processWidth, processHeight);
-      if (unwarpResult.wasUnwarped) {
-        processData = unwarpResult.data;
-        processWidth = unwarpResult.width;
-        processHeight = unwarpResult.height;
-      }
+      // v1.1.34: Unwarp desabilitado temporariamente - estava distorcendo ao invés de corrigir
+      // O algoritmo aplicava transformação na imagem recortada bruta, encontrando cantos errados
+      // Futuro: implementar Unwarp v2 com detecção de linhas (Hough Transform)
+      // const unwarpResult = tryUnwarpPlate(processData, processWidth, processHeight);
+      // if (unwarpResult.wasUnwarped) {
+      //   processData = unwarpResult.data;
+      //   processWidth = unwarpResult.width;
+      //   processHeight = unwarpResult.height;
+      // }
     } else {
       processData = imageData.data;
       processWidth = width;
