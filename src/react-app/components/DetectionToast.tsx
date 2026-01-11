@@ -20,6 +20,7 @@ export default function DetectionToast() {
   const isOnMonitoringPage = location.pathname === '/monitoramento';
   
   // Mostrar toast quando detectar uma placa (apenas fora da página de monitoramento)
+  // Usa timestamp como dependência para garantir que cada detecção única dispare o efeito
   useEffect(() => {
     if (lastDetection && isActive && !isOnMonitoringPage) {
       // Nova detecção
@@ -38,7 +39,7 @@ export default function DetectionToast() {
       
       return () => clearTimeout(hideTimer);
     }
-  }, [lastDetection, isActive, isOnMonitoringPage]);
+  }, [lastDetection?.timestamp, isActive, isOnMonitoringPage]);
   
   // Esconder ao entrar na página de monitoramento
   useEffect(() => {
