@@ -828,7 +828,11 @@ export function useLPRDetections() {
       setDetectionHistory((history || []).map(mapDetectionData));
       
     } catch (err) {
-      console.error('Erro ao buscar detecções:', err);
+      // v1.1.30: Silenciar erros de rede transitórios (Failed to fetch)
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      if (!errorMessage.includes('Failed to fetch')) {
+        console.error('Erro ao buscar detecções:', err);
+      }
       setError(err instanceof Error ? err.message : 'Erro ao buscar detecções');
     } finally {
       setLoading(false);
