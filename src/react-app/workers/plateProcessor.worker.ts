@@ -184,16 +184,17 @@ async function initONNX(): Promise<void> {
   }
 }
 
-// v1.1.21: Center Crop + Padding Horizontal + BGR
-// - Center Crop vertical: remove 15% do topo e 10% da base (para-choque/grade)
-// - Padding horizontal: 280px útil centralizado em 320px (20px margem cada lado)
-// - Fundo cinza neutro (#7f7f7f) para padding
-// - Mantém BGR e normalização [-1, 1] corretas
+// v1.1.22: Center Crop + Padding + Contraste + Temperature Scaling
+// - Center Crop vertical: 15% topo, 5% base (preserva base dos caracteres)
+// - Padding horizontal: 290px útil centralizado em 320px (15px margem cada lado)
+// - Contraste: +20% para melhorar separação de caracteres
+// - Temperature Scaling: x10 no softmax para confiança calibrada
 
 /**
- * Pré-processa imagem para PaddleOCR v1.1.21 - Center Crop + Padding
- * - Tight Crop: Remove margem vertical (15% topo, 10% base)
- * - Padding Horizontal: 280px útil centralizado (20px margem cada lado)
+ * Pré-processa imagem para PaddleOCR v1.1.22
+ * - Tight Crop: Remove margem vertical (15% topo, 5% base)
+ * - Padding Horizontal: 290px útil centralizado (15px margem cada lado)
+ * - Contraste: +20% antes da normalização
  * - Ordem BGR (padrão OpenCV/PaddleOCR)
  * - Normalização [-1, 1]: (pixel/255 - 0.5) / 0.5
  */
@@ -204,13 +205,12 @@ function preprocessForONNX(
 ): { tensor: Float32Array; width: number; height: number } {
   const targetWidth = 320;
   const targetHeight = OCR_INPUT_HEIGHT; // 48
-  const drawWidth = 280;  // Largura útil (deixa 20px margem cada lado)
-  const drawX = (targetWidth - drawWidth) / 2; // Centraliza (x=20)
+  const drawWidth = 290;  // Largura útil (deixa 15px margem cada lado)
+  const drawX = (targetWidth - drawWidth) / 2; // Centraliza (x=15)
   
-  // 1. TIGHT CROP VERTICAL (O Pulo do Gato)
-  // Remove o "lixo" vertical (para-choque, grade) para dar zoom no texto
-  const cropTopRatio = 0.15;  // Remove 15% do topo (ajustado para segurança)
-  const cropBottomRatio = 0.10; // Remove 10% da base
+  // 1. TIGHT CROP VERTICAL (Ajustado para preservar base dos caracteres)
+  const cropTopRatio = 0.15;  // Remove 15% do topo
+  const cropBottomRatio = 0.05; // APENAS 5% da base (preserva '2', 'J', etc.)
   
   const cropTop = Math.round(srcHeight * cropTopRatio);
   const cropBottom = Math.round(srcHeight * cropBottomRatio);
@@ -238,12 +238,10 @@ function preprocessForONNX(
   ctx.imageSmoothingQuality = 'high';
   
   // 4. DESENHAR IMAGEM CENTRALIZADA COM PADDING
-  // Source: Pega só o miolo da placa (y=cropTop, height=usefulHeight)
-  // Destino: 280x48 centralizado (com 20px de margem em cada lado)
   ctx.drawImage(
     srcCanvas, 
-    0, cropTop, srcWidth, usefulHeight,  // Source: área útil
-    drawX, 0, drawWidth, targetHeight     // Destino: 280x48 em x=20
+    0, cropTop, srcWidth, usefulHeight,  // Source: área útil (miolo vertical)
+    drawX, 0, drawWidth, targetHeight     // Destino: 290x48 em x=15
   );
   
   // 5. EXTRAIR DADOS E CRIAR TENSOR
@@ -251,13 +249,22 @@ function preprocessForONNX(
   const pixels = targetWidth * targetHeight;
   const tensor = new Float32Array(3 * pixels);
   
-  // 6. NORMALIZAÇÃO [-1, 1] COM ORDEM BGR (não RGB!)
-  // Fórmula: (pixel/255 - 0.5) / 0.5
+  // 6. CONTRASTE + NORMALIZAÇÃO [-1, 1] COM ORDEM BGR
+  // Fator de Contraste (1.2 = +20% contraste)
+  const contrast = 1.2;
+  const intercept = 128 * (1 - contrast);
+  
   for (let i = 0; i < pixels; i++) {
-    const r = imageData.data[i * 4];
-    const g = imageData.data[i * 4 + 1];
-    const b = imageData.data[i * 4 + 2];
+    let r = imageData.data[i * 4];
+    let g = imageData.data[i * 4 + 1];
+    let b = imageData.data[i * 4 + 2];
     
+    // Aplica Contraste Simples
+    r = Math.max(0, Math.min(255, (r * contrast) + intercept));
+    g = Math.max(0, Math.min(255, (g * contrast) + intercept));
+    b = Math.max(0, Math.min(255, (b * contrast) + intercept));
+    
+    // Normalização Paddle BGR [-1, 1]
     // Canal 0: Blue
     tensor[0 * pixels + i] = ((b / 255.0) - 0.5) / 0.5;
     // Canal 1: Green
@@ -272,14 +279,28 @@ function preprocessForONNX(
     if (tensor[j] < minVal) minVal = tensor[j];
     if (tensor[j] > maxVal) maxVal = tensor[j];
   }
-  console.log(`📊 Tensor BGR [-1, 1]: min=${minVal.toFixed(2)}, max=${maxVal.toFixed(2)}`);
-  console.log(`📊 Layout: 20px padding | 280px conteúdo | 20px padding`);
+  console.log(`📊 Tensor BGR [-1, 1] (contraste ${contrast}x): min=${minVal.toFixed(2)}, max=${maxVal.toFixed(2)}`);
+  console.log(`📊 Layout: 15px padding | 290px conteúdo | 15px padding`);
   
   return { tensor, width: targetWidth, height: targetHeight };
 }
 
 /**
- * Decodifica output CTC do PaddleOCR
+ * Aplica Softmax com Temperature Scaling
+ * Temperature > 1 "afia" a distribuição, aumentando confiança em logits baixos
+ * @param logits - Array de logits (valores brutos do modelo)
+ * @param temperature - Fator de escala (10 = calibração para modelos uncalibrated)
+ */
+function softmaxWithTemperature(logits: number[], temperature: number = 10): number[] {
+  const maxLogit = Math.max(...logits); // Estabilidade numérica
+  // Multiplica por temperatura ANTES do exp para "afiar" a distribuição
+  const exps = logits.map(l => Math.exp((l - maxLogit) * temperature));
+  const sumExps = exps.reduce((a, b) => a + b, 0);
+  return exps.map(e => e / sumExps);
+}
+
+/**
+ * Decodifica output CTC do PaddleOCR com Temperature Scaling
  */
 function decodeCTC(output: Float32Array, outputShape: readonly number[]): { text: string; confidence: number } {
   // Shape: [1, seq_len, num_classes] ou [seq_len, num_classes]
@@ -302,30 +323,29 @@ function decodeCTC(output: Float32Array, outputShape: readonly number[]): { text
   let totalConf = 0;
   let charCount = 0;
   
+  // Temperature para calibração de confiança (logits do modelo são muito baixos)
+  const TEMPERATURE = 10;
+  
   for (let t = 0; t < seqLen; t++) {
-    // Encontrar índice com maior probabilidade
+    // Extrair logits para esta posição
+    const logits: number[] = [];
+    for (let c = 0; c < numClasses; c++) {
+      logits.push(output[t * numClasses + c]);
+    }
+    
+    // Encontrar índice com maior valor
     let maxIdx = 0;
     let maxVal = -Infinity;
-    
     for (let c = 0; c < numClasses; c++) {
-      const val = output[t * numClasses + c];
-      if (val > maxVal) {
-        maxVal = val;
+      if (logits[c] > maxVal) {
+        maxVal = logits[c];
         maxIdx = c;
       }
     }
     
-    // Aplicar softmax para obter probabilidade correta
-    let expSum = 0;
-    const expValues: number[] = [];
-    for (let c = 0; c < numClasses; c++) {
-      const expVal = Math.exp(output[t * numClasses + c] - maxVal);
-      expValues.push(expVal);
-      expSum += expVal;
-    }
-    // Probabilidade real = exp(maxVal - maxVal) / expSum = 1 / expSum
-    // Mas expValues[maxIdx] = exp(0) = 1, então:
-    const prob = expValues[maxIdx] / expSum;
+    // Aplicar softmax com temperature scaling para confiança calibrada
+    const probs = softmaxWithTemperature(logits, TEMPERATURE);
+    const prob = probs[maxIdx];
     
     // CTC: ignorar blank (índice 0) e repetições
     if (maxIdx !== 0 && maxIdx !== lastIdx) {
@@ -1817,4 +1837,4 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 };
 
 // Notificar que o worker está carregado
-console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.21 - Center Crop + Padding)');
+console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.22 - Contraste + Temperature Scaling)');
