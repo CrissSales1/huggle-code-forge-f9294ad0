@@ -1058,7 +1058,7 @@ export default function Configuracoes() {
       {/* Rodapé com versão */}
       <div className="mt-8 pt-4 border-t border-gray-200 text-center">
         <p className="text-xs text-gray-400">
-          Versão do Sistema: <span className="font-mono font-medium text-gray-500">1.1.35</span> <span className="text-emerald-500">(Unwarp v2 - Hough Transform)</span>
+          Versão do Sistema: <span className="font-mono font-medium text-gray-500">1.1.36</span> <span className="text-emerald-500">(Upscale 2x + Unwarp Removido)</span>
         </p>
       </div>
     </div>
