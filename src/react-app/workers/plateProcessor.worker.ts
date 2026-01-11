@@ -190,8 +190,9 @@ async function initONNX(): Promise<void> {
 // - Mantém BGR e normalização [-1, 1] corretas
 
 /**
- * Pré-processa imagem para PaddleOCR v1.1.18
- * - Stretch to Fill (320x48) para máxima resolução horizontal
+ * Pré-processa imagem para PaddleOCR v1.1.19 - Letterbox Resize
+ * - Preserva Aspect Ratio (height=48px fixo, width proporcional)
+ * - Padding com cinza (#7f7f7f) para áreas vazias à direita
  * - Ordem BGR (padrão OpenCV/PaddleOCR)
  * - Normalização [-1, 1]: (pixel/255 - 0.5) / 0.5
  */
@@ -203,29 +204,41 @@ function preprocessForONNX(
   const targetWidth = 320;
   const targetHeight = OCR_INPUT_HEIGHT; // 48
   
-  console.log(`📐 Stretch to Fill: ${srcWidth}x${srcHeight} → ${targetWidth}x${targetHeight}`);
+  // 1. CALCULAR DIMENSÕES PRESERVANDO ASPECT RATIO
+  const scale = targetHeight / srcHeight;
+  let newWidth = Math.round(srcWidth * scale);
   
-  // 1. CRIAR CANVAS TEMPORÁRIO COM IMAGEM ORIGINAL
+  // Trava de segurança: Se a placa for muito comprida, limita a 320
+  if (newWidth > targetWidth) newWidth = targetWidth;
+  
+  console.log(`📐 Letterbox Resize: ${srcWidth}x${srcHeight} → ${newWidth}x${targetHeight} (padding: ${targetWidth - newWidth}px)`);
+  
+  // 2. CRIAR CANVAS TEMPORÁRIO COM IMAGEM ORIGINAL
   const srcCanvas = new OffscreenCanvas(srcWidth, srcHeight);
   const srcCtx = srcCanvas.getContext('2d', { alpha: false })!;
   const srcImageData = srcCtx.createImageData(srcWidth, srcHeight);
   srcImageData.data.set(data);
   srcCtx.putImageData(srcImageData, 0, 0);
   
-  // 2. CRIAR CANVAS DE DESTINO E ESTICAR IMAGEM (STRETCH TO FILL)
+  // 3. CRIAR CANVAS DE DESTINO COM FUNDO CINZA (PADDING NEUTRO)
   const processCanvas = new OffscreenCanvas(targetWidth, targetHeight);
   const ctx = processCanvas.getContext('2d', { alpha: false })!;
   
+  // Preencher com cinza médio (#7f7f7f) - valor neutro para a rede neural
+  ctx.fillStyle = '#7f7f7f';
+  ctx.fillRect(0, 0, targetWidth, targetHeight);
+  
+  // 4. DESENHAR IMAGEM ALINHADA À ESQUERDA (x=0)
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(srcCanvas, 0, 0, srcWidth, srcHeight, 0, 0, targetWidth, targetHeight);
+  ctx.drawImage(srcCanvas, 0, 0, srcWidth, srcHeight, 0, 0, newWidth, targetHeight);
   
-  // 3. EXTRAIR DADOS E CRIAR TENSOR
+  // 5. EXTRAIR DADOS E CRIAR TENSOR
   const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
   const pixels = targetWidth * targetHeight;
   const tensor = new Float32Array(3 * pixels);
   
-  // 4. NORMALIZAÇÃO [-1, 1] COM ORDEM BGR (não RGB!)
+  // 6. NORMALIZAÇÃO [-1, 1] COM ORDEM BGR (não RGB!)
   // Fórmula: (pixel/255 - 0.5) / 0.5
   for (let i = 0; i < pixels; i++) {
     const r = imageData.data[i * 4];
@@ -240,14 +253,17 @@ function preprocessForONNX(
     tensor[2 * pixels + i] = ((r / 255.0) - 0.5) / 0.5;
   }
   
-  // Debug: mostrar range do tensor
+  // Debug: mostrar range do tensor e seq len efetivo
   let minVal = Infinity, maxVal = -Infinity;
   for (let j = 0; j < tensor.length; j++) {
     if (tensor[j] < minVal) minVal = tensor[j];
     if (tensor[j] > maxVal) maxVal = tensor[j];
   }
   console.log(`📊 Tensor BGR [-1, 1]: min=${minVal.toFixed(2)}, max=${maxVal.toFixed(2)}`);
-  console.log(`📊 Seq Len: 40 (320px / 8px por passo)`);
+  
+  // Seq len baseado na largura real do conteúdo (não do padding)
+  const effectiveSeqLen = Math.floor(newWidth / 8);
+  console.log(`📊 Seq Len efetivo: ${effectiveSeqLen} (baseado em ${newWidth}px de conteúdo)`);
   
   return { tensor, width: targetWidth, height: targetHeight };
 }
@@ -1791,4 +1807,4 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 };
 
 // Notificar que o worker está carregado
-console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.18 - BGR + Stretch)');
+console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.19 - Letterbox Resize)');
