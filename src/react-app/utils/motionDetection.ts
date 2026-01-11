@@ -366,7 +366,7 @@ export function compareFrames(
 }
 
 // Thresholds para detecção por referência
-const DETECTION_THRESHOLD = 0.15; // 15% de diferença = veículo presente
+const DETECTION_THRESHOLD = 0.10; // 10% de diferença = veículo presente (v1.1.33)
 const CLEAN_THRESHOLD = 0.05;     // 5% de diferença = área considerada limpa
 const AUTO_UPDATE_DELAY_MS = 10000; // 10 segundos limpa = atualiza referência
 const OCR_RETRY_DELAY_MS = 800;   // Fast-Track: 800ms entre tentativas para coleta de buffer

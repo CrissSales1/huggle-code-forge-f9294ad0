@@ -729,13 +729,13 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
             {/* Indicador de detecção */}
             {hasReference && (
               <div className={`text-xs px-2 py-1 rounded ${
-                motionPercent >= 0.15 
+                motionPercent >= 0.10 
                   ? 'bg-yellow-500 text-black font-medium' 
                   : motionPercent >= 0.05 
                     ? 'bg-blue-500/80 text-white'
                     : 'bg-black/70 text-gray-300'
               }`}>
-                {motionPercent >= 0.15 
+                {motionPercent >= 0.10 
                   ? `🚗 Veículo: ${Math.round(motionPercent * 100)}%`
                   : motionPercent >= 0.05 
                     ? `⚠️ Mudança: ${Math.round(motionPercent * 100)}%`
