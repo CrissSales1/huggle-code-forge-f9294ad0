@@ -188,10 +188,13 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   const recentPlatesRef = useRef<Map<string, number>>(new Map());
   const isActiveRef = useRef(false);
   
-  // Fast-Track: Buffer de consistência temporal para OCR
+  // Fast-Track v1.1.29: Buffer de consistência temporal para OCR + Auto-Reset
   const ocrBufferRef = useRef<Array<{ placa: string; confidence: number; timestamp: number }>>([]);
   const fastTrackValidatedRef = useRef<boolean>(false);
   const noMotionCounterRef = useRef<number>(0); // Contador de frames sem movimento
+  const lastValidationTimeRef = useRef<number>(0);        // Timestamp da última validação
+  const lastValidatedPlateRef = useRef<string>('');       // Placa que foi validada
+  const VALIDATION_TIMEOUT_MS = 8000;                      // 8 segundos para reset automático
   
   // Hooks para processamento em background e métricas de performance
   const { 
@@ -547,10 +550,19 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     if (!videoRef.current || status !== 'monitoring') return false;
     if (!workerReady) return false;
     
-    // Fast-Track: Se já validou por consistência temporal, ignorar novas leituras
+    // Fast-Track v1.1.29: Se já validou, verificar timeout para permitir novo veículo
     if (fastTrackValidatedRef.current) {
-      console.log('🚀 Fast-Track: Veículo já validado, ignorando nova leitura');
-      return true;
+      const timeSinceValidation = Date.now() - lastValidationTimeRef.current;
+      
+      // Reset automático após timeout (veículo já passou)
+      if (timeSinceValidation >= VALIDATION_TIMEOUT_MS) {
+        console.log(`⏱️ Fast-Track: Timeout ${VALIDATION_TIMEOUT_MS/1000}s - permitindo novo veículo`);
+        resetOcrBuffer();
+        // Continua para processar novo OCR
+      } else {
+        console.log('🚀 Fast-Track: Veículo já validado, ignorando nova leitura');
+        return true;
+      }
     }
     
     setStatus('processing');
@@ -624,6 +636,8 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         // ========== CONSENSO ATINGIDO - Fast-Track Validação! ==========
         console.log(`🚀 Fast-Track: Placa ${placa} validada por consistência (${matchCount}/${OCR_BUFFER_SIZE})`);
         fastTrackValidatedRef.current = true;
+        lastValidationTimeRef.current = Date.now();
+        lastValidatedPlateRef.current = placa;
         
         if (isPlateRecent(placa)) {
           logger.log(`⏳ Placa ${placa} detectada recentemente, ignorando...`);
