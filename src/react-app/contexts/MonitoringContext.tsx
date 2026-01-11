@@ -144,6 +144,11 @@ const MonitoringContext = createContext<MonitoringContextType | null>(null);
 const COOLDOWN_MS = 30000;
 const FRAME_INTERVAL_MS = 350;
 
+// Fast-Track: Constantes de Consistência Temporal
+const CONSISTENCY_THRESHOLD = 3;       // Precisa de 3 leituras iguais para validar
+const OCR_BUFFER_SIZE = 5;             // Janela deslizante de últimas 5 leituras
+const MIN_CONFIDENCE_FOR_BUFFER = 70;  // Confiança mínima para entrar no buffer (70%)
+
 export function MonitoringProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<MonitoringStatus>('idle');
   const [statusMessage, setStatusMessage] = useState('Parado');
@@ -182,6 +187,11 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   const frameIntervalRef = useRef<number | null>(null);
   const recentPlatesRef = useRef<Map<string, number>>(new Map());
   const isActiveRef = useRef(false);
+  
+  // Fast-Track: Buffer de consistência temporal para OCR
+  const ocrBufferRef = useRef<Array<{ placa: string; confidence: number; timestamp: number }>>([]);
+  const fastTrackValidatedRef = useRef<boolean>(false);
+  const noMotionCounterRef = useRef<number>(0); // Contador de frames sem movimento
   
   // Hooks para processamento em background e métricas de performance
   const { 
@@ -369,6 +379,41 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     recentPlatesRef.current.set(placa, Date.now());
   }, []);
   
+  // Fast-Track: Verificar consistência temporal do buffer OCR
+  const checkOcrConsistency = useCallback((plateText: string, confidence: number): { hasConsensus: boolean; matchCount: number } => {
+    // Só aceita leituras com confiança mínima para o buffer
+    if (confidence < MIN_CONFIDENCE_FOR_BUFFER) {
+      console.log(`⚠️ Fast-Track: Confiança ${confidence.toFixed(0)}% abaixo do mínimo (${MIN_CONFIDENCE_FOR_BUFFER}%), ignorando leitura`);
+      return { hasConsensus: false, matchCount: 0 };
+    }
+    
+    // Adiciona ao buffer (FIFO)
+    ocrBufferRef.current.push({ placa: plateText, confidence, timestamp: Date.now() });
+    
+    // Mantém apenas as últimas N leituras
+    if (ocrBufferRef.current.length > OCR_BUFFER_SIZE) {
+      ocrBufferRef.current.shift();
+    }
+    
+    // Conta quantas vezes a placa atual aparece no buffer
+    const matchCount = ocrBufferRef.current.filter(entry => entry.placa === plateText).length;
+    const hasConsensus = matchCount >= CONSISTENCY_THRESHOLD;
+    
+    console.log(`🔄 Fast-Track Buffer: "${plateText}" aparece ${matchCount}/${OCR_BUFFER_SIZE} vezes (consenso=${hasConsensus ? '✅' : '❌'})`);
+    
+    return { hasConsensus, matchCount };
+  }, []);
+  
+  // Fast-Track: Limpar buffer quando veículo sai da área ou é validado
+  const resetOcrBuffer = useCallback(() => {
+    if (ocrBufferRef.current.length > 0 || fastTrackValidatedRef.current) {
+      console.log('🧹 Fast-Track: Buffer OCR limpo');
+    }
+    ocrBufferRef.current = [];
+    fastTrackValidatedRef.current = false;
+    noMotionCounterRef.current = 0;
+  }, []);
+  
   const checkIfMorador = useCallback(async (placa: string): Promise<{ isMorador: boolean; casa?: string; placaCadastrada?: string }> => {
     try {
       const placaLimpa = placa.toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -502,6 +547,12 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     if (!videoRef.current || status !== 'monitoring') return false;
     if (!workerReady) return false;
     
+    // Fast-Track: Se já validou por consistência temporal, ignorar novas leituras
+    if (fastTrackValidatedRef.current) {
+      console.log('🚀 Fast-Track: Veículo já validado, ignorando nova leitura');
+      return true;
+    }
+    
     setStatus('processing');
     setStatusMessage('🔍 Reconhecendo placa...');
     
@@ -521,6 +572,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       if (!result) {
         finishProcessingTimer();
         setStatusMessage('❌ Erro no processamento');
+        setStatus('monitoring');
         return false;
       }
       
@@ -554,6 +606,24 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       
       if (result.success && result.validation.isValid) {
         const placa = result.validation.corrected;
+        const confidence = result.validation.confidence;
+        
+        // ========== FAST-TRACK: Verificar Consistência Temporal ==========
+        const { hasConsensus, matchCount } = checkOcrConsistency(placa, confidence);
+        
+        if (!hasConsensus) {
+          // Sem consenso ainda - continuar coletando leituras
+          finishProcessingTimer();
+          setStatus('monitoring');
+          setStatusMessage(`🔄 Coletando: ${matchCount}/${CONSISTENCY_THRESHOLD} (${placa})`);
+          
+          // Não marca como sucesso de OCR para continuar tentando
+          return false;
+        }
+        
+        // ========== CONSENSO ATINGIDO - Fast-Track Validação! ==========
+        console.log(`🚀 Fast-Track: Placa ${placa} validada por consistência (${matchCount}/${OCR_BUFFER_SIZE})`);
+        fastTrackValidatedRef.current = true;
         
         if (isPlateRecent(placa)) {
           logger.log(`⏳ Placa ${placa} detectada recentemente, ignorando...`);
@@ -604,9 +674,9 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         motionDetectorRef.current.markOcrSuccess();
         
         if (isMorador) {
-          setStatusMessage(`✅ Morador: ${placa} - Casa ${casa}`);
+          setStatusMessage(`✅ Morador: ${placa} - Casa ${casa} (Fast-Track)`);
         } else if (isVisitante) {
-          setStatusMessage(`🧑 Visitante: ${nomeVisitante} - Casa ${casaFinal}`);
+          setStatusMessage(`🧑 Visitante: ${nomeVisitante} - Casa ${casaFinal} (Fast-Track)`);
         } else {
           setStatusMessage(`⚠️ Não cadastrado: ${placa}`);
         }
@@ -615,12 +685,14 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       } else {
         finishProcessingTimer();
         setStatusMessage('❌ Placa não reconhecida - tentando novamente...');
+        setStatus('monitoring');
         return false;
       }
     } catch (e) {
       console.error('Erro ao processar OCR:', e);
       finishProcessingTimer();
       setStatusMessage('❌ Erro no processamento - tentando novamente...');
+      setStatus('monitoring');
       return false;
     }
   }, [
@@ -637,6 +709,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     updateProcessingStage,
     finishProcessingTimer,
     debugModeEnabled,
+    checkOcrConsistency,
   ]);
   
   const captureReferenceFrame = useCallback(() => {
@@ -841,6 +914,9 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     }
     
     if (result.hasMotion) {
+      // Reset contador de frames sem movimento
+      noMotionCounterRef.current = 0;
+      
       setStatus('motion_detected');
       setStatusMessage('🟡 Veículo detectado...');
       setProcessingInfo(prev => ({
@@ -849,6 +925,15 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         stageLabel: 'Veículo detectado!',
       }));
     } else if (!result.hasMotion && status === 'motion_detected') {
+      // Fast-Track: Incrementar contador de frames sem movimento
+      noMotionCounterRef.current++;
+      
+      // Após 3 frames sem movimento (~1 segundo), limpar buffer OCR
+      // Isso indica que o veículo saiu da área de detecção
+      if (noMotionCounterRef.current >= 3) {
+        resetOcrBuffer();
+      }
+      
       setStatus('monitoring');
       setStatusMessage('🟢 Monitorando...');
       setProcessingInfo(prev => ({
@@ -875,7 +960,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         }
       }, 2000);
     }
-  }, [status, virtualArea, processFrameForOCR, captureReferenceFrame, processingInfo.stage, processingInfo.stageLabel, recordFrameStart, recordFrameEnd, recordOcrTime]);
+  }, [status, virtualArea, processFrameForOCR, captureReferenceFrame, processingInfo.stage, processingInfo.stageLabel, recordFrameStart, recordFrameEnd, recordOcrTime, resetOcrBuffer]);
   
   // Loop de frames
   useEffect(() => {
@@ -917,6 +1002,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       motionDetectorRef.current.fullReset();
       recentPlatesRef.current.clear();
       resetOCRState();
+      resetOcrBuffer(); // Fast-Track: Limpar buffer de consistência
       setHasReference(false);
       
       processingTimesRef.current = [];
@@ -959,7 +1045,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       setStatus('error');
       setStatusMessage('❌ Erro ao acessar câmera');
     }
-  }, [selectedCamera, selectedResolution, resetOCRState]);
+  }, [selectedCamera, selectedResolution, resetOCRState, resetOcrBuffer]);
   
   const stopMonitoring = useCallback(() => {
     if (streamRef.current) {
@@ -1012,6 +1098,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       motionDetectorRef.current.fullReset();
       recentPlatesRef.current.clear();
       resetOCRState();
+      resetOcrBuffer(); // Fast-Track: Limpar buffer de consistência
       setHasReference(false);
       
       processingTimesRef.current = [];
@@ -1100,7 +1187,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       setHlsStatus('error');
       setStatusMessage(`❌ ${e instanceof Error ? e.message : 'Erro ao conectar'}`);
     }
-  }, [hlsUrl, stopMonitoring, resetOCRState]);
+  }, [hlsUrl, stopMonitoring, resetOCRState, resetOcrBuffer]);
   
   // Reconectar stream quando elemento de vídeo muda (navegação entre páginas)
   const reconnectStream = useCallback(() => {
