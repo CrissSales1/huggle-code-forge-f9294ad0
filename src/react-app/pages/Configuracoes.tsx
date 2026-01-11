@@ -1058,7 +1058,7 @@ export default function Configuracoes() {
       {/* Rodapé com versão */}
       <div className="mt-8 pt-4 border-t border-gray-200 text-center">
         <p className="text-xs text-gray-400">
-          Versão do Sistema: <span className="font-mono font-medium text-gray-500">1.1.9</span> <span className="text-emerald-500">(ONNX OCR + HistEQ + Sharpen + Norm [0,1])</span>
+          Versão do Sistema: <span className="font-mono font-medium text-gray-500">1.1.10</span> <span className="text-emerald-500">(ONNX OCR + BGR + Tensor dinâmico)</span>
         </p>
       </div>
     </div>

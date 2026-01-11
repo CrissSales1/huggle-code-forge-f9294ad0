@@ -88,7 +88,8 @@ let charset: string[] = [];
 
 // Constantes PaddleOCR
 const OCR_INPUT_HEIGHT = 48; // PaddleOCR PP-OCRv3/v4 usa altura 48px
-const OCR_MIN_WIDTH = 320;   // Largura mínima para Seq Len adequado (~40+ fatias para CTC)
+// @ts-ignore - Mantido para referência histórica
+const _OCR_MIN_WIDTH = 320;   // Não usado em v1.1.10 (tensor dinâmico)
 
 // Estado do modelo YOLO (TensorFlow.js)
 let yoloModel: any = null;
@@ -309,11 +310,11 @@ function resizeToTensorDirect(
 }
 
 /**
- * Pré-processa imagem para PaddleOCR v1.1.9
+ * Pré-processa imagem para PaddleOCR v1.1.10
  * - Histogram Equalization (força max=255)
- * - Resize PROPORCIONAL + padding centralizado (evita stretch)
+ * - Resize DIRETO para tensor dinâmico (texto ocupa ~90% da largura)
  * - Sharpen após resize
- * - Normalização simples [0, 1]
+ * - Normalização [0, 1] em ordem BGR (PaddlePaddle padrão)
  */
 function preprocessForONNX(
   data: Uint8ClampedArray,
@@ -321,70 +322,54 @@ function preprocessForONNX(
   srcHeight: number
 ): { tensor: Float32Array; width: number; height: number } {
   const targetHeight = OCR_INPUT_HEIGHT; // 48
-  const minWidth = OCR_MIN_WIDTH;        // 320
   
   // 1. Calcular largura mantendo proporção
   const aspectRatio = srcWidth / srcHeight;
   let contentWidth = Math.round(targetHeight * aspectRatio);
   
-  // 2. Largura final: mínimo 320px, múltiplo de 32
-  let tensorWidth = Math.max(minWidth, contentWidth);
+  // 2. Adicionar pequena margem (10% de cada lado) - NÃO forçar 320px
+  const margin = Math.round(contentWidth * 0.1);
+  let tensorWidth = contentWidth + margin * 2;
+  
+  // 3. Garantir múltiplo de 32 (requisito de alguns modelos)
   tensorWidth = Math.ceil(tensorWidth / 32) * 32;
   
-  console.log(`📐 Resize com padding: ${srcWidth}x${srcHeight} → conteúdo ${contentWidth}x${targetHeight} → tensor ${tensorWidth}x${targetHeight}`);
+  // Mínimo 96px (para placas muito pequenas), máximo 480px
+  tensorWidth = Math.max(96, Math.min(480, tensorWidth));
   
-  // 3. HISTOGRAM EQUALIZATION antes do resize (força max=255)
+  console.log(`📐 Tensor dinâmico: ${srcWidth}x${srcHeight} → ${contentWidth}x${targetHeight} + margem → ${tensorWidth}x${targetHeight}`);
+  
+  // 4. HISTOGRAM EQUALIZATION antes do resize (força max=255)
   const equalizedData = histogramEqualization(data, srcWidth, srcHeight);
   
-  // 4. Redimensionar conteúdo mantendo proporção
-  const resizedContent = resizeToTensorDirect(equalizedData, srcWidth, srcHeight, contentWidth, targetHeight);
+  // 5. Redimensionar DIRETAMENTE para tensor (conteúdo preenche ~90%)
+  const resizedContent = resizeToTensorDirect(equalizedData, srcWidth, srcHeight, tensorWidth, targetHeight);
   
-  // 5. SHARPEN após resize (separa caracteres)
-  const sharpenedContent = sharpenImage(resizedContent, contentWidth, targetHeight);
+  // 6. SHARPEN após resize (separa caracteres)
+  const sharpenedContent = sharpenImage(resizedContent, tensorWidth, targetHeight);
   
-  // 6. Criar buffer final com padding preto centralizado
-  const finalRGBA = new Uint8ClampedArray(tensorWidth * targetHeight * 4);
-  for (let i = 0; i < finalRGBA.length; i += 4) {
-    finalRGBA[i] = 0;
-    finalRGBA[i + 1] = 0;
-    finalRGBA[i + 2] = 0;
-    finalRGBA[i + 3] = 255;
-  }
-  
-  // 7. Centralizar o conteúdo no buffer
-  const padLeft = Math.floor((tensorWidth - contentWidth) / 2);
-  
-  for (let y = 0; y < targetHeight; y++) {
-    for (let x = 0; x < contentWidth; x++) {
-      const srcIdx = (y * contentWidth + x) * 4;
-      const dstX = x + padLeft;
-      const dstIdx = (y * tensorWidth + dstX) * 4;
-      
-      finalRGBA[dstIdx] = sharpenedContent[srcIdx];
-      finalRGBA[dstIdx + 1] = sharpenedContent[srcIdx + 1];
-      finalRGBA[dstIdx + 2] = sharpenedContent[srcIdx + 2];
-      finalRGBA[dstIdx + 3] = 255;
-    }
-  }
-  
-  // 8. Converter para tensor CHW com normalização SIMPLES [0, 1]
+  // 7. Converter para tensor CHW em ordem BGR (PaddlePaddle padrão!)
   const pixels = tensorWidth * targetHeight;
   const tensor = new Float32Array(3 * pixels);
   
   for (let i = 0; i < pixels; i++) {
-    // Normalização simples: apenas dividir por 255 (range 0 a 1)
-    tensor[i] = finalRGBA[i * 4] / 255.0;
-    tensor[pixels + i] = finalRGBA[i * 4 + 1] / 255.0;
-    tensor[2 * pixels + i] = finalRGBA[i * 4 + 2] / 255.0;
+    const r = sharpenedContent[i * 4] / 255.0;
+    const g = sharpenedContent[i * 4 + 1] / 255.0;
+    const b = sharpenedContent[i * 4 + 2] / 255.0;
+    
+    // BGR order (PaddlePaddle padrão - CRÍTICO!)
+    tensor[i] = b;                    // Canal 0 = Blue
+    tensor[pixels + i] = g;           // Canal 1 = Green
+    tensor[2 * pixels + i] = r;       // Canal 2 = Red
   }
   
   // Debug: mostrar range do tensor
   let minVal = Infinity, maxVal = -Infinity;
-  for (let i = 0; i < tensor.length; i++) {
-    if (tensor[i] < minVal) minVal = tensor[i];
-    if (tensor[i] > maxVal) maxVal = tensor[i];
+  for (let j = 0; j < tensor.length; j++) {
+    if (tensor[j] < minVal) minVal = tensor[j];
+    if (tensor[j] > maxVal) maxVal = tensor[j];
   }
-  console.log(`📊 Tensor normalizado [0, 1]: min=${minVal.toFixed(2)}, max=${maxVal.toFixed(2)}`);
+  console.log(`📊 Tensor BGR [0, 1]: min=${minVal.toFixed(2)}, max=${maxVal.toFixed(2)}`);
   
   return { tensor, width: tensorWidth, height: targetHeight };
 }
@@ -963,8 +948,10 @@ function applyCLAHE(
 /**
  * Adiciona padding assimétrico (margem) em volta da imagem
  * Mais lateral para caracteres respirarem, menos vertical para texto ocupar mais altura
+ * NOTA: Não usado em v1.1.10 - mantido para uso futuro
  */
-function addPadding(
+// @ts-ignore - Mantido para uso futuro
+function _addPadding(
   data: Uint8ClampedArray,
   width: number,
   height: number,
@@ -1002,8 +989,10 @@ function addPadding(
 /**
  * Tenta detectar e corrigir perspectiva da placa (simplificado)
  * Se a placa estiver muito torta, tenta retificar
+ * NOTA: Não usado em v1.1.10 - mantido para uso futuro
  */
-function unwarpPlate(
+// @ts-ignore - Mantido para uso futuro
+function _unwarpPlate(
   data: Uint8ClampedArray,
   width: number,
   height: number
@@ -1035,27 +1024,16 @@ function optimizeImageForOCR(
   width: number,
   height: number
 ): { data: Uint8ClampedArray; width: number; height: number } {
-  console.log(`🔄 Pipeline v1.1.9 iniciado: ${width}x${height}px`);
+  console.log(`🔄 Pipeline v1.1.10 iniciado: ${width}x${height}px`);
   
-  // 1. Correção de perspectiva (placeholder para versão futura)
-  let result = unwarpPlate(data, width, height);
+  // v1.1.10: Simplificado - todo processamento no preprocessForONNX
+  // - Sem CLAHE (usando Histogram EQ global)
+  // - Sem padding (resize direto para tensor dinâmico)
+  // - Apenas passar os dados da região da placa
   
-  // 2. CLAHE DESABILITADO - usando Histogram EQ global no preprocessForONNX
-  // O CLAHE estava criando imagens muito escuras (max=0.18 ao invés de ~1.0)
-  console.log(`⏭️ CLAHE desabilitado (usando Histogram EQ global)`);
+  console.log(`📏 Passando para tensor dinâmico (BGR + resize direto)`);
   
-  // 3. Padding assimétrico: mais lateral (12px), menos vertical (4px)
-  // Texto ocupa maior porcentagem da altura final
-  result = addPadding(result.data, result.width, result.height, 12, 4, [0, 0, 0]);
-  console.log(`🔲 Padding: ${result.width}x${result.height}px`);
-  
-  // 4. NÃO fazer resize aqui - deixar preprocessForONNX fazer:
-  //    - Histogram EQ (força max=255)
-  //    - Resize proporcional + padding centralizado
-  //    - Sharpen
-  console.log(`📏 Otimização concluída: ${result.width}x${result.height}px`);
-  
-  return result;
+  return { data: new Uint8ClampedArray(data), width, height };
 }
 
 function toGrayscale(data: Uint8ClampedArray): Uint8ClampedArray {
