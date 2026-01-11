@@ -184,19 +184,20 @@ async function initONNX(): Promise<void> {
   }
 }
 
-// v1.1.22: Center Crop + Padding + Contraste + Temperature Scaling
+// v1.1.23: Center Crop + Padding "Emagrecido" + Heurística de Homoglifos
 // - Center Crop vertical: 15% topo, 5% base (preserva base dos caracteres)
-// - Padding horizontal: 290px útil centralizado em 320px (15px margem cada lado)
-// - Contraste: +20% para melhorar separação de caracteres
+// - Padding horizontal: 260px útil centralizado em 320px (30px margem cada lado)
+// - SEM contraste artificial (evita saturação e engrossamento)
 // - Temperature Scaling: x10 no softmax para confiança calibrada
+// - Heurística pós-OCR para corrigir confusões de caracteres (0↔O, 3↔J, etc.)
 
 /**
- * Pré-processa imagem para PaddleOCR v1.1.22
+ * Pré-processa imagem para PaddleOCR v1.1.23
  * - Tight Crop: Remove margem vertical (15% topo, 5% base)
- * - Padding Horizontal: 290px útil centralizado (15px margem cada lado)
- * - Contraste: +20% antes da normalização
+ * - Padding Horizontal: 260px útil centralizado (30px margem cada lado)
  * - Ordem BGR (padrão OpenCV/PaddleOCR)
  * - Normalização [-1, 1]: (pixel/255 - 0.5) / 0.5
+ * - Caracteres mais "altos e magros" para diferenciar 0/6, B/8
  */
 function preprocessForONNX(
   data: Uint8ClampedArray,
@@ -205,10 +206,10 @@ function preprocessForONNX(
 ): { tensor: Float32Array; width: number; height: number } {
   const targetWidth = 320;
   const targetHeight = OCR_INPUT_HEIGHT; // 48
-  const drawWidth = 290;  // Largura útil (deixa 15px margem cada lado)
-  const drawX = (targetWidth - drawWidth) / 2; // Centraliza (x=15)
+  const drawWidth = 260;  // Largura útil "emagrecida" (deixa 30px margem cada lado)
+  const drawX = (targetWidth - drawWidth) / 2; // Centraliza (x=30)
   
-  // 1. TIGHT CROP VERTICAL (Ajustado para preservar base dos caracteres)
+  // 1. TIGHT CROP VERTICAL (Preserva base dos caracteres)
   const cropTopRatio = 0.15;  // Remove 15% do topo
   const cropBottomRatio = 0.05; // APENAS 5% da base (preserva '2', 'J', etc.)
   
@@ -217,7 +218,7 @@ function preprocessForONNX(
   const usefulHeight = srcHeight - cropTop - cropBottom;
   
   console.log(`📐 Center Crop: ${srcWidth}x${srcHeight} → crop top=${cropTop}px, bottom=${cropBottom}px → útil=${srcWidth}x${usefulHeight}px`);
-  console.log(`📐 Stretch+Padding: ${srcWidth}x${usefulHeight} → ${drawWidth}x${targetHeight} centralizado em ${targetWidth}x${targetHeight}`);
+  console.log(`📐 Stretch "Emagrecido": ${srcWidth}x${usefulHeight} → ${drawWidth}x${targetHeight} centralizado em ${targetWidth}x${targetHeight}`);
   
   // 2. CRIAR CANVAS TEMPORÁRIO COM IMAGEM ORIGINAL
   const srcCanvas = new OffscreenCanvas(srcWidth, srcHeight);
@@ -226,7 +227,7 @@ function preprocessForONNX(
   srcImageData.data.set(data);
   srcCtx.putImageData(srcImageData, 0, 0);
   
-  // 3. CRIAR CANVAS DE DESTINO COM FUNDO NEUTRO
+  // 3. CRIAR CANVAS DE DESTINO COM FUNDO NEUTRO (Mais Padding = Menos Ruído de Borda)
   const processCanvas = new OffscreenCanvas(targetWidth, targetHeight);
   const ctx = processCanvas.getContext('2d', { alpha: false })!;
   
@@ -237,11 +238,11 @@ function preprocessForONNX(
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   
-  // 4. DESENHAR IMAGEM CENTRALIZADA COM PADDING
+  // 4. DESENHAR IMAGEM CENTRALIZADA COM PADDING "EMAGRECIDO"
   ctx.drawImage(
     srcCanvas, 
     0, cropTop, srcWidth, usefulHeight,  // Source: área útil (miolo vertical)
-    drawX, 0, drawWidth, targetHeight     // Destino: 290x48 em x=15
+    drawX, 0, drawWidth, targetHeight     // Destino: 260x48 em x=30
   );
   
   // 5. EXTRAIR DADOS E CRIAR TENSOR
@@ -249,20 +250,11 @@ function preprocessForONNX(
   const pixels = targetWidth * targetHeight;
   const tensor = new Float32Array(3 * pixels);
   
-  // 6. CONTRASTE + NORMALIZAÇÃO [-1, 1] COM ORDEM BGR
-  // Fator de Contraste (1.2 = +20% contraste)
-  const contrast = 1.2;
-  const intercept = 128 * (1 - contrast);
-  
+  // 6. NORMALIZAÇÃO [-1, 1] COM ORDEM BGR (SEM contraste artificial)
   for (let i = 0; i < pixels; i++) {
-    let r = imageData.data[i * 4];
-    let g = imageData.data[i * 4 + 1];
-    let b = imageData.data[i * 4 + 2];
-    
-    // Aplica Contraste Simples
-    r = Math.max(0, Math.min(255, (r * contrast) + intercept));
-    g = Math.max(0, Math.min(255, (g * contrast) + intercept));
-    b = Math.max(0, Math.min(255, (b * contrast) + intercept));
+    const r = imageData.data[i * 4];
+    const g = imageData.data[i * 4 + 1];
+    const b = imageData.data[i * 4 + 2];
     
     // Normalização Paddle BGR [-1, 1]
     // Canal 0: Blue
@@ -279,8 +271,8 @@ function preprocessForONNX(
     if (tensor[j] < minVal) minVal = tensor[j];
     if (tensor[j] > maxVal) maxVal = tensor[j];
   }
-  console.log(`📊 Tensor BGR [-1, 1] (contraste ${contrast}x): min=${minVal.toFixed(2)}, max=${maxVal.toFixed(2)}`);
-  console.log(`📊 Layout: 15px padding | 290px conteúdo | 15px padding`);
+  console.log(`📊 Tensor BGR [-1, 1] (sem contraste): min=${minVal.toFixed(2)}, max=${maxVal.toFixed(2)}`);
+  console.log(`📊 Layout: 30px padding | 260px conteúdo | 30px padding`);
   
   return { tensor, width: targetWidth, height: targetHeight };
 }
@@ -360,66 +352,88 @@ function decodeCTC(output: Float32Array, outputShape: readonly number[]): { text
   
   const confidence = charCount > 0 ? totalConf / charCount : 0;
   
-  // Aplicar pós-processamento para placas brasileiras
-  const correctedText = postProcessBrazilianPlate(result.toUpperCase());
+  // Guardar texto bruto para log
+  const rawText = result.toUpperCase();
+  
+  // Aplicar correção heurística de homoglifos
+  const correctedText = heuristicCorrection(rawText);
+  
+  console.log(`🔤 OCR Bruto: "${rawText}" → Corrigido: "${correctedText}" (${(confidence * 100).toFixed(1)}%)`);
   
   return { text: correctedText, confidence };
 }
 
 /**
- * Pós-processamento específico para placas brasileiras
- * Corrige erros comuns de OCR baseado na posição do caractere
+ * Correção Heurística de Homoglifos para placas brasileiras v1.1.23
+ * Corrige confusões de caracteres baseado na posição (formato BR)
+ * Limpa ruído e garante máximo 7 caracteres
  */
-function postProcessBrazilianPlate(text: string): string {
-  if (text.length < 7) return text;
+function heuristicCorrection(text: string): string {
+  // 1. LIMPAR - Remove caracteres não-alfanuméricos e converte para maiúsculo
+  let clean = text.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
   
-  // Mapeamentos de correção por tipo de posição
+  // Se muito curto, retornar como está
+  if (clean.length < 3) return clean;
+  
+  // 2. MAPEAMENTOS DE CORREÇÃO
+  // Número → Letra (para posições 0, 1, 2 que devem ser letras)
   const numToLetter: Record<string, string> = {
-    '0': 'O', '1': 'I', '2': 'Z', '4': 'A', '5': 'S', '6': 'G', '8': 'B'
+    '0': 'O', '1': 'I', '2': 'Z', '3': 'J', '4': 'A', '5': 'S', '6': 'G', '7': 'T', '8': 'B'
   };
+  
+  // Letra → Número (para posições que devem ser números)
   const letterToNum: Record<string, string> = {
-    'O': '0', 'I': '1', 'Z': '2', 'A': '4', 'S': '5', 'G': '6', 'B': '8', 'D': '0', 'Q': '0'
+    'O': '0', 'I': '1', 'Z': '2', 'J': '3', 'A': '4', 'S': '5', 'G': '6', 'T': '7', 'B': '8', 'D': '0', 'Q': '0'
   };
   
-  let result = text.substring(0, 7); // Pegar apenas os 7 primeiros
-  const chars = result.split('');
+  const chars = clean.split('');
   
-  // Posições 0, 1, 2: devem ser letras
+  // 3. CORREÇÃO BASEADA NA POSIÇÃO (Brasil: LLL-NLNN Mercosul ou LLL-NNNN antiga)
+  
+  // Posições 0, 1, 2: SEMPRE letras
   for (let i = 0; i < 3 && i < chars.length; i++) {
     if (/[0-9]/.test(chars[i]) && numToLetter[chars[i]]) {
+      console.log(`🔧 Correção pos ${i}: '${chars[i]}' → '${numToLetter[chars[i]]}' (número→letra)`);
       chars[i] = numToLetter[chars[i]];
     }
   }
   
-  // Posição 3: número (formato antigo ABC-1234) ou letra (Mercosul ABC1D23)
-  // Não corrigir pois pode ser ambíguo
+  // Posição 3: SEMPRE número (tanto Mercosul quanto antiga)
+  if (chars.length > 3 && /[A-Z]/.test(chars[3]) && letterToNum[chars[3]]) {
+    console.log(`🔧 Correção pos 3: '${chars[3]}' → '${letterToNum[chars[3]]}' (letra→número)`);
+    chars[3] = letterToNum[chars[3]];
+  }
   
-  // Posição 4: sempre letra no Mercosul, número no antigo
-  // Se parece Mercosul (posição 4 é letra), aplicar regras Mercosul
+  // Detectar formato: Mercosul tem LETRA na posição 4, antiga tem NÚMERO
   const isMercosul = chars.length > 4 && /[A-Z]/.test(chars[4]);
   
   if (isMercosul) {
-    // Mercosul: ABC1D23 - posições 3,5,6 são números, posição 4 é letra
-    if (chars[3] && /[A-Z]/.test(chars[3]) && letterToNum[chars[3]]) {
-      chars[3] = letterToNum[chars[3]];
+    // Mercosul: ABC1D23 - posição 4 é LETRA, posições 5,6 são NÚMEROS
+    // Posição 4: manter como letra (converter número se necessário)
+    if (chars[4] && /[0-9]/.test(chars[4]) && numToLetter[chars[4]]) {
+      console.log(`🔧 Correção pos 4 (Mercosul): '${chars[4]}' → '${numToLetter[chars[4]]}' (número→letra)`);
+      chars[4] = numToLetter[chars[4]];
     }
-    // Posição 4 já é letra (não corrigir)
-    if (chars[5] && /[A-Z]/.test(chars[5]) && letterToNum[chars[5]]) {
-      chars[5] = letterToNum[chars[5]];
-    }
-    if (chars[6] && /[A-Z]/.test(chars[6]) && letterToNum[chars[6]]) {
-      chars[6] = letterToNum[chars[6]];
+    
+    // Posições 5, 6: SEMPRE números
+    for (let i = 5; i <= 6 && i < chars.length; i++) {
+      if (/[A-Z]/.test(chars[i]) && letterToNum[chars[i]]) {
+        console.log(`🔧 Correção pos ${i} (Mercosul): '${chars[i]}' → '${letterToNum[chars[i]]}' (letra→número)`);
+        chars[i] = letterToNum[chars[i]];
+      }
     }
   } else {
-    // Formato antigo: ABC-1234 - posições 3,4,5,6 são números
-    for (let i = 3; i < 7 && i < chars.length; i++) {
+    // Formato antigo: ABC-1234 - posições 3,4,5,6 são TODAS números
+    for (let i = 3; i <= 6 && i < chars.length; i++) {
       if (/[A-Z]/.test(chars[i]) && letterToNum[chars[i]]) {
+        console.log(`🔧 Correção pos ${i} (antiga): '${chars[i]}' → '${letterToNum[chars[i]]}' (letra→número)`);
         chars[i] = letterToNum[chars[i]];
       }
     }
   }
   
-  return chars.join('');
+  // 4. LIMITAR A 7 CARACTERES (ignorar ruído extra)
+  return chars.join('').substring(0, 7);
 }
 
 /**
@@ -1837,4 +1851,4 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 };
 
 // Notificar que o worker está carregado
-console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.22 - Contraste + Temperature Scaling)');
+console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.23 - Padding Emagrecido + Heurística Homoglifos)');
