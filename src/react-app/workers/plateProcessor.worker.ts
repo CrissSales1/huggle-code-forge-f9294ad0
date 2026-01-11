@@ -3,7 +3,7 @@
  * Move OCR (ONNX Runtime), detecção de placa e motion detection para thread separada
  * Evita bloqueio da UI durante processamento pesado
  * 
- * v1.1.31: Filtro Anti-Falso-Positivo (bloqueia textos de câmera como "ENTRADA VEICULOS")
+ * v1.1.32: Perspective Unwarp - Desentorta placas inclinadas para melhor OCR
  */
 
 import * as ort from 'onnxruntime-web';
@@ -137,6 +137,230 @@ function isForbiddenText(rawText: string): boolean {
   }
   
   return false;
+}
+
+// ============ PERSPECTIVE UNWARP (DESENTORTAR PLACA) ============
+
+interface Point {
+  x: number;
+  y: number;
+}
+
+/**
+ * Detecta bordas usando Sobel simplificado
+ */
+function detectEdgesForUnwarp(data: Uint8ClampedArray, width: number, height: number): Uint8ClampedArray {
+  const edges = new Uint8ClampedArray(width * height);
+  
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      const idx = y * width + x;
+      
+      // Vizinhos para cálculo de gradiente
+      const leftIdx = (y * width + (x - 1)) * 4;
+      const rightIdx = (y * width + (x + 1)) * 4;
+      const topIdx = ((y - 1) * width + x) * 4;
+      const bottomIdx = ((y + 1) * width + x) * 4;
+      
+      const left = 0.299 * data[leftIdx] + 0.587 * data[leftIdx + 1] + 0.114 * data[leftIdx + 2];
+      const right = 0.299 * data[rightIdx] + 0.587 * data[rightIdx + 1] + 0.114 * data[rightIdx + 2];
+      const top = 0.299 * data[topIdx] + 0.587 * data[topIdx + 1] + 0.114 * data[topIdx + 2];
+      const bottom = 0.299 * data[bottomIdx] + 0.587 * data[bottomIdx + 1] + 0.114 * data[bottomIdx + 2];
+      
+      // Sobel simplificado
+      const gx = Math.abs(right - left);
+      const gy = Math.abs(bottom - top);
+      edges[idx] = Math.min(255, Math.sqrt(gx * gx + gy * gy));
+    }
+  }
+  return edges;
+}
+
+/**
+ * Encontra os 4 cantos da placa usando análise de bordas
+ * Retorna [topLeft, topRight, bottomRight, bottomLeft] ou null
+ */
+function findPlateCorners(
+  edges: Uint8ClampedArray, 
+  width: number, 
+  height: number
+): [Point, Point, Point, Point] | null {
+  const threshold = 30;
+  
+  // Encontrar pontos de borda mais extremos em cada quadrante
+  let topLeft: Point = { x: width, y: height };
+  let topRight: Point = { x: 0, y: height };
+  let bottomLeft: Point = { x: width, y: 0 };
+  let bottomRight: Point = { x: 0, y: 0 };
+  
+  const midX = width / 2;
+  const midY = height / 2;
+  
+  // Varrer pixels de borda e encontrar extremos por quadrante
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (edges[y * width + x] > threshold) {
+        // Quadrante superior esquerdo
+        if (x < midX && y < midY) {
+          if (x + y < topLeft.x + topLeft.y) {
+            topLeft = { x, y };
+          }
+        }
+        // Quadrante superior direito
+        if (x >= midX && y < midY) {
+          if ((width - x) + y < (width - topRight.x) + topRight.y) {
+            topRight = { x, y };
+          }
+        }
+        // Quadrante inferior esquerdo
+        if (x < midX && y >= midY) {
+          if (x + (height - y) < bottomLeft.x + (height - bottomLeft.y)) {
+            bottomLeft = { x, y };
+          }
+        }
+        // Quadrante inferior direito
+        if (x >= midX && y >= midY) {
+          if ((width - x) + (height - y) < (width - bottomRight.x) + (height - bottomRight.y)) {
+            bottomRight = { x, y };
+          }
+        }
+      }
+    }
+  }
+  
+  // Validar que os cantos formam um quadrilátero válido
+  if (topLeft.x >= topRight.x - 10 || bottomLeft.x >= bottomRight.x - 10) {
+    return null;
+  }
+  if (topLeft.y >= bottomLeft.y - 5 || topRight.y >= bottomRight.y - 5) {
+    return null;
+  }
+  
+  // Verificar se os cantos foram encontrados (não são valores default)
+  if (topLeft.x === width || topRight.x === 0 || bottomLeft.x === width || bottomRight.x === 0) {
+    return null;
+  }
+  
+  return [topLeft, topRight, bottomRight, bottomLeft];
+}
+
+/**
+ * Aplica transformação de perspectiva (unwarp) para retangularizar a placa
+ * Usa interpolação bilinear para qualidade
+ */
+function unwarpPlate(
+  srcData: Uint8ClampedArray,
+  srcWidth: number,
+  srcHeight: number,
+  corners: [Point, Point, Point, Point],
+  dstWidth: number = 260,
+  dstHeight: number = 80
+): { data: Uint8ClampedArray; width: number; height: number } {
+  const [tl, tr, br, bl] = corners;
+  const dst = new Uint8ClampedArray(dstWidth * dstHeight * 4);
+  
+  // Para cada pixel destino, calcular coordenada fonte usando interpolação bilinear
+  for (let dy = 0; dy < dstHeight; dy++) {
+    for (let dx = 0; dx < dstWidth; dx++) {
+      const u = dx / (dstWidth - 1);  // 0..1
+      const v = dy / (dstHeight - 1); // 0..1
+      
+      // Interpolação bilinear dos 4 cantos
+      const topX = tl.x + (tr.x - tl.x) * u;
+      const topY = tl.y + (tr.y - tl.y) * u;
+      const bottomX = bl.x + (br.x - bl.x) * u;
+      const bottomY = bl.y + (br.y - bl.y) * u;
+      
+      const srcX = topX + (bottomX - topX) * v;
+      const srcY = topY + (bottomY - topY) * v;
+      
+      // Interpolar pixel (bilinear)
+      const x0 = Math.floor(srcX);
+      const y0 = Math.floor(srcY);
+      const x1 = Math.min(x0 + 1, srcWidth - 1);
+      const y1 = Math.min(y0 + 1, srcHeight - 1);
+      const fx = srcX - x0;
+      const fy = srcY - y0;
+      
+      // Bounds check
+      if (x0 < 0 || y0 < 0 || x1 >= srcWidth || y1 >= srcHeight) {
+        continue;
+      }
+      
+      const dstIdx = (dy * dstWidth + dx) * 4;
+      
+      for (let c = 0; c < 4; c++) {
+        const v00 = srcData[(y0 * srcWidth + x0) * 4 + c];
+        const v10 = srcData[(y0 * srcWidth + x1) * 4 + c];
+        const v01 = srcData[(y1 * srcWidth + x0) * 4 + c];
+        const v11 = srcData[(y1 * srcWidth + x1) * 4 + c];
+        
+        dst[dstIdx + c] = Math.round(
+          v00 * (1 - fx) * (1 - fy) +
+          v10 * fx * (1 - fy) +
+          v01 * (1 - fx) * fy +
+          v11 * fx * fy
+        );
+      }
+    }
+  }
+  
+  return { data: dst, width: dstWidth, height: dstHeight };
+}
+
+/**
+ * Tenta desentortar a placa se detectar inclinação significativa
+ * Retorna os dados originais se não conseguir detectar cantos ou inclinação < 3°
+ */
+function tryUnwarpPlate(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number
+): { data: Uint8ClampedArray; width: number; height: number; wasUnwarped: boolean } {
+  // Imagem muito pequena não precisa de unwarp
+  if (width < 50 || height < 20) {
+    return { data, width, height, wasUnwarped: false };
+  }
+  
+  // 1. Detectar bordas
+  const edges = detectEdgesForUnwarp(data, width, height);
+  
+  // 2. Encontrar 4 cantos
+  const corners = findPlateCorners(edges, width, height);
+  
+  if (!corners) {
+    console.log('📐 Unwarp: Cantos não detectados, usando imagem original');
+    return { data, width, height, wasUnwarped: false };
+  }
+  
+  const [tl, tr, bl, br] = corners;
+  
+  // 3. Calcular ângulo de inclinação das bordas superior e inferior
+  const topAngle = Math.atan2(tr.y - tl.y, tr.x - tl.x) * 180 / Math.PI;
+  const bottomAngle = Math.atan2(br.y - bl.y, br.x - bl.x) * 180 / Math.PI;
+  const avgAngle = (Math.abs(topAngle) + Math.abs(bottomAngle)) / 2;
+  
+  // Se inclinação < 3°, não vale a pena fazer unwarp
+  if (avgAngle < 3) {
+    console.log(`📐 Unwarp: Inclinação mínima (${avgAngle.toFixed(1)}°), pulando`);
+    return { data, width, height, wasUnwarped: false };
+  }
+  
+  console.log(`📐 Unwarp: Inclinação detectada (top=${topAngle.toFixed(1)}°, bottom=${bottomAngle.toFixed(1)}°), corrigindo...`);
+  
+  // 4. Calcular dimensões ideais baseado nos cantos detectados
+  const plateWidth = Math.max(tr.x - tl.x, br.x - bl.x);
+  
+  // Manter proporção aproximada de placa brasileira (3.5:1)
+  const targetWidth = Math.max(200, Math.min(300, Math.round(plateWidth * 1.2)));
+  const targetHeight = Math.max(60, Math.min(100, Math.round(targetWidth / 3.5)));
+  
+  // 5. Aplicar unwarp
+  const unwarped = unwarpPlate(data, width, height, corners, targetWidth, targetHeight);
+  
+  console.log(`✅ Unwarp: ${width}x${height} → ${unwarped.width}x${unwarped.height}`);
+  
+  return { ...unwarped, wasUnwarped: true };
 }
 
 // ============ FUNÇÕES ONNX OCR ============
@@ -1733,6 +1957,14 @@ async function processPlate(
       }
       
       console.log(`🔲 Região recortada: ${processWidth}x${processHeight}px`);
+      
+      // Tentar desentortar a placa se estiver inclinada
+      const unwarpResult = tryUnwarpPlate(processData, processWidth, processHeight);
+      if (unwarpResult.wasUnwarped) {
+        processData = unwarpResult.data;
+        processWidth = unwarpResult.width;
+        processHeight = unwarpResult.height;
+      }
     } else {
       processData = imageData.data;
       processWidth = width;
