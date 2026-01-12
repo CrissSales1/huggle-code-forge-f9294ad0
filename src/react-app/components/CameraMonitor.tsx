@@ -810,7 +810,7 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
             </div>
           </div>
           
-          {/* Debug Pipeline - 4 etapas visuais do processamento OCR */}
+          {/* Debug Pipeline - 2 etapas visuais otimizadas v1.1.42 */}
           {debugModeEnabled && (
             <div className="mt-3 pt-3 border-t border-gray-200">
               <div className="flex items-center gap-2 mb-2">
@@ -822,44 +822,40 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
                 )}
               </div>
               
-              <div className="grid grid-cols-4 gap-2">
-                {/* 1. Frame Original */}
+              <div className="grid grid-cols-2 gap-3">
+                {/* Placa Processada (antes: Otimizado) */}
                 <div className="bg-gray-800 rounded-lg overflow-hidden">
-                  <div className="text-[10px] text-center text-gray-400 py-1 bg-gray-900">1. Original</div>
-                  {processingInfo.debugImages?.original ? (
-                    <img src={processingInfo.debugImages.original} alt="Original" className="w-full h-20 object-contain" />
-                  ) : (
-                    <div className="h-20 flex items-center justify-center text-gray-500 text-xs">-</div>
-                  )}
-                </div>
-                
-                {/* 2. Recorte */}
-                <div className="bg-gray-800 rounded-lg overflow-hidden">
-                  <div className="text-[10px] text-center text-gray-400 py-1 bg-gray-900">2. Recorte</div>
-                  {processingInfo.debugImages?.cropped ? (
-                    <img src={processingInfo.debugImages.cropped} alt="Recorte" className="w-full h-20 object-contain" />
-                  ) : (
-                    <div className="h-20 flex items-center justify-center text-gray-500 text-xs">-</div>
-                  )}
-                </div>
-                
-                {/* 3. Pré-processado */}
-                <div className="bg-gray-800 rounded-lg overflow-hidden">
-                  <div className="text-[10px] text-center text-gray-400 py-1 bg-gray-900">3. Otimizado</div>
+                  <div className="text-xs text-center text-gray-300 py-1.5 bg-gray-900 font-medium">
+                    Placa Processada
+                  </div>
                   {processingInfo.debugImages?.preprocessed ? (
-                    <img src={processingInfo.debugImages.preprocessed} alt="Preprocessado" className="w-full h-20 object-contain" />
+                    <img 
+                      src={processingInfo.debugImages.preprocessed} 
+                      alt="Placa Processada" 
+                      className="w-full h-32 object-contain bg-gray-900" 
+                    />
                   ) : (
-                    <div className="h-20 flex items-center justify-center text-gray-500 text-xs">-</div>
+                    <div className="h-32 flex items-center justify-center text-gray-500 text-sm">
+                      Aguardando detecção...
+                    </div>
                   )}
                 </div>
                 
-                {/* 4. Resultado Final */}
+                {/* Resultado OCR (antes: Detecção) */}
                 <div className="bg-gray-800 rounded-lg overflow-hidden border-2 border-green-500">
-                  <div className="text-[10px] text-center text-green-400 py-1 bg-gray-900">4. Detecção</div>
+                  <div className="text-xs text-center text-green-400 py-1.5 bg-gray-900 font-medium">
+                    Resultado OCR
+                  </div>
                   {processingInfo.debugImages?.final ? (
-                    <img src={processingInfo.debugImages.final} alt="Final" className="w-full h-20 object-contain" />
+                    <img 
+                      src={processingInfo.debugImages.final} 
+                      alt="Resultado OCR" 
+                      className="w-full h-32 object-contain bg-gray-900" 
+                    />
                   ) : (
-                    <div className="h-20 flex items-center justify-center text-gray-500 text-xs">-</div>
+                    <div className="h-32 flex items-center justify-center text-gray-500 text-sm">
+                      Aguardando leitura...
+                    </div>
                   )}
                 </div>
               </div>

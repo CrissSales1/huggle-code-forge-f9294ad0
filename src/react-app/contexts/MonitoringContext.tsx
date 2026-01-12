@@ -898,6 +898,17 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         setDebugImage(result.debugImage);
       }
       
+      // v1.1.42: Atualizar processingInfo para exibir no pipeline de debug
+      setProcessingInfo(prev => ({
+        ...prev,
+        rawText: result.rawText || '',
+        ocrConfidence: result.ocrConfidence || 0,
+        plateRegion: result.plateRegion,
+        usedYolo: result.usedYolo,
+        detectedPlate: result.validation?.isValid ? result.validation.formatted : undefined,
+        debugImages: result.debugImages,
+      }));
+      
       updateProcessingStage('validating', 'Validando placa...');
       
       if (result.success && result.validation.isValid) {
