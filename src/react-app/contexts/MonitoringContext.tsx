@@ -915,10 +915,14 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         const placa = result.validation.corrected;
         
         if (isPlateRecent(placa)) {
-          console.log(`⏳ Placa ${placa} detectada recentemente, ignorando...`);
+          console.log(`⏳ Placa ${placa} detectada recentemente, ignorando duplicata...`);
           finishProcessingTimer();
           setStatus(isActive ? 'monitoring' : 'idle');
-          setStatusMessage(isActive ? '🟢 Monitorando...' : 'Parado');
+          // v1.1.42: Feedback visual claro quando placa é ignorada por cooldown
+          setStatusMessage(`⏳ ${placa} já detectada recentemente`);
+          setTimeout(() => {
+            setStatusMessage(isActive ? '🟢 Monitorando...' : 'Parado');
+          }, 2000);
           return true;
         }
         
