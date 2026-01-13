@@ -267,7 +267,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     } catch { }
   }, []);
   
-  // v1.1.45: Estado para forçar modo noturno manualmente
+  // v1.1.50: Estado para forçar modo noturno manualmente
   const [forceNightMode, setForceNightMode] = useState<boolean>(() => {
     try {
       return localStorage.getItem('portacerta_force_night_mode') === 'true';
