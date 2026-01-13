@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function Login() {
   const navigate = useNavigate();
-  const [usuario, setUsuario] = useState('');
+  const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [erro, setErro] = useState('');
@@ -15,18 +16,29 @@ export default function Login() {
     setCarregando(true);
     setErro('');
 
-    // Simular um pequeno delay para dar feedback visual
-    await new Promise(resolve => setTimeout(resolve, 500));
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password: senha,
+      });
 
-    if (usuario === 'aguasdafonte' && senha === 'portaria') {
-      // Salvar estado de login no localStorage
-      localStorage.setItem('aguasdafonte_authenticated', 'true');
-      navigate('/');
-    } else {
-      setErro('Usuário ou senha incorretos');
+      if (error) {
+        if (error.message === 'Invalid login credentials') {
+          setErro('Email ou senha incorretos');
+        } else {
+          setErro('Erro ao fazer login. Tente novamente.');
+        }
+        return;
+      }
+
+      if (data.session) {
+        navigate('/');
+      }
+    } catch (err) {
+      setErro('Erro de conexão. Verifique sua internet.');
+    } finally {
+      setCarregando(false);
     }
-    
-    setCarregando(false);
   };
 
   return (
@@ -61,16 +73,16 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label htmlFor="usuario" className="block text-sm font-medium text-gray-700 mb-2">
-                Usuário
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                Email
               </label>
               <input
-                type="text"
-                id="usuario"
-                value={usuario}
-                onChange={(e) => setUsuario(e.target.value)}
+                type="email"
+                id="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                placeholder="Digite seu usuário"
+                placeholder="Digite seu email"
                 required
                 disabled={carregando}
               />
@@ -104,7 +116,7 @@ export default function Login() {
 
             <button
               type="submit"
-              disabled={carregando || !usuario || !senha}
+              disabled={carregando || !email || !senha}
               className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 px-4 rounded-lg font-medium hover:from-blue-700 hover:to-blue-800 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-[1.02] active:scale-[0.98]"
             >
               {carregando ? (

@@ -1,32 +1,41 @@
 import { useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import type { User } from '@supabase/supabase-js';
 
 export function useAuth() {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Verificar se o usuário está autenticado no localStorage
-    const authenticated = localStorage.getItem('aguasdafonte_authenticated') === 'true';
-    setIsAuthenticated(authenticated);
-    setLoading(false);
+    // Limpar localStorage antigo para evitar conflitos
+    localStorage.removeItem('aguasdafonte_authenticated');
+
+    // IMPORTANTE: Configurar listener ANTES de getSession
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setUser(session?.user ?? null);
+        setLoading(false);
+      }
+    );
+
+    // Verificar sessão existente
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const login = () => {
-    localStorage.setItem('aguasdafonte_authenticated', 'true');
-    setIsAuthenticated(true);
-  };
-
-  const logout = () => {
-    localStorage.removeItem('aguasdafonte_authenticated');
-    setIsAuthenticated(false);
-    // Forçar uma atualização da página para garantir que o logout seja aplicado
-    window.location.reload();
+  const logout = async () => {
+    await supabase.auth.signOut();
+    window.location.href = '/login';
   };
 
   return {
-    isAuthenticated,
+    user,
+    isAuthenticated: !!user,
     loading,
-    login,
     logout,
   };
 }
