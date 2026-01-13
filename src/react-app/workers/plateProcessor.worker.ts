@@ -3,7 +3,7 @@
  * Move OCR (ONNX Runtime), detecção de placa e motion detection para thread separada
  * Evita bloqueio da UI durante processamento pesado
  * 
- * v1.1.42: Pipeline na Leitura Manual + Visual Simplificado
+ * v1.1.44: Pré-processamento Noturno (Gamma + CLAHE) + Correções Mercosul
  */
 
 import * as ort from 'onnxruntime-web';
@@ -2153,4 +2153,4 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 };
 
 // Notificar que o worker está carregado
-console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.42 - Pipeline Visual)');
+console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.44 - Night Mode + Mercosul Fix)');
