@@ -429,24 +429,66 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     return wasRecent;
   }, []);
   
+  // v1.1.50: Função auxiliar para verificar similaridade visual entre placas
+  const arePlatesSimilar = useCallback((plate1: string, plate2: string): boolean => {
+    if (plate1.length !== plate2.length) return false;
+    if (plate1 === plate2) return true;
+    
+    const VISUAL_PAIRS: Record<string, string[]> = {
+      '0': ['O', 'Q', 'D'],
+      'O': ['0', 'Q', 'D'],
+      '1': ['I', 'L', 'T', '7'],
+      'I': ['1', 'L', 'T'],
+      '2': ['Z', '7', '9'],  // 9↔2 é confusão MUITO comum
+      '9': ['2', '0', 'Q'],
+      '7': ['1', '2', 'T'],
+      '5': ['S', '6'],
+      '6': ['G', '8', '5'],
+      '8': ['B', '6', '0'],
+      'B': ['8', '6'],
+      'D': ['0', 'O'],
+      'E': ['F'],
+      'G': ['6', 'C'],
+      'Q': ['0', 'O', '9'],
+      'S': ['5'],
+      'T': ['1', '7', 'I'],
+      'Z': ['2'],
+    };
+    
+    let differences = 0;
+    
+    for (let i = 0; i < plate1.length; i++) {
+      if (plate1[i] === plate2[i]) continue;
+      
+      // Verifica se são visualmente similares
+      const alts = VISUAL_PAIRS[plate1[i]] || [];
+      if (alts.includes(plate2[i])) {
+        differences++;
+      } else {
+        differences += 2; // Diferença não-visual conta mais
+      }
+    }
+    
+    // Permite até 2 diferenças visuais (ou 1 não-visual)
+    return differences <= 2;
+  }, []);
+
   // Fast-Track: Verificar consistência temporal do buffer OCR
-  // v1.1.37: VOTAÇÃO PONDERADA POR CONFIANÇA
-  const checkOcrConsistency = useCallback((plateText: string, confidence: number): { hasConsensus: boolean; matchCount: number } => {
+  // v1.1.50: VOTAÇÃO COM AGRUPAMENTO DE PLACAS VISUALMENTE SIMILARES
+  const checkOcrConsistency = useCallback((plateText: string, confidence: number): { hasConsensus: boolean; matchCount: number; bestPlate: string } => {
     // Só aceita leituras com confiança mínima para o buffer
     if (confidence < MIN_CONFIDENCE_FOR_BUFFER) {
       logger.log(`⚠️ Fast-Track: Confiança ${(confidence * 100).toFixed(1)}% abaixo do mínimo (${(MIN_CONFIDENCE_FOR_BUFFER * 100).toFixed(0)}%), ignorando leitura`);
-      return { hasConsensus: false, matchCount: 0 };
+      return { hasConsensus: false, matchCount: 0, bestPlate: '' };
     }
     
-    // v1.1.34: Se a placa for DIFERENTE da última validada, resetar buffer
-    // Isso resolve o problema de carros que saem e outros entram imediatamente sem queda de movimento
+    // v1.1.34: Se a placa for MUITO DIFERENTE da última validada, resetar buffer
+    // v1.1.50: Usa similaridade visual ao invés de igualdade exata
     if (fastTrackValidatedRef.current && lastValidatedPlateRef.current) {
-      if (plateText !== lastValidatedPlateRef.current) {
-        logger.log(`🔄 Fast-Track: Placa diferente detectada (${plateText} != ${lastValidatedPlateRef.current}), resetando buffer para novo veículo`);
+      if (!arePlatesSimilar(plateText, lastValidatedPlateRef.current)) {
+        logger.log(`🔄 Fast-Track: Placa muito diferente detectada (${plateText} != ${lastValidatedPlateRef.current}), resetando buffer para novo veículo`);
         ocrBufferRef.current = [];
         fastTrackValidatedRef.current = false;
-        // NÃO reseta noMotionCounterRef - movimento continua
-        // NÃO reseta lastValidatedPlateRef - será atualizado quando o novo veículo for validado
       }
     }
     
@@ -458,44 +500,89 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       ocrBufferRef.current.shift();
     }
     
-    // v1.1.37: Agrupa por placa e calcula score ponderado (count × avgConf)
-    const voteMap = new Map<string, { count: number; totalConf: number; maxConf: number }>();
+    // v1.1.50: Agrupa placas VISUALMENTE SIMILARES como mesmo grupo
+    const voteMap = new Map<string, { count: number; totalConf: number; maxConf: number; variants: Set<string>; bestVariant: string; bestVariantConf: number }>();
     
     for (const entry of ocrBufferRef.current) {
-      const existing = voteMap.get(entry.placa) || { count: 0, totalConf: 0, maxConf: 0 };
-      voteMap.set(entry.placa, {
+      // Procura grupo existente que seja similar
+      let matchedGroup: string | null = null;
+      
+      for (const [groupPlate] of voteMap) {
+        if (arePlatesSimilar(entry.placa, groupPlate)) {
+          matchedGroup = groupPlate;
+          break;
+        }
+      }
+      
+      const targetGroup = matchedGroup || entry.placa;
+      const existing = voteMap.get(targetGroup) || { 
+        count: 0, 
+        totalConf: 0, 
+        maxConf: 0, 
+        variants: new Set<string>(),
+        bestVariant: entry.placa,
+        bestVariantConf: 0
+      };
+      
+      existing.variants.add(entry.placa);
+      
+      // Atualiza melhor variante se esta tem maior confiança
+      if (entry.confidence > existing.bestVariantConf) {
+        existing.bestVariant = entry.placa;
+        existing.bestVariantConf = entry.confidence;
+      }
+      
+      voteMap.set(targetGroup, {
         count: existing.count + 1,
         totalConf: existing.totalConf + entry.confidence,
-        maxConf: Math.max(existing.maxConf, entry.confidence)
+        maxConf: Math.max(existing.maxConf, entry.confidence),
+        variants: existing.variants,
+        bestVariant: existing.bestVariant,
+        bestVariantConf: existing.bestVariantConf
       });
+      
+      // Log de agrupamento quando encontra similar
+      if (matchedGroup && matchedGroup !== entry.placa) {
+        console.log(`🔗 Agrupando "${entry.placa}" com "${matchedGroup}" (similar visual)`);
+      }
     }
     
-    // Encontra a placa com maior pontuação ponderada
-    let bestPlate = '';
+    // Encontra o grupo com maior pontuação ponderada
+    let bestGroupPlate = '';
     let bestScore = 0;
+    let bestGroupData: typeof voteMap extends Map<string, infer V> ? V : never = null as any;
     
-    for (const [plate, votes] of voteMap) {
+    for (const [groupPlate, votes] of voteMap) {
       // Score = contagem × confiança média
       const avgConf = votes.totalConf / votes.count;
       const score = votes.count * avgConf;
       
-      logger.log(`   📊 ${plate}: ${votes.count}x, avg=${(avgConf * 100).toFixed(1)}%, max=${(votes.maxConf * 100).toFixed(1)}%, score=${score.toFixed(2)}`);
+      const variantsList = [...votes.variants].join(', ');
+      console.log(`📊 Grupo ${groupPlate}: ${votes.count}x [${variantsList}], avg=${(avgConf * 100).toFixed(1)}%, best=${votes.bestVariant}@${(votes.bestVariantConf * 100).toFixed(1)}%`);
       
       if (score > bestScore) {
         bestScore = score;
-        bestPlate = plate;
+        bestGroupPlate = groupPlate;
+        bestGroupData = votes;
       }
     }
     
-    // Consenso: placa atual é a melhor E tem >= CONSISTENCY_THRESHOLD leituras
-    const currentVotes = voteMap.get(plateText);
-    const matchCount = currentVotes?.count || 0;
-    const hasConsensus = plateText === bestPlate && matchCount >= CONSISTENCY_THRESHOLD;
+    // v1.1.50: Verificar se a placa atual pertence ao melhor grupo
+    const currentBelongsToBestGroup = arePlatesSimilar(plateText, bestGroupPlate);
+    const matchCount = bestGroupData?.count || 0;
+    const hasConsensus = currentBelongsToBestGroup && matchCount >= CONSISTENCY_THRESHOLD;
     
-    logger.log(`🔄 Fast-Track Buffer: "${plateText}" bestScore=${bestScore.toFixed(2)} (consenso=${hasConsensus ? '✅' : '❌'})`);
+    // A melhor placa é a variante com maior confiança do grupo vencedor
+    const finalBestPlate = hasConsensus ? bestGroupData.bestVariant : plateText;
     
-    return { hasConsensus, matchCount };
-  }, []);
+    if (hasConsensus) {
+      console.log(`✅ Consenso v1.1.50: Grupo "${bestGroupPlate}" com ${matchCount}x → Melhor variante: "${finalBestPlate}" (${(bestGroupData.bestVariantConf * 100).toFixed(1)}%)`);
+    } else {
+      logger.log(`🔄 Fast-Track Buffer: "${plateText}" score=${bestScore.toFixed(2)} (consenso=${hasConsensus ? '✅' : '❌'})`);
+    }
+    
+    return { hasConsensus, matchCount, bestPlate: finalBestPlate };
+  }, [arePlatesSimilar]);
   
   // Fast-Track: Limpar buffer quando veículo sai da área ou é validado
   const resetOcrBuffer = useCallback(() => {
@@ -732,7 +819,8 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         const confidence = result.validation.confidence;
         
         // ========== FAST-TRACK: Verificar Consistência Temporal ==========
-        const { hasConsensus, matchCount } = checkOcrConsistency(placa, confidence);
+        // v1.1.50: checkOcrConsistency agora retorna bestPlate (melhor variante do grupo similar)
+        const { hasConsensus, matchCount, bestPlate } = checkOcrConsistency(placa, confidence);
         
         if (!hasConsensus) {
           // Sem consenso ainda - continuar coletando leituras
@@ -744,15 +832,20 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
           return false;
         }
         
+        // v1.1.50: Usar a MELHOR VARIANTE do grupo (maior confiança)
+        const placaConfirmada = bestPlate || placa;
+        
         // ========== CONSENSO ATINGIDO - Fast-Track Validação! ==========
-        logger.log(`🚀 Fast-Track: Placa ${placa} validada por consistência (${matchCount}/${OCR_BUFFER_SIZE})`);
+        logger.log(`🚀 Fast-Track: Placa ${placaConfirmada} validada por consistência (${matchCount}/${OCR_BUFFER_SIZE})`);
         
         // v1.1.38: Verificar se é a mesma placa validada recentemente (anti-duplicatas)
-        if (placa === lastValidatedPlateRef.current) {
+        // v1.1.50: Usa similaridade ao invés de igualdade exata
+        const isSamePlate = lastValidatedPlateRef.current && arePlatesSimilar(placaConfirmada, lastValidatedPlateRef.current);
+        if (isSamePlate) {
           const timeSinceLastValidation = Date.now() - lastValidationTimeRef.current;
           
           if (timeSinceLastValidation < MIN_REDETECTION_INTERVAL) {
-            logger.log(`🔁 Fast-Track: Mesma placa ${placa} detectada após ${(timeSinceLastValidation/1000).toFixed(1)}s - ignorando (mín: ${MIN_REDETECTION_INTERVAL/1000}s)`);
+            logger.log(`🔁 Fast-Track: Mesma placa ${placaConfirmada} detectada após ${(timeSinceLastValidation/1000).toFixed(1)}s - ignorando (mín: ${MIN_REDETECTION_INTERVAL/1000}s)`);
             finishProcessingTimer();
             setStatus('monitoring');
             setStatusMessage('🟢 Monitorando...');
@@ -762,13 +855,14 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         
         fastTrackValidatedRef.current = true;
         lastValidationTimeRef.current = Date.now();
-        lastValidatedPlateRef.current = placa;
+        lastValidatedPlateRef.current = placaConfirmada;
         
         // v1.1.39: Verificação ATÔMICA - check AND mark em uma operação
         // Isso resolve a race condition da v1.1.38
-        const wasAlreadyDetected = checkAndMarkPlate(placa);
+        // v1.1.50: Usa placaConfirmada (melhor variante do grupo)
+        const wasAlreadyDetected = checkAndMarkPlate(placaConfirmada);
         if (wasAlreadyDetected) {
-          logger.log(`⏳ Placa ${placa} detectada recentemente (anti-duplicata atômico), ignorando...`);
+          logger.log(`⏳ Placa ${placaConfirmada} detectada recentemente (anti-duplicata atômico), ignorando...`);
           finishProcessingTimer();
           setStatus('monitoring');
           setStatusMessage('🟢 Monitorando...');
@@ -777,20 +871,21 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         }
         
         // v1.1.40: Capturar placaCadastrada do fuzzy match
-        const { isMorador, casa, placaCadastrada } = await checkIfMorador(placa);
+        // v1.1.50: Usa placaConfirmada para busca (melhor variante)
+        const { isMorador, casa, placaCadastrada } = await checkIfMorador(placaConfirmada);
         
         let isVisitante = false;
         let nomeVisitante: string | undefined;
         let casaFinal = casa;
-        let placaFinal = placaCadastrada || placa; // Usar placa cadastrada se encontrada
+        let placaFinal = placaCadastrada || placaConfirmada; // Usar placa cadastrada se encontrada
         
         if (!isMorador) {
-          const visitanteResult = await checkIfVisitanteAtivo(placa);
+          const visitanteResult = await checkIfVisitanteAtivo(placaConfirmada);
           if (visitanteResult.isVisitante) {
             isVisitante = true;
             nomeVisitante = visitanteResult.nome;
             casaFinal = visitanteResult.casa;
-            placaFinal = visitanteResult.placaCadastrada || placa;
+            placaFinal = visitanteResult.placaCadastrada || placaConfirmada;
           }
         }
         
@@ -823,7 +918,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         } else if (isVisitante) {
           setStatusMessage(`🧑 Visitante: ${nomeVisitante} - Casa ${casaFinal} (Fast-Track)`);
         } else {
-          setStatusMessage(`⚠️ Não cadastrado: ${placa}`); // Desconhecidos usam placa do OCR
+          setStatusMessage(`⚠️ Não cadastrado: ${placaConfirmada}`); // Desconhecidos usam placa confirmada
         }
         
         return true;
