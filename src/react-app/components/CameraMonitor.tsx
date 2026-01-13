@@ -81,6 +81,9 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
     // Debug
     debugModeEnabled,
     setDebugModeEnabled,
+    // v1.1.45: Modo noturno forçado
+    forceNightMode,
+    setForceNightMode,
     // Performance
     performanceMetrics,
     modelLoaded,
@@ -461,6 +464,27 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
             </button>
             <span className="text-xs text-gray-500">
               {debugModeEnabled ? '🔍 Mostrando região detectada' : 'Desativado'}
+            </span>
+          </div>
+          
+          {/* v1.1.45: Toggle de Modo Noturno Forçado */}
+          <div className="flex items-center gap-3">
+            <label className="text-sm font-medium text-gray-700 min-w-[70px]">Modo Noturno:</label>
+            <button
+              onClick={() => setForceNightMode(!forceNightMode)}
+              className={`relative w-11 h-6 rounded-full transition-colors ${
+                forceNightMode ? 'bg-indigo-600' : 'bg-gray-300'
+              }`}
+              title={forceNightMode 
+                ? 'Clique para usar detecção automática' 
+                : 'Clique para forçar correções noturnas em todas as leituras'}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                forceNightMode ? 'translate-x-5' : 'translate-x-0'
+              }`} />
+            </button>
+            <span className="text-xs text-gray-500">
+              {forceNightMode ? '🌙 Forçado (todas as leituras)' : '☀️ Automático'}
             </span>
           </div>
           

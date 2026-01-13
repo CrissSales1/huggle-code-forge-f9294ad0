@@ -54,6 +54,7 @@ export interface ProcessPlateOptions {
   enableFallback?: boolean;
   fallbackApiUrl?: string;
   fallbackApiToken?: string;
+  forceNightMode?: boolean;  // v1.1.45: Forçar correções noturnas em todas as leituras
 }
 
 type WorkerResponse = 
