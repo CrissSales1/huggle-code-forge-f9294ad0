@@ -407,9 +407,12 @@ function decodeCTC(output: Float32Array, outputShape: readonly number[]): { text
 }
 
 /**
- * Correção Heurística de Homoglifos para placas brasileiras v1.1.23
+ * Correção Heurística de Homoglifos para placas brasileiras v1.1.43
  * Corrige confusões de caracteres baseado na posição (formato BR)
  * Limpa ruído e garante máximo 7 caracteres
+ * 
+ * v1.1.43: Adicionado numToNum para confusões numéricas (9↔2, 2↔7)
+ *          Detecção inteligente da posição 4 (Mercosul vs Antiga)
  */
 function heuristicCorrection(text: string): string {
   // 1. LIMPEZA BÁSICA - Remove caracteres não-alfanuméricos e converte para maiúsculo
@@ -435,12 +438,28 @@ function heuristicCorrection(text: string): string {
   // 3. MAPEAMENTOS DE CORREÇÃO (Homoglifos)
   // Número → Letra (para posições 0, 1, 2 que devem ser letras)
   const numToLetter: Record<string, string> = {
-    '0': 'O', '1': 'I', '2': 'Z', '3': 'J', '4': 'A', '5': 'S', '6': 'G', '7': 'T', '8': 'B'
+    '0': 'O', '1': 'I', '2': 'Z', '3': 'J', '4': 'A', '5': 'S', '6': 'G', '7': 'T', '8': 'B', '9': 'G'
   };
   
   // Letra → Número (para posições que devem ser números)
   const letterToNum: Record<string, string> = {
     'O': '0', 'I': '1', 'Z': '2', 'J': '3', 'A': '4', 'S': '5', 'G': '6', 'T': '7', 'B': '8', 'D': '0', 'Q': '0'
+  };
+  
+  // v1.1.43: Confusões entre números (iluminação noturna/fonte similar)
+  // Usado para corrigir erros como 9→2, 2→7, 7→2
+  const numToNum: Record<string, string[]> = {
+    '2': ['7', '9'],   // 2 parece 7 em fontes finas, 9 com base escura
+    '7': ['2', '1'],   // 7 parece 2 ou 1
+    '9': ['2', '6'],   // 9 parece 2 (parte inferior escura) ou 6 (invertido)
+    '6': ['9', '0'],   // 6 parece 9 ou 0
+    '0': ['6', '8'],   // 0 parece 6 ou 8
+    '1': ['7'],        // 1 parece 7
+  };
+  
+  // Número → Letra (posição 4 específica para Mercosul)
+  const numToLetterPos4: Record<string, string> = {
+    '0': 'D', '1': 'I', '2': 'J', '3': 'J', '6': 'G', '8': 'B', '9': 'G'
   };
   
   const chars = clean.split('');
@@ -461,13 +480,64 @@ function heuristicCorrection(text: string): string {
     chars[3] = letterToNum[chars[3]];
   }
   
-  // Posição 4: Mercosul=Letra, Antiga=Número (deixamos o OCR decidir)
+  // v1.1.43: Posição 4 - Detecção inteligente Mercosul vs Antiga
+  // Se for número, verificar se pode ser letra confundida (Mercosul)
+  if (chars.length > 4) {
+    const char4 = chars[4];
+    
+    if (/[0-9]/.test(char4)) {
+      // Verificar se convertendo para letra forma um padrão Mercosul válido
+      if (numToLetterPos4[char4]) {
+        const testMercosul = [...chars];
+        testMercosul[4] = numToLetterPos4[char4];
+        const testStr = testMercosul.join('');
+        
+        // Mercosul: LLL N L NN (posições 5,6 devem ser números)
+        if (/^[A-Z]{3}[0-9][A-Z][0-9]{2}$/.test(testStr)) {
+          console.log(`🔧 Correção pos 4: '${char4}' → '${numToLetterPos4[char4]}' (número→letra Mercosul detectado)`);
+          chars[4] = numToLetterPos4[char4];
+        }
+      }
+    }
+  }
   
   // Posições 5, 6: SEMPRE números
   for (let i = 5; i <= 6 && i < chars.length; i++) {
     if (/[A-Z]/.test(chars[i]) && letterToNum[chars[i]]) {
       console.log(`🔧 Correção pos ${i}: '${chars[i]}' → '${letterToNum[chars[i]]}' (letra→número)`);
       chars[i] = letterToNum[chars[i]];
+    }
+  }
+  
+  // v1.1.43: Correção de confusões numéricas em posições de números (3, 5, 6)
+  // Aplica apenas se o resultado final não forma placa válida
+  const currentResult = chars.join('');
+  const isMercosul = /^[A-Z]{3}[0-9][A-Z][0-9]{2}$/.test(currentResult);
+  const isAntiga = /^[A-Z]{3}[0-9]{4}$/.test(currentResult);
+  
+  // Se já é válido, retornar
+  if (isMercosul || isAntiga) {
+    return currentResult;
+  }
+  
+  // Tentar correções de confusão numérica nas posições de números
+  const numPositions = [3, 5, 6];
+  for (const pos of numPositions) {
+    if (pos < chars.length && /[0-9]/.test(chars[pos])) {
+      const alternatives = numToNum[chars[pos]];
+      if (alternatives) {
+        for (const alt of alternatives) {
+          const testChars = [...chars];
+          testChars[pos] = alt;
+          const testStr = testChars.join('');
+          
+          if (/^[A-Z]{3}[0-9][A-Z][0-9]{2}$/.test(testStr) || /^[A-Z]{3}[0-9]{4}$/.test(testStr)) {
+            console.log(`🔧 Correção numérica pos ${pos}: '${chars[pos]}' → '${alt}' (confusão ${chars[pos]}↔${alt})`);
+            chars[pos] = alt;
+            break;
+          }
+        }
+      }
     }
   }
   

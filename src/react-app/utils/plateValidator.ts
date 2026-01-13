@@ -45,8 +45,8 @@ const OCR_CORRECTIONS: Record<string, string[]> = {
   'Z': ['2', '7'],
 };
 
-// v1.1.38: Mapeamento de caracteres visualmente similares (para correção agressiva)
-// Inclui confusões 0↔6↔9 e E↔B para melhor matching no banco
+// v1.1.43: Mapeamento de caracteres visualmente similares (para correção agressiva)
+// Inclui confusões 0↔6↔9, E↔B, 2↔7, 9↔2 para melhor matching no banco
 const VISUAL_SIMILAR: Record<string, string[]> = {
   // Muito similares - altíssima confusão
   'D': ['0', 'O', 'Q'],
@@ -62,15 +62,16 @@ const VISUAL_SIMILAR: Record<string, string[]> = {
   'S': ['5'],
   '6': ['G', 'B', '0', '9', '5'],         // v1.1.38: adicionado '0', '9', '5'
   'G': ['6', '9', '0'],                   // v1.1.38: adicionado '0'
-  '9': ['G', '6', '0'],                   // v1.1.38: adicionado '6' e '0'
-  '2': ['Z'],
-  'Z': ['2'],
+  '9': ['G', '6', '0', '2'],              // v1.1.43: adicionado '2' (confusão noturna)
+  '2': ['Z', '7', '9'],                   // v1.1.43: adicionado '7' e '9' (confusão noturna)
+  '7': ['T', '1', '2'],                   // v1.1.43: adicionado '2' (confusão fonte fina)
+  'Z': ['2', '7'],                        // v1.1.43: adicionado '7'
   'E': ['3', 'B', 'F'],                   // v1.1.38: adicionado 'B' e 'F'
   // Confusões específicas do caso UFHJ -> DFJ
   'U': ['0', 'O', 'D', 'V'],
   'F': ['E', 'P', 'T'],
   'H': ['4', 'N', 'M'],
-  'J': ['1', ']'],
+  'J': ['1', '2', '3', ']'],              // v1.1.43: adicionado '2', '3' (confusão noturna)
 };
 
 /**
