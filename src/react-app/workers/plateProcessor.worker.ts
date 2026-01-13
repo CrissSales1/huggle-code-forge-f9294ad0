@@ -3,7 +3,7 @@
  * Move OCR (ONNX Runtime), detecção de placa e motion detection para thread separada
  * Evita bloqueio da UI durante processamento pesado
  * 
- * v1.1.44: Pré-processamento Noturno (Gamma + CLAHE) + Correções Mercosul
+ * v1.1.45: Modo Noturno Manual + Pré-processamento Noturno (Gamma + CLAHE)
  */
 
 import * as ort from 'onnxruntime-web';
@@ -59,6 +59,7 @@ interface ProcessPlateOptions {
   enableFallback?: boolean;
   fallbackApiUrl?: string;
   fallbackApiToken?: string;
+  forceNightMode?: boolean;  // v1.1.45: Forçar correções noturnas
 }
 
 // ============ MENSAGENS ============
@@ -1170,11 +1171,11 @@ function applyNightCorrection(
 }
 
 /**
- * Pipeline completo de otimização de imagem para OCR v1.1.44
+ * Pipeline completo de otimização de imagem para OCR v1.1.45
  * 
  * Ordem de processamento:
  * 1. Detecção de condição noturna (análise de luminância)
- * 2. Correção noturna se necessário (gamma + highlight clip + CLAHE)
+ * 2. Correção noturna se forceNightMode=true OU detecção automática
  * 3. Upscale 2x para imagens pequenas (< 200px)
  * 
  * IMPORTANTE: Mantém RGB - PaddleOCR foi treinado com estatísticas ImageNet em 3 canais
@@ -1182,17 +1183,19 @@ function applyNightCorrection(
 function optimizeImageForOCR(
   data: Uint8ClampedArray,
   width: number,
-  height: number
+  height: number,
+  options?: { forceNightMode?: boolean }
 ): { data: Uint8ClampedArray; width: number; height: number } {
-  console.log(`🔄 Pipeline v1.1.44 iniciado: ${width}x${height}px`);
+  console.log(`🔄 Pipeline v1.1.45 iniciado: ${width}x${height}px`);
   
   let processedData = data;
   
-  // v1.1.44: Detecção e correção automática para condições noturnas
+  // v1.1.45: Modo noturno forçado OU detecção automática
+  const forceNight = options?.forceNightMode ?? false;
   const nightAnalysis = detectNightCondition(data, width, height);
   
-  if (nightAnalysis.isNight) {
-    console.log(`🌙 Modo noturno ativado - aplicando correções`);
+  if (forceNight || nightAnalysis.isNight) {
+    console.log(`🌙 Modo noturno ${forceNight ? 'FORÇADO ✋' : 'automático 🤖'} - aplicando correções`);
     processedData = applyNightCorrection(
       data, width, height, 
       nightAnalysis.avgLuminance
@@ -1986,8 +1989,10 @@ async function processPlate(
     
     self.postMessage({ type: 'PROGRESS', payload: { stage: 'Otimizando imagem...', progress: 0.3 } });
     
-    // Otimizar imagem com pipeline avançado v1.1.6 (CLAHE LAB + Padding + Lanczos)
-    let optimized = optimizeImageForOCR(processData, processWidth, processHeight);
+    // Otimizar imagem com pipeline avançado v1.1.45 (CLAHE LAB + Padding + Night Mode)
+    let optimized = optimizeImageForOCR(processData, processWidth, processHeight, {
+      forceNightMode: options?.forceNightMode,
+    });
     
     // v1.1.36: Unwarp removido - estava introduzindo artefatos em imagens pequenas
     // O upscale 2x em optimizeImageForOCR compensa a perda de detalhes
@@ -2153,4 +2158,4 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 };
 
 // Notificar que o worker está carregado
-console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.44 - Night Mode + Mercosul Fix)');
+console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.45 - Manual Night Mode)');

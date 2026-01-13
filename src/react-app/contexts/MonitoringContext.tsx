@@ -104,6 +104,8 @@ interface MonitoringContextType {
   debugImage: string | null; // Imagem de debug com região da placa detectada
   debugModeEnabled: boolean;
   setDebugModeEnabled: (enabled: boolean) => void;
+  forceNightMode: boolean;
+  setForceNightMode: (enabled: boolean) => void;
   
   // Performance
   performanceMetrics: PerformanceMetrics;
@@ -262,6 +264,21 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     setDebugModeEnabled(enabled);
     try {
       localStorage.setItem('portacerta_debug_mode', enabled ? 'true' : 'false');
+    } catch { }
+  }, []);
+  
+  // v1.1.45: Estado para forçar modo noturno manualmente
+  const [forceNightMode, setForceNightMode] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('portacerta_force_night_mode') === 'true';
+    } catch { return false; }
+  });
+  
+  // Persistir modo noturno forçado
+  const setForceNightModeWithPersist = useCallback((enabled: boolean) => {
+    setForceNightMode(enabled);
+    try {
+      localStorage.setItem('portacerta_force_night_mode', enabled ? 'true' : 'false');
     } catch { }
   }, []);
   
@@ -659,7 +676,10 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       );
       
       updateProcessingStage('ocr', 'Executando OCR no Worker...');
-      const result = await processPlateWorker(capturedCanvas, { enableDebug: debugModeEnabled });
+      const result = await processPlateWorker(capturedCanvas, { 
+        enableDebug: debugModeEnabled,
+        forceNightMode, // v1.1.45: Passar modo noturno forçado
+      });
       
       if (!result) {
         finishProcessingTimer();
@@ -884,7 +904,10 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       );
       
       updateProcessingStage('ocr', 'Executando OCR no Worker...');
-      const result = await processPlateWorker(capturedCanvas, { enableDebug: debugModeEnabled });
+      const result = await processPlateWorker(capturedCanvas, { 
+        enableDebug: debugModeEnabled,
+        forceNightMode, // v1.1.45: Passar modo noturno forçado
+      });
       
       if (!result) {
         finishProcessingTimer();
@@ -1364,6 +1387,8 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     debugImage,
     debugModeEnabled,
     setDebugModeEnabled: setDebugModeEnabledWithPersist,
+    forceNightMode,
+    setForceNightMode: setForceNightModeWithPersist,
     // Performance
     performanceMetrics,
     workerReady,
