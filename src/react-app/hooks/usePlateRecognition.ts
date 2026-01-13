@@ -7,6 +7,7 @@ import { useState, useCallback, useRef } from 'react';
 import { validateAndCorrectPlate } from '../utils/plateValidator';
 import { getPlateDetector } from '../utils/plateDetector';
 import { usePlateWorker, type OCRResult } from './usePlateWorker';
+import { supabase } from '@/integrations/supabase/client';
 
 // Threshold para aceitar resultados do OCR local
 const CONFIDENCE_THRESHOLD = 0.60;
@@ -84,6 +85,7 @@ function createEmptyResult(): OCRResult {
 
 /**
  * Chama a API do Plate Recognizer como fallback
+ * SECURITY: Includes Supabase auth token for authenticated requests
  */
 async function callPlateRecognizerFallback(canvas: HTMLCanvasElement): Promise<OCRResult> {
   const startTime = performance.now();
@@ -91,15 +93,29 @@ async function callPlateRecognizerFallback(canvas: HTMLCanvasElement): Promise<O
   try {
     console.log('🔄 Usando fallback: Plate Recognizer API...');
     
+    // SECURITY: Get current session for authenticated API call
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session?.access_token) {
+      console.error('❌ Usuário não autenticado - redirecionando para login');
+      throw new Error('Sessão expirada. Faça login novamente.');
+    }
+    
     const imageBase64 = canvasToBase64(canvas);
     
     const response = await fetch(PLATE_RECOGNIZER_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
       body: JSON.stringify({ imageBase64 }),
     });
     
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Sessão expirada. Faça login novamente.');
+      }
       const errorData = await response.json();
       throw new Error(errorData.error || `Erro HTTP: ${response.status}`);
     }
