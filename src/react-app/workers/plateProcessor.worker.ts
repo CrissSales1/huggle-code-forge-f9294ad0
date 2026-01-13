@@ -3,7 +3,7 @@
  * Move OCR (ONNX Runtime), detecção de placa e motion detection para thread separada
  * Evita bloqueio da UI durante processamento pesado
  * 
- * v1.1.47: Filtros noturnos refinados (anti-glare, gamma suave, CLAHE conservador, sharpening)
+ * v1.1.50: Consistência Fuzzy - agrupamento de variantes visuais no buffer OCR
  */
 
 import * as ort from 'onnxruntime-web';
@@ -1300,7 +1300,7 @@ function optimizeImageForOCR(
   height: number,
   options?: { forceNightMode?: boolean }
 ): { data: Uint8ClampedArray; width: number; height: number } {
-  console.log(`🔄 Pipeline v1.1.47 iniciado: ${width}x${height}px`);
+  console.log(`🔄 Pipeline v1.1.50 iniciado: ${width}x${height}px`);
   
   let processedData = data;
   
@@ -2281,4 +2281,4 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 };
 
 // Notificar que o worker está carregado
-console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.45 - Manual Night Mode)');
+console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.50 - Consistência Fuzzy)');
