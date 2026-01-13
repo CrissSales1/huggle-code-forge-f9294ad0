@@ -3,7 +3,7 @@
  * Move OCR (ONNX Runtime), detecção de placa e motion detection para thread separada
  * Evita bloqueio da UI durante processamento pesado
  * 
- * v1.1.45: Modo Noturno Manual + Pré-processamento Noturno (Gamma + CLAHE)
+ * v1.1.46: Fix forceNightMode passando para worker + Limpar histórico melhorado
  */
 
 import * as ort from 'onnxruntime-web';

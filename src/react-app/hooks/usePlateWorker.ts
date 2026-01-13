@@ -235,6 +235,7 @@ export function usePlateWorker(): UsePlateWorkerReturn {
         enableFallback: options?.enableFallback ?? fallbackConfig.enabled,
         fallbackApiUrl: options?.fallbackApiUrl ?? fallbackConfig.apiUrl,
         fallbackApiToken: options?.fallbackApiToken ?? fallbackConfig.apiToken,
+        forceNightMode: options?.forceNightMode ?? false,  // v1.1.46: Passar para o worker
       };
       
       // Usar Transferable para zero-copy
