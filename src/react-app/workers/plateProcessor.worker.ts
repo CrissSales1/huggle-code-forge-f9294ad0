@@ -886,10 +886,8 @@ function labToRgb(L: number, A: number, B: number): [number, number, number] {
 /**
  * Aplica CLAHE (Contrast Limited Adaptive Histogram Equalization) apenas no canal L
  * Preserva cores originais - essencial para PaddleOCR que foi treinado com RGB
- * NOTA: Desabilitado em v1.1.9 - usando Histogram EQ global no preprocessForONNX
+ * v1.1.44: Reativado para correção noturna
  */
-// @ts-ignore - Mantido para uso futuro, desabilitado em v1.1.9
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function applyCLAHE(
   data: Uint8ClampedArray,
   width: number,
@@ -1055,13 +1053,129 @@ function _unwarpPlate(
 }
 
 /**
- * Pipeline completo de otimização de imagem para OCR v1.1.7
+ * v1.1.44: Detecta se a imagem foi capturada em condições noturnas
+ * Baseado em:
+ * - Luminância média baixa (imagem escura em geral)
+ * - Alta variância de luminância (áreas muito claras e muito escuras)
+ * - Histograma bimodal (picos em extremos - reflexos de farol + fundo escuro)
+ */
+function detectNightCondition(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number
+): { isNight: boolean; avgLuminance: number; luminanceVariance: number } {
+  const numPixels = width * height;
+  const histogram = new Uint32Array(256);
+  let totalLuminance = 0;
+  
+  // Calcular luminância e histograma
+  for (let i = 0; i < numPixels; i++) {
+    const idx = i * 4;
+    const r = data[idx];
+    const g = data[idx + 1];
+    const b = data[idx + 2];
+    // Luminância perceptual (BT.709)
+    const luminance = Math.round(0.2126 * r + 0.7152 * g + 0.0722 * b);
+    histogram[Math.min(255, luminance)]++;
+    totalLuminance += luminance;
+  }
+  
+  const avgLuminance = totalLuminance / numPixels;
+  
+  // Calcular variância (desvio padrão)
+  let varianceSum = 0;
+  for (let i = 0; i < numPixels; i++) {
+    const idx = i * 4;
+    const luminance = 0.2126 * data[idx] + 0.7152 * data[idx + 1] + 0.0722 * data[idx + 2];
+    varianceSum += (luminance - avgLuminance) ** 2;
+  }
+  const luminanceVariance = Math.sqrt(varianceSum / numPixels);
+  
+  // Contar pixels em extremos (< 30 = muito escuro, > 225 = reflexo/farol)
+  let darkPixels = 0;
+  let brightPixels = 0;
+  for (let i = 0; i < 30; i++) darkPixels += histogram[i];
+  for (let i = 225; i < 256; i++) brightPixels += histogram[i];
+  
+  const darkRatio = darkPixels / numPixels;
+  const brightRatio = brightPixels / numPixels;
+  
+  // CRITÉRIOS DE DETECÇÃO NOTURNA:
+  // 1. Luminância média baixa (< 80) - imagem geralmente escura OU
+  // 2. Alta variância (> 60) + presença de extremos (bimodal) - reflexos de farol
+  const isNight = 
+    avgLuminance < 80 || 
+    (luminanceVariance > 60 && darkRatio > 0.15 && brightRatio > 0.05);
+  
+  console.log(`🌙 Detecção noturna: avg=${avgLuminance.toFixed(1)}, var=${luminanceVariance.toFixed(1)}, ` +
+    `dark=${(darkRatio*100).toFixed(1)}%, bright=${(brightRatio*100).toFixed(1)}% → ${isNight ? '🌙 NOTURNA' : '☀️ diurna'}`);
+  
+  return { isNight, avgLuminance, luminanceVariance };
+}
+
+/**
+ * v1.1.44: Aplica correções específicas para imagens noturnas
+ * - Correção de gamma adaptativo para expandir tons escuros
+ * - Clipping de highlights (reduz reflexos de farol)
+ * - CLAHE adaptativo para equalizar contraste local
+ */
+function applyNightCorrection(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  avgLuminance: number
+): Uint8ClampedArray {
+  const numPixels = width * height;
+  const intermediate = new Uint8ClampedArray(data.length);
+  
+  // 1. GAMMA ADAPTATIVO - Quanto mais escura, maior o gamma
+  // avgLuminance 40 → gamma 1.8 (forte correção)
+  // avgLuminance 80 → gamma 1.2 (leve correção)
+  const gamma = Math.max(1.1, Math.min(2.0, 2.0 - (avgLuminance / 100)));
+  const gammaInv = 1 / gamma;
+  
+  // 2. CLIPPING DE HIGHLIGHTS - Limita pixels muito claros (reflexos de farol)
+  const HIGHLIGHT_CLIP = 245; // Valores > 245 são comprimidos
+  const HIGHLIGHT_TARGET = 230; // Valor máximo após clipping
+  
+  console.log(`🔆 Correção noturna: gamma=${gamma.toFixed(2)}`);
+  
+  // 3. APLICAR CORREÇÕES POR PIXEL
+  for (let i = 0; i < numPixels; i++) {
+    const idx = i * 4;
+    
+    for (let c = 0; c < 3; c++) { // R, G, B
+      let value = data[idx + c];
+      
+      // Gamma correction (expande tons escuros)
+      value = 255 * Math.pow(value / 255, gammaInv);
+      
+      // Highlight clipping (comprime tons claros - reduz reflexos)
+      if (value > HIGHLIGHT_CLIP) {
+        value = HIGHLIGHT_TARGET + (value - HIGHLIGHT_CLIP) * 0.2;
+      }
+      
+      intermediate[idx + c] = Math.max(0, Math.min(255, Math.round(value)));
+    }
+    intermediate[idx + 3] = 255; // Alpha
+  }
+  
+  // 4. APLICAR CLAHE (Contrast Limited Adaptive Histogram Equalization)
+  // clipLimit menor para noite (evita over-enhancement)
+  const claheResult = applyCLAHE(intermediate, width, height, 2.0, 8);
+  
+  console.log(`🌙 Correção noturna aplicada: gamma=${gamma.toFixed(2)} + CLAHE`);
+  
+  return claheResult;
+}
+
+/**
+ * Pipeline completo de otimização de imagem para OCR v1.1.44
  * 
  * Ordem de processamento:
- * 1. Correção de perspectiva (se necessário)
- * 2. CLAHE no espaço LAB (DESABILITADO TEMPORARIAMENTE para debug)
- * 3. Padding (margem de segurança)
- * 4. Resize inteligente com Lanczos (altura 48px)
+ * 1. Detecção de condição noturna (análise de luminância)
+ * 2. Correção noturna se necessário (gamma + highlight clip + CLAHE)
+ * 3. Upscale 2x para imagens pequenas (< 200px)
  * 
  * IMPORTANTE: Mantém RGB - PaddleOCR foi treinado com estatísticas ImageNet em 3 canais
  */
@@ -1070,7 +1184,20 @@ function optimizeImageForOCR(
   width: number,
   height: number
 ): { data: Uint8ClampedArray; width: number; height: number } {
-  console.log(`🔄 Pipeline v1.1.36 iniciado: ${width}x${height}px`);
+  console.log(`🔄 Pipeline v1.1.44 iniciado: ${width}x${height}px`);
+  
+  let processedData = data;
+  
+  // v1.1.44: Detecção e correção automática para condições noturnas
+  const nightAnalysis = detectNightCondition(data, width, height);
+  
+  if (nightAnalysis.isNight) {
+    console.log(`🌙 Modo noturno ativado - aplicando correções`);
+    processedData = applyNightCorrection(
+      data, width, height, 
+      nightAnalysis.avgLuminance
+    );
+  }
   
   // v1.1.36: Upscale 2x para imagens pequenas (< 200px largura)
   // Melhora detalhes dos caracteres antes do resize para tensor
@@ -1084,11 +1211,11 @@ function optimizeImageForOCR(
     
     console.log(`📏 Upscale ${UPSCALE_FACTOR}x: ${width}x${height} → ${newWidth}x${newHeight}px`);
     
-    // Criar canvas source com os dados originais
+    // Criar canvas source com os dados processados
     const srcCanvas = new OffscreenCanvas(width, height);
     const srcCtx = srcCanvas.getContext('2d', { alpha: false })!;
     const srcImageData = srcCtx.createImageData(width, height);
-    srcImageData.data.set(data);
+    srcImageData.data.set(processedData);
     srcCtx.putImageData(srcImageData, 0, 0);
     
     // Criar canvas destino com upscale e interpolação de alta qualidade
@@ -1112,7 +1239,7 @@ function optimizeImageForOCR(
   console.log(`📏 Tamanho adequado (>=${MIN_WIDTH_FOR_OCR}px), sem upscale`);
   console.log(`📏 Passando para tensor dinâmico (BGR + resize direto)`);
   
-  return { data: new Uint8ClampedArray(data), width, height };
+  return { data: new Uint8ClampedArray(processedData), width, height };
 }
 
 function toGrayscale(data: Uint8ClampedArray): Uint8ClampedArray {
