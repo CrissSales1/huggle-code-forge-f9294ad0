@@ -3,7 +3,7 @@
  * Move OCR (ONNX Runtime), detecção de placa e motion detection para thread separada
  * Evita bloqueio da UI durante processamento pesado
  * 
- * v1.1.46: Fix forceNightMode passando para worker + Limpar histórico melhorado
+ * v1.1.47: Filtros noturnos refinados (anti-glare, gamma suave, CLAHE conservador, sharpening)
  */
 
 import * as ort from 'onnxruntime-web';
@@ -447,15 +447,17 @@ function heuristicCorrection(text: string): string {
     'O': '0', 'I': '1', 'Z': '2', 'J': '3', 'A': '4', 'S': '5', 'G': '6', 'T': '7', 'B': '8', 'D': '0', 'Q': '0'
   };
   
-  // v1.1.43: Confusões entre números (iluminação noturna/fonte similar)
-  // Usado para corrigir erros como 9→2, 2→7, 7→2
+  // v1.1.47: Confusões entre números (iluminação noturna/fonte similar)
+  // Atualizado com 9↔2 bidirecional mais forte
   const numToNum: Record<string, string[]> = {
     '2': ['7', '9'],   // 2 parece 7 em fontes finas, 9 com base escura
     '7': ['2', '1'],   // 7 parece 2 ou 1
-    '9': ['2', '6'],   // 9 parece 2 (parte inferior escura) ou 6 (invertido)
-    '6': ['9', '0'],   // 6 parece 9 ou 0
-    '0': ['6', '8'],   // 0 parece 6 ou 8
-    '1': ['7'],        // 1 parece 7
+    '9': ['2', '6', '0'],   // v1.1.47: 9 parece 2, 6 ou 0
+    '6': ['9', '0', '8'],   // v1.1.47: 6 parece 9, 0 ou 8
+    '0': ['6', '8', '9'],   // v1.1.47: 0 parece 6, 8 ou 9
+    '1': ['7'],             // 1 parece 7
+    '5': ['6', '8'],        // v1.1.47: 5 parece 6 ou 8
+    '8': ['0', '6'],        // v1.1.47: 8 parece 0 ou 6
   };
   
   // Número → Letra (posição 4 específica para Mercosul)
@@ -1115,10 +1117,85 @@ function detectNightCondition(
 }
 
 /**
- * v1.1.44: Aplica correções específicas para imagens noturnas
- * - Correção de gamma adaptativo para expandir tons escuros
- * - Clipping de highlights (reduz reflexos de farol)
- * - CLAHE adaptativo para equalizar contraste local
+ * v1.1.47: Aplica sharpening leve para recuperar bordas após CLAHE
+ * Kernel 3x3 conservador para não criar artefatos
+ */
+function applyLightSharpening(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number
+): Uint8ClampedArray {
+  const result = new Uint8ClampedArray(data.length);
+  // Kernel de sharpening leve (unsharp mask suave)
+  // Centro = 1.5 (leve realce), vizinhos = -0.125 cada
+  const SHARPEN_STRENGTH = 0.4; // 40% do efeito para não exagerar
+  
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      const idx = (y * width + x) * 4;
+      
+      for (let c = 0; c < 3; c++) {
+        const center = data[idx + c];
+        
+        // Vizinhos cardinais
+        const top = data[((y - 1) * width + x) * 4 + c];
+        const bottom = data[((y + 1) * width + x) * 4 + c];
+        const left = data[(y * width + (x - 1)) * 4 + c];
+        const right = data[(y * width + (x + 1)) * 4 + c];
+        
+        // Média dos vizinhos
+        const avgNeighbors = (top + bottom + left + right) / 4;
+        
+        // Unsharp mask: original + (original - blur) * strength
+        const sharpened = center + (center - avgNeighbors) * SHARPEN_STRENGTH;
+        
+        result[idx + c] = Math.max(0, Math.min(255, Math.round(sharpened)));
+      }
+      result[idx + 3] = 255;
+    }
+  }
+  
+  // Copiar bordas sem modificação
+  for (let x = 0; x < width; x++) {
+    // Primeira linha
+    const topIdx = x * 4;
+    result[topIdx] = data[topIdx];
+    result[topIdx + 1] = data[topIdx + 1];
+    result[topIdx + 2] = data[topIdx + 2];
+    result[topIdx + 3] = 255;
+    // Última linha
+    const bottomIdx = ((height - 1) * width + x) * 4;
+    result[bottomIdx] = data[bottomIdx];
+    result[bottomIdx + 1] = data[bottomIdx + 1];
+    result[bottomIdx + 2] = data[bottomIdx + 2];
+    result[bottomIdx + 3] = 255;
+  }
+  for (let y = 0; y < height; y++) {
+    // Primeira coluna
+    const leftIdx = y * width * 4;
+    result[leftIdx] = data[leftIdx];
+    result[leftIdx + 1] = data[leftIdx + 1];
+    result[leftIdx + 2] = data[leftIdx + 2];
+    result[leftIdx + 3] = 255;
+    // Última coluna
+    const rightIdx = (y * width + (width - 1)) * 4;
+    result[rightIdx] = data[rightIdx];
+    result[rightIdx + 1] = data[rightIdx + 1];
+    result[rightIdx + 2] = data[rightIdx + 2];
+    result[rightIdx + 3] = 255;
+  }
+  
+  return result;
+}
+
+/**
+ * v1.1.47: Aplica correções específicas para imagens noturnas (REFINADO)
+ * 
+ * Pipeline melhorado:
+ * 1. Anti-Glare: Atenua reflexos de farol ANTES do gamma (evita saturação)
+ * 2. Gamma suave: Máximo 1.5 (era 2.0) - menos "lavado"
+ * 3. CLAHE conservador: clipLimit 1.5 (era 2.0) - menos over-enhancement
+ * 4. Sharpening leve: Recupera bordas dos caracteres após CLAHE
  */
 function applyNightCorrection(
   data: Uint8ClampedArray,
@@ -1129,53 +1206,84 @@ function applyNightCorrection(
   const numPixels = width * height;
   const intermediate = new Uint8ClampedArray(data.length);
   
-  // 1. GAMMA ADAPTATIVO - Quanto mais escura, maior o gamma
-  // avgLuminance 40 → gamma 1.8 (forte correção)
-  // avgLuminance 80 → gamma 1.2 (leve correção)
-  const gamma = Math.max(1.1, Math.min(2.0, 2.0 - (avgLuminance / 100)));
+  // === v1.1.47: PARÂMETROS REFINADOS ===
+  const GLARE_THRESHOLD = 220;    // Pixels acima disso são reflexos de farol
+  const GLARE_REDUCTION = 0.5;    // Atenua 50% da intensidade do glare
+  
+  // Gamma mais suave (era max 2.0, agora max 1.5)
+  // avgLuminance 40 → gamma 1.5
+  // avgLuminance 80 → gamma 1.1
+  const gamma = Math.max(1.1, Math.min(1.5, 1.6 - (avgLuminance / 160)));
   const gammaInv = 1 / gamma;
   
-  // 2. CLIPPING DE HIGHLIGHTS - Limita pixels muito claros (reflexos de farol)
-  const HIGHLIGHT_CLIP = 245; // Valores > 245 são comprimidos
-  const HIGHLIGHT_TARGET = 230; // Valor máximo após clipping
+  console.log(`🔆 v1.1.47 Correção noturna: gamma=${gamma.toFixed(2)}, glare_thresh=${GLARE_THRESHOLD}`);
   
-  console.log(`🔆 Correção noturna: gamma=${gamma.toFixed(2)}`);
-  
-  // 3. APLICAR CORREÇÕES POR PIXEL
+  // === PASSO 1: ANTI-GLARE (Antes do Gamma) ===
+  // Detecta pixels super-brilhantes (faróis) e atenua gradualmente
   for (let i = 0; i < numPixels; i++) {
     const idx = i * 4;
     
-    for (let c = 0; c < 3; c++) { // R, G, B
-      let value = data[idx + c];
+    // Calcular luminância do pixel
+    const r = data[idx];
+    const g = data[idx + 1];
+    const b = data[idx + 2];
+    const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    
+    if (luminance > GLARE_THRESHOLD) {
+      // Pixel muito brilhante (provavelmente reflexo de farol)
+      // Atenuar proporcionalmente à intensidade
+      const excessBrightness = (luminance - GLARE_THRESHOLD) / (255 - GLARE_THRESHOLD);
+      const attenuation = 1 - (excessBrightness * GLARE_REDUCTION);
       
-      // Gamma correction (expande tons escuros)
-      value = 255 * Math.pow(value / 255, gammaInv);
-      
-      // Highlight clipping (comprime tons claros - reduz reflexos)
-      if (value > HIGHLIGHT_CLIP) {
-        value = HIGHLIGHT_TARGET + (value - HIGHLIGHT_CLIP) * 0.2;
-      }
-      
-      intermediate[idx + c] = Math.max(0, Math.min(255, Math.round(value)));
+      intermediate[idx] = Math.round(r * attenuation);
+      intermediate[idx + 1] = Math.round(g * attenuation);
+      intermediate[idx + 2] = Math.round(b * attenuation);
+    } else {
+      // Pixel normal - copiar sem alteração
+      intermediate[idx] = r;
+      intermediate[idx + 1] = g;
+      intermediate[idx + 2] = b;
     }
-    intermediate[idx + 3] = 255; // Alpha
+    intermediate[idx + 3] = 255;
   }
   
-  // 4. APLICAR CLAHE (Contrast Limited Adaptive Histogram Equalization)
-  // clipLimit menor para noite (evita over-enhancement)
-  const claheResult = applyCLAHE(intermediate, width, height, 2.0, 8);
+  // === PASSO 2: GAMMA SUAVE ===
+  const afterGamma = new Uint8ClampedArray(data.length);
+  for (let i = 0; i < numPixels; i++) {
+    const idx = i * 4;
+    
+    for (let c = 0; c < 3; c++) {
+      let value = intermediate[idx + c];
+      // Gamma correction (expande tons escuros suavemente)
+      value = 255 * Math.pow(value / 255, gammaInv);
+      afterGamma[idx + c] = Math.max(0, Math.min(255, Math.round(value)));
+    }
+    afterGamma[idx + 3] = 255;
+  }
   
-  console.log(`🌙 Correção noturna aplicada: gamma=${gamma.toFixed(2)} + CLAHE`);
+  // === PASSO 3: CLAHE CONSERVADOR ===
+  // clipLimit reduzido de 2.0 para 1.5 (menos redistribuição = menos lavagem)
+  const afterCLAHE = applyCLAHE(afterGamma, width, height, 1.5, 8);
   
-  return claheResult;
+  // === PASSO 4: SHARPENING LEVE ===
+  // Recupera bordas dos caracteres que podem ter sido suavizadas
+  const final = applyLightSharpening(afterCLAHE, width, height);
+  
+  console.log(`🌙 v1.1.47 Correção noturna aplicada: anti-glare → gamma=${gamma.toFixed(2)} → CLAHE(1.5) → sharpen`);
+  
+  return final;
 }
 
 /**
- * Pipeline completo de otimização de imagem para OCR v1.1.45
+ * Pipeline completo de otimização de imagem para OCR v1.1.47
  * 
  * Ordem de processamento:
  * 1. Detecção de condição noturna (análise de luminância)
- * 2. Correção noturna se forceNightMode=true OU detecção automática
+ * 2. Correção noturna REFINADA se forceNightMode=true OU detecção automática
+ *    - Anti-glare (atenua faróis)
+ *    - Gamma suave (max 1.5)
+ *    - CLAHE conservador (clipLimit 1.5)
+ *    - Sharpening leve (recupera bordas)
  * 3. Upscale 2x para imagens pequenas (< 200px)
  * 
  * IMPORTANTE: Mantém RGB - PaddleOCR foi treinado com estatísticas ImageNet em 3 canais
@@ -1186,7 +1294,7 @@ function optimizeImageForOCR(
   height: number,
   options?: { forceNightMode?: boolean }
 ): { data: Uint8ClampedArray; width: number; height: number } {
-  console.log(`🔄 Pipeline v1.1.45 iniciado: ${width}x${height}px`);
+  console.log(`🔄 Pipeline v1.1.47 iniciado: ${width}x${height}px`);
   
   let processedData = data;
   
