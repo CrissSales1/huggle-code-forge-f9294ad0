@@ -1,7 +1,7 @@
 project_id = "kbgftpiyzfmabrncpnas"
 
 [functions.detect-plate]
-verify_jwt = false
+verify_jwt = true
 
 [functions.import-data]
-verify_jwt = false
+verify_jwt = true
