@@ -93,22 +93,34 @@ export default function Monitoramento() {
   };
 
   const handleLimparMonitoramento = async () => {
-    if (!confirm('Tem certeza que deseja limpar o histórico de detecções?')) {
+    if (!confirm('Tem certeza que deseja limpar todo o histórico de detecções?')) {
       return;
     }
     try {
+      // v1.1.46: Usar gt(0) para melhor compatibilidade com RLS
       const { error } = await supabase
         .from('lpr_deteccoes')
         .delete()
-        .neq('id', 0);
+        .gt('id', 0);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Erro ao limpar histórico:', error);
+        throw error;
+      }
       
       alert('Histórico de detecções limpo com sucesso!');
       refetch();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erro ao limpar histórico:', err);
-      alert('Erro ao limpar histórico');
+      
+      // v1.1.46: Mensagens mais descritivas para o usuário
+      if (err?.code === 'PGRST301' || err?.message?.includes('JWT')) {
+        alert('Sessão expirada. Por favor, faça login novamente.');
+      } else if (err?.code === '42501' || err?.message?.includes('RLS')) {
+        alert('Sem permissão para limpar o histórico. Verifique suas credenciais.');
+      } else {
+        alert(`Erro ao limpar histórico: ${err?.message || 'Erro desconhecido'}`);
+      }
     }
   };
 
