@@ -1,14 +1,83 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Rate limiting: Track requests by IP
+const requestCounts = new Map<string, { count: number; resetTime: number }>();
+const RATE_LIMIT = 30; // max requests per minute (plate detection may be frequent)
+const RATE_WINDOW = 60000; // per minute
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const record = requestCounts.get(ip);
+  
+  if (!record || now > record.resetTime) {
+    requestCounts.set(ip, { count: 1, resetTime: now + RATE_WINDOW });
+    return true;
+  }
+  
+  if (record.count >= RATE_LIMIT) {
+    return false;
+  }
+  
+  record.count++;
+  return true;
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  // SECURITY: Check for authorization header
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) {
+    console.warn("🚨 Unauthorized request to detect-plate - missing auth header");
+    return new Response(
+      JSON.stringify({ error: 'Unauthorized - authentication required' }),
+      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // SECURITY: Verify the JWT token
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const authClient = createClient(supabaseUrl, supabaseAnonKey);
+    
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: authError } = await authClient.auth.getUser(token);
+    
+    if (authError || !user) {
+      console.warn("🚨 Invalid token for detect-plate:", authError?.message);
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized - invalid token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log(`✅ Authenticated user: ${user.email}`);
+  } catch (authErr) {
+    console.error("🚨 Auth verification failed:", authErr);
+    return new Response(
+      JSON.stringify({ error: 'Unauthorized - authentication failed' }),
+      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // SECURITY: Rate limiting
+  const clientIP = req.headers.get("x-forwarded-for") || req.headers.get("cf-connecting-ip") || "unknown";
+  if (!checkRateLimit(clientIP)) {
+    console.warn(`🚨 Rate limit exceeded for IP: ${clientIP}`);
+    return new Response(
+      JSON.stringify({ error: 'Rate limit exceeded - try again later' }),
+      { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   }
 
   try {
@@ -18,6 +87,15 @@ serve(async (req) => {
       console.error('❌ Nenhuma imagem enviada');
       return new Response(
         JSON.stringify({ error: 'Imagem não enviada' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // SECURITY: Validate image size (max 5MB base64 = ~3.75MB actual)
+    if (imageBase64.length > 5 * 1024 * 1024) {
+      console.error('❌ Imagem muito grande');
+      return new Response(
+        JSON.stringify({ error: 'Imagem muito grande - máximo 5MB' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
