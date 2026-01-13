@@ -275,11 +275,15 @@ export function generateAggressiveVariations(plate: string): string[] {
   
   // Posição 3: DEVE ser número
   const alt3 = VISUAL_SIMILAR[chars[3]] || [];
+  // v1.1.49: Log temporário para diagnóstico de variações
+  console.log(`📊 Pos3 (${chars[3]}): alternativas = [${alt3.join(', ')}]`);
   for (const alt of alt3) {
     if (/[0-9]/.test(alt)) {
       const variant = [...chars];
       variant[3] = alt;
-      variations.add(correctByPosition(variant.join('')));
+      const generated = correctByPosition(variant.join(''));
+      console.log(`   ↳ Variação gerada: ${generated}`);
+      variations.add(generated);
     }
   }
   
