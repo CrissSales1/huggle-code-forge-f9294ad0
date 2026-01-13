@@ -733,6 +733,9 @@ async function detectPlateWithYOLO(
       return null;
     }
     
+    // v1.1.48: Log de debug para diagnóstico
+    console.log(`🔍 YOLO encontrou ${detections.length} detecções brutas`);
+    
     let bestBox: BoundingBox | null = null;
     let bestConfidence = YOLO_CONFIDENCE_THRESHOLD;
     
@@ -766,9 +769,12 @@ async function detectPlateWithYOLO(
         
         const aspectRatio = boxW / boxH;
         
-        // Filtros relaxados para capturar mais placas
-        if (aspectRatio < 2.0 || aspectRatio > 5.0) {
-          console.log(`⚠️ YOLO: placa descartada por proporção ${aspectRatio.toFixed(2)} (esperado 2.0-5.0)`);
+        // v1.1.48: Log de cada box detectada para diagnóstico
+        console.log(`📦 YOLO box: ${boxW}x${boxH}px @ (${boxX},${boxY}) conf=${(confidence*100).toFixed(0)}% ratio=${aspectRatio.toFixed(2)}`);
+        
+        // v1.1.48: Filtros mais relaxados (1.5-8.0) pois YOLO pode incluir área ao redor
+        if (aspectRatio < 1.5 || aspectRatio > 8.0) {
+          console.log(`⚠️ YOLO: placa descartada por proporção ${aspectRatio.toFixed(2)} (esperado 1.5-8.0)`);
           continue;
         }
         if (boxW < 50 || boxH < 12) {
@@ -1578,7 +1584,16 @@ function findBestPlateRegion(
       if (!hasInternalVerticalEdges(edges, processWidth, x, y, windowWidth, windowHeight)) continue;
       
       const aspectScore = 1 - Math.abs(aspectRatio - PLATE_ASPECT_RATIO_IDEAL) / PLATE_ASPECT_RATIO_IDEAL;
-      const positionBonus = 1 - Math.abs((y / processHeight) - 0.6) * 0.5;
+      
+      // v1.1.48: Penalizar apenas região muito inferior (chão) - >80% = 0.5, 70-80% = 0.75, resto = 1.0
+      const relativeY = y / processHeight;
+      let positionBonus = 1.0;
+      if (relativeY > 0.80) {
+        positionBonus = 0.5; // Muito inferior (chão) - penalidade moderada
+      } else if (relativeY > 0.70) {
+        positionBonus = 0.75; // Inferior - penalidade leve
+      }
+      
       const score = density * aspectScore * contrast * positionBonus * (1 - saturation * 0.5);
       
       if (score > bestScore) {
