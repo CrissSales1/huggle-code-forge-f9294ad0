@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Plus, Camera, CheckCircle, XCircle, Home, Edit2, Trash2, Car, Activity, HelpCircle, RotateCcw, Search, X, User } from 'lucide-react';
+import { Plus, Camera, CheckCircle, XCircle, Home, Edit2, Trash2, Car, Activity, HelpCircle, RotateCcw, Search, X, User, Clock } from 'lucide-react';
 import { useLPRDetections } from '@/react-app/hooks/useApi';
 import { supabase } from '@/integrations/supabase/client';
 import CadastroMoradorModal from '@/react-app/components/CadastroMoradorModal';
@@ -163,27 +163,27 @@ export default function Monitoramento() {
       {/* Ajuda de Configuração */}
       {showHelp && <MonitoramentoHelp />}
 
-      {/* Camera Monitor com Painel de Resultado */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 sm:gap-6 mb-4 sm:mb-6 items-stretch">
-        {/* Câmera - 3/5 da largura */}
-        <div className="lg:col-span-3">
+      {/* Camera Monitor com Painel de Resultado - Layout responsivo 3 colunas */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 2xl:grid-cols-12 gap-4 2xl:gap-3 mb-4 sm:mb-6 items-stretch 2xl:h-[calc(100vh-280px)] 2xl:min-h-[500px]">
+        {/* Câmera - 3/5 em LG, 6/12 em 2XL */}
+        <div className="lg:col-span-3 2xl:col-span-6 2xl:flex 2xl:flex-col">
           <CameraMonitor 
             onDetection={debouncedRefetch} 
             compact 
           />
         </div>
         
-        {/* Painel de Resultado - 2/5 da largura */}
-        <div className="lg:col-span-2">
+        {/* Painel de Resultado - 2/5 em LG, 4/12 em 2XL */}
+        <div className="lg:col-span-2 2xl:col-span-4">
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm h-full flex flex-col">
             {/* Header */}
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                <Activity className="w-5 h-5 text-blue-600" />
-                <span>Resultado da Detecção</span>
+            <div className="px-4 py-2.5 2xl:py-2 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="font-semibold text-gray-900 flex items-center gap-2 text-sm 2xl:text-base">
+                <Activity className="w-4 h-4 2xl:w-5 2xl:h-5 text-blue-600" />
+                <span>Resultado</span>
               </h3>
               {latestDetection && (
-                <span className={`text-xs px-2 py-1 rounded-full ${
+                <span className={`text-xs px-2 py-0.5 rounded-full ${
                   latestDetection.morador 
                     ? 'bg-green-100 text-green-700' 
                     : latestDetection.visitante
@@ -196,124 +196,121 @@ export default function Monitoramento() {
             </div>
             
             {/* Conteúdo */}
-            <div className="flex-1 p-4 flex flex-col">
+            <div className="flex-1 p-3 2xl:p-4 flex flex-col overflow-hidden">
               {/* Card de resultado principal */}
-              <div className="flex-1 flex flex-col justify-center">
+              <div className="flex-1 flex flex-col justify-center min-h-0">
                 {!latestDetection ? (
                   /* Aguardando detecção */
-                  <div className="text-center py-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300">
-                    <Camera className="w-14 h-14 text-gray-400 mx-auto mb-3" />
-                    <p className="text-gray-600 text-lg font-medium">Aguardando detecção...</p>
-                    <p className="text-gray-400 text-sm mt-1">O sistema exibirá os veículos automaticamente</p>
+                  <div className="text-center py-8 2xl:py-6 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300">
+                    <Camera className="w-12 h-12 2xl:w-10 2xl:h-10 text-gray-400 mx-auto mb-2" />
+                    <p className="text-gray-600 text-base 2xl:text-sm font-medium">Aguardando detecção...</p>
+                    <p className="text-gray-400 text-sm 2xl:text-xs mt-1">O sistema exibirá os veículos</p>
                   </div>
                 ) : latestDetection.morador ? (
-                  /* MORADOR AUTORIZADO - Card grande e verde */
-                  <div className="bg-gradient-to-br from-green-100 via-green-50 to-emerald-100 border-4 border-green-500 rounded-2xl p-5 sm:p-6 shadow-lg animate-fade-in">
+                  <div className="bg-gradient-to-br from-green-100 via-green-50 to-emerald-100 border-4 border-green-500 rounded-2xl p-4 2xl:p-3 shadow-lg animate-fade-in">
                     {/* Badge de status */}
-                    <div className="flex items-center justify-center mb-4">
-                      <div className="bg-green-600 text-white px-5 py-1.5 rounded-full font-bold text-base sm:text-lg flex items-center gap-2 shadow-md">
-                        <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6" />
+                    <div className="flex items-center justify-center mb-3 2xl:mb-2">
+                      <div className="bg-green-600 text-white px-4 py-1 2xl:px-3 2xl:py-0.5 rounded-full font-bold text-sm 2xl:text-xs flex items-center gap-1.5 shadow-md">
+                        <CheckCircle className="w-4 h-4 2xl:w-3.5 2xl:h-3.5" />
                         <span>MORADOR AUTORIZADO</span>
                       </div>
                     </div>
                     
                     {/* Placa centralizada */}
-                    <div className="flex justify-center mb-4">
+                    <div className="flex justify-center mb-3 2xl:mb-2">
                       <PlacaVeiculo placa={latestDetection.placa} size="lg" />
                     </div>
                     
                     {/* Casa do morador */}
-                    <div className="flex justify-center mb-3">
-                      <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border-2 border-green-300 shadow-sm">
-                        <Home className="w-6 h-6 text-blue-600" />
-                        <span className="text-3xl sm:text-4xl font-bold text-green-700">
+                    <div className="flex justify-center mb-2">
+                      <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border-2 border-green-300 shadow-sm">
+                        <Home className="w-5 h-5 2xl:w-4 2xl:h-4 text-blue-600" />
+                        <span className="text-2xl 2xl:text-xl font-bold text-green-700">
                           Casa {latestDetection.morador.casa}
                         </span>
                       </div>
                     </div>
                     
                     {/* Horário e fonte */}
-                    <div className="text-center">
+                    <div className="text-center text-sm 2xl:text-xs">
                       <span className="text-gray-600">
                         {new Date(latestDetection.timestamp).toLocaleTimeString('pt-BR')}
                       </span>
-                      <span className="text-gray-400 text-xs ml-2">
+                      <span className="text-gray-400 ml-1">
                         • {latestDetection.fonteDeteccao === 'api' ? 'API' : 'OCR'}
                         {latestDetection.confidence && ` (${Math.round(latestDetection.confidence * 100)}%)`}
                       </span>
                     </div>
                   </div>
                 ) : latestDetection.visitante ? (
-                  /* VISITANTE ATIVO - Card grande e amarelo */
-                  <div className="bg-gradient-to-br from-amber-100 via-yellow-50 to-orange-100 border-4 border-amber-500 rounded-2xl p-5 sm:p-6 shadow-lg animate-fade-in">
+                  <div className="bg-gradient-to-br from-amber-100 via-yellow-50 to-orange-100 border-4 border-amber-500 rounded-2xl p-4 2xl:p-3 shadow-lg animate-fade-in">
                     {/* Badge de status */}
-                    <div className="flex items-center justify-center mb-4">
-                      <div className="bg-amber-600 text-white px-5 py-1.5 rounded-full font-bold text-base sm:text-lg flex items-center gap-2 shadow-md">
-                        <User className="w-5 h-5 sm:w-6 sm:h-6" />
+                    <div className="flex items-center justify-center mb-3 2xl:mb-2">
+                      <div className="bg-amber-600 text-white px-4 py-1 2xl:px-3 2xl:py-0.5 rounded-full font-bold text-sm 2xl:text-xs flex items-center gap-1.5 shadow-md">
+                        <User className="w-4 h-4 2xl:w-3.5 2xl:h-3.5" />
                         <span>VISITANTE ATIVO</span>
                       </div>
                     </div>
                     
                     {/* Placa centralizada */}
-                    <div className="flex justify-center mb-4">
+                    <div className="flex justify-center mb-3 2xl:mb-2">
                       <PlacaVeiculo placa={latestDetection.placa} size="lg" />
                     </div>
                     
                     {/* Casa do visitante e nome */}
-                    <div className="flex flex-col items-center gap-2 mb-3">
-                      <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border-2 border-amber-300 shadow-sm">
-                        <Home className="w-5 h-5 text-blue-600" />
-                        <span className="text-2xl sm:text-3xl font-bold text-amber-700">
+                    <div className="flex flex-col items-center gap-1.5 mb-2">
+                      <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border-2 border-amber-300 shadow-sm">
+                        <Home className="w-4 h-4 text-blue-600" />
+                        <span className="text-xl 2xl:text-lg font-bold text-amber-700">
                           Casa {latestDetection.visitante.casa}
                         </span>
                       </div>
-                      <div className="text-lg font-semibold text-amber-800">
+                      <div className="text-base 2xl:text-sm font-semibold text-amber-800">
                         {latestDetection.visitante.nome}
                       </div>
                     </div>
                     
                     {/* Horário e fonte */}
-                    <div className="text-center">
+                    <div className="text-center text-sm 2xl:text-xs">
                       <span className="text-gray-600">
                         {new Date(latestDetection.timestamp).toLocaleTimeString('pt-BR')}
                       </span>
-                      <span className="text-gray-400 text-xs ml-2">
+                      <span className="text-gray-400 ml-1">
                         • {latestDetection.fonteDeteccao === 'api' ? 'API' : 'OCR'}
                         {latestDetection.confidence && ` (${Math.round(latestDetection.confidence * 100)}%)`}
                       </span>
                     </div>
                   </div>
                 ) : (
-                  /* VEÍCULO DESCONHECIDO - Card grande e vermelho */
-                  <div className="bg-gradient-to-br from-red-100 via-red-50 to-orange-100 border-4 border-red-500 rounded-2xl p-5 sm:p-6 shadow-lg animate-fade-in">
+                  <div className="bg-gradient-to-br from-red-100 via-red-50 to-orange-100 border-4 border-red-500 rounded-2xl p-4 2xl:p-3 shadow-lg animate-fade-in">
                     {/* Badge de alerta */}
-                    <div className="flex items-center justify-center mb-4">
-                      <div className="bg-red-600 text-white px-5 py-1.5 rounded-full font-bold text-base sm:text-lg flex items-center gap-2 shadow-md animate-pulse">
-                        <XCircle className="w-5 h-5 sm:w-6 sm:h-6" />
+                    <div className="flex items-center justify-center mb-3 2xl:mb-2">
+                      <div className="bg-red-600 text-white px-4 py-1 2xl:px-3 2xl:py-0.5 rounded-full font-bold text-sm 2xl:text-xs flex items-center gap-1.5 shadow-md animate-pulse">
+                        <XCircle className="w-4 h-4 2xl:w-3.5 2xl:h-3.5" />
                         <span>VEÍCULO DESCONHECIDO</span>
                       </div>
                     </div>
                     
                     {/* Placa centralizada */}
-                    <div className="flex justify-center mb-4">
+                    <div className="flex justify-center mb-3 2xl:mb-2">
                       <PlacaVeiculo placa={latestDetection.placa} size="lg" />
                     </div>
                     
                     {/* Aviso */}
-                    <div className="flex justify-center mb-3">
-                      <div className="bg-red-50 border border-red-200 px-3 py-1.5 rounded-lg">
-                        <p className="text-red-700 font-medium text-center text-sm">
-                          Verifique o veículo antes de liberar
+                    <div className="flex justify-center mb-2">
+                      <div className="bg-red-50 border border-red-200 px-2 py-1 rounded-lg">
+                        <p className="text-red-700 font-medium text-center text-xs">
+                          Verifique antes de liberar
                         </p>
                       </div>
                     </div>
                     
                     {/* Horário e fonte */}
-                    <div className="text-center">
+                    <div className="text-center text-sm 2xl:text-xs">
                       <span className="text-gray-600">
                         {new Date(latestDetection.timestamp).toLocaleTimeString('pt-BR')}
                       </span>
-                      <span className="text-gray-400 text-xs ml-2">
+                      <span className="text-gray-400 ml-1">
                         • {latestDetection.fonteDeteccao === 'api' ? 'API' : 'OCR'}
                         {latestDetection.confidence && ` (${Math.round(latestDetection.confidence * 100)}%)`}
                       </span>
@@ -322,15 +319,15 @@ export default function Monitoramento() {
                 )}
               </div>
               
-              {/* Histórico de detecções */}
+              {/* Histórico de detecções - oculto em 2XL (vai para coluna separada) */}
               {detectionHistory.length > 0 && (
-                <div className="mt-4 pt-4 border-t border-gray-100">
+                <div className="mt-3 pt-3 border-t border-gray-100 2xl:hidden">
                   <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center justify-between">
                     <span>Histórico</span>
                     <span className="text-gray-400 font-normal text-xs">({detectionHistory.length})</span>
                   </h4>
-                  <div className="space-y-1.5 max-h-[180px] overflow-y-auto pr-1">
-                    {detectionHistory.slice(0, 10).map((det, idx) => (
+                  <div className="space-y-1.5 max-h-[150px] overflow-y-auto pr-1">
+                    {detectionHistory.slice(0, 8).map((det, idx) => (
                       <div 
                         key={idx} 
                         className={`p-2 rounded-lg border text-xs ${
@@ -347,7 +344,6 @@ export default function Monitoramento() {
                           </span>
                           <span className="text-gray-400 text-[10px]">
                             {new Date(det.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                            {det.fonteDeteccao && ` • ${det.fonteDeteccao === 'api' ? 'API' : 'OCR'}`}
                           </span>
                         </div>
                         {det.morador && (
@@ -373,10 +369,131 @@ export default function Monitoramento() {
             </div>
           </div>
         </div>
+        
+        {/* Coluna de Histórico separada - só visível em 2XL */}
+        <div className="hidden 2xl:block 2xl:col-span-2">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm h-full flex flex-col">
+            <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between bg-gray-50 rounded-t-xl">
+              <h3 className="font-semibold text-gray-900 flex items-center gap-2 text-sm">
+                <Clock className="w-4 h-4 text-blue-600" />
+                <span>Histórico</span>
+              </h3>
+              <span className="text-xs text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">
+                {detectionHistory.length}
+              </span>
+            </div>
+            <div className="flex-1 p-2 overflow-y-auto">
+              {detectionHistory.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-gray-400 text-sm">
+                  <p>Nenhuma detecção</p>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {detectionHistory.slice(0, 20).map((det, idx) => (
+                    <div 
+                      key={idx} 
+                      className={`p-2 rounded-lg border text-xs ${
+                        det.morador 
+                          ? 'bg-green-50 border-green-200' 
+                          : det.visitante
+                          ? 'bg-amber-50 border-amber-200'
+                          : 'bg-red-50 border-red-200'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1 mb-0.5">
+                        <span className={`font-mono font-bold text-[11px] ${det.morador ? 'text-green-800' : det.visitante ? 'text-amber-800' : 'text-red-800'}`}>
+                          {det.placa}
+                        </span>
+                        <span className="text-gray-400 text-[10px]">
+                          {new Date(det.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      {det.morador && (
+                        <div className="flex items-center gap-1 text-green-700">
+                          <Home className="w-2.5 h-2.5" />
+                          <span className="font-medium text-[10px]">Casa {det.morador.casa}</span>
+                        </div>
+                      )}
+                      {det.visitante && (
+                        <div className="flex items-center gap-1 text-amber-700">
+                          <User className="w-2.5 h-2.5" />
+                          <span className="font-medium text-[10px]">{det.visitante.nome}</span>
+                        </div>
+                      )}
+                      {!det.morador && !det.visitante && (
+                        <span className="text-red-600 text-[10px]">Não cadastrado</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      {/* Seção de Veículos Cadastrados - Grid compacto em 2XL */}
+      <div className="hidden 2xl:block mb-4">
+        <div className="bg-white border border-gray-200 rounded-xl p-3">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Car className="w-4 h-4 text-blue-600" />
+              <h3 className="text-sm font-semibold text-gray-900">Veículos Cadastrados</h3>
+              <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{veiculos.length}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-40 pl-7 pr-2 py-1 border border-gray-300 rounded-lg text-xs focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <button 
+                onClick={() => setShowCadastroModal(true)} 
+                className="flex items-center gap-1 px-2 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-xs"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Novo</span>
+              </button>
+            </div>
+          </div>
+          
+          {veiculos.length === 0 ? (
+            <p className="text-gray-500 text-xs text-center py-4">Nenhum veículo cadastrado</p>
+          ) : (
+            <div className="flex flex-wrap gap-2 max-h-[100px] overflow-y-auto">
+              {veiculosFiltrados.slice(0, 24).map(veiculo => (
+                <div 
+                  key={veiculo.id} 
+                  className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 hover:bg-gray-100 transition-colors group"
+                >
+                  <span className="font-mono text-xs font-bold text-gray-800">{veiculo.placa_veiculo}</span>
+                  <span className="text-[10px] text-gray-500 flex items-center gap-0.5">
+                    <Home className="w-2.5 h-2.5" />
+                    {veiculo.casa}
+                  </span>
+                  <button 
+                    onClick={() => handleEditarVeiculo(veiculo)}
+                    className="opacity-0 group-hover:opacity-100 p-0.5 text-blue-600 hover:bg-blue-100 rounded transition-all"
+                  >
+                    <Edit2 className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+              {veiculosFiltrados.length > 24 && (
+                <span className="text-xs text-gray-500 self-center">+{veiculosFiltrados.length - 24} mais</span>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Lista de Veículos */}
-      <div className="mt-4 sm:mt-6">
+      {/* Lista de Veículos - Versão expandível para telas menores que 2XL */}
+      <div className="mt-4 sm:mt-6 2xl:hidden">
         <button onClick={async () => {
         if (!showVeiculosCadastrados) {
           await carregarVeiculos();
