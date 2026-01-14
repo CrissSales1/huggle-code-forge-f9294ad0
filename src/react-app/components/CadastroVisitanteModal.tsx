@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Camera, ChevronDown } from 'lucide-react';
+import { Camera, ChevronDown, ArrowLeft, Pencil } from 'lucide-react';
 import Modal from './Modal';
 import CameraModal from './CameraModal';
 import SelecionarVisitanteModal from './SelecionarVisitanteModal';
@@ -318,31 +318,37 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
             <h3 className="text-lg font-medium text-gray-900">
               2. Dados do Visitante
             </h3>
-            <div className="flex items-center space-x-3 text-sm text-gray-600">
-              <span>Prisma selecionado:</span>
-              <div className="relative">
-                {/* Prisma 3D em laranja */}
-                <div className="relative w-8 h-8">
-                  {/* Face frontal do prisma */}
-                  <div className="absolute inset-0 bg-gradient-to-br from-orange-400 to-orange-600 rounded-lg transform perspective-1000 shadow-lg border border-orange-500">
-                    {/* Face lateral direita (efeito 3D) */}
-                    <div className="absolute top-0 right-0 w-1.5 h-full bg-gradient-to-b from-orange-500 to-orange-700 transform skew-y-12 origin-top-right rounded-r-lg"></div>
-                    {/* Face superior (efeito 3D) */}
-                    <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-orange-300 to-orange-500 transform skew-x-12 origin-top-left rounded-t-lg"></div>
-                    
-                    {/* Número do prisma centralizado */}
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <span className="font-black text-white text-sm drop-shadow-lg tracking-tight" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-                        {prismaSelecionado}
-                      </span>
-                    </div>
-                    
-                    {/* Brilho/highlight no prisma */}
-                    <div className="absolute top-0.5 left-0.5 w-2 h-2 bg-white opacity-30 rounded-full blur-sm"></div>
+            {/* Prisma clicável para trocar */}
+            <button
+              type="button"
+              onClick={handleVoltar}
+              className="group flex items-center space-x-2 text-sm text-gray-600 hover:bg-blue-50 rounded-lg px-3 py-1.5 transition-all border border-transparent hover:border-blue-200"
+              title="Clique para trocar o prisma"
+            >
+              <span>Prisma:</span>
+              {/* Prisma 3D em laranja */}
+              <div className="relative w-8 h-8 group-hover:scale-110 transition-transform">
+                {/* Face frontal do prisma */}
+                <div className="absolute inset-0 bg-gradient-to-br from-orange-400 to-orange-600 rounded-lg transform perspective-1000 shadow-lg border border-orange-500">
+                  {/* Face lateral direita (efeito 3D) */}
+                  <div className="absolute top-0 right-0 w-1.5 h-full bg-gradient-to-b from-orange-500 to-orange-700 transform skew-y-12 origin-top-right rounded-r-lg"></div>
+                  {/* Face superior (efeito 3D) */}
+                  <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-orange-300 to-orange-500 transform skew-x-12 origin-top-left rounded-t-lg"></div>
+                  
+                  {/* Número do prisma centralizado */}
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="font-black text-white text-sm drop-shadow-lg tracking-tight" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+                      {prismaSelecionado}
+                    </span>
                   </div>
+                  
+                  {/* Brilho/highlight no prisma */}
+                  <div className="absolute top-0.5 left-0.5 w-2 h-2 bg-white opacity-30 rounded-full blur-sm"></div>
                 </div>
               </div>
-            </div>
+              {/* Ícone de editar */}
+              <Pencil className="w-3.5 h-3.5 text-gray-400 group-hover:text-blue-500 transition-colors" />
+            </button>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -553,10 +559,11 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
               <button
                 type="button"
                 onClick={handleVoltar}
-                className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                className="px-4 py-2 text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors flex items-center space-x-2 border border-blue-200"
                 disabled={loading}
               >
-                Voltar
+                <ArrowLeft className="w-4 h-4" />
+                <span>Trocar Prisma</span>
               </button>
               
               <div className="space-x-3">
