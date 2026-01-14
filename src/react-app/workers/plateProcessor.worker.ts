@@ -3,7 +3,7 @@
  * Move OCR (ONNX Runtime), detecção de placa e motion detection para thread separada
  * Evita bloqueio da UI durante processamento pesado
  * 
- * v1.1.51: OCR apenas quando YOLO confirma placa - elimina falsos positivos de heurística
+ * v1.1.52: Detecta formato por hífen/traço no OCR bruto para distinguir placas antigas de Mercosul
  */
 
 import * as ort from 'onnxruntime-web';
@@ -337,8 +337,13 @@ function softmaxWithTemperature(logits: number[], temperature: number = 10): num
 
 /**
  * Decodifica output CTC do PaddleOCR com Temperature Scaling
+ * v1.1.52: Retorna também o formato detectado pelo hífen/traço
  */
-function decodeCTC(output: Float32Array, outputShape: readonly number[]): { text: string; confidence: number } {
+function decodeCTC(output: Float32Array, outputShape: readonly number[]): { 
+  text: string; 
+  confidence: number;
+  detectedFormat: 'antiga' | 'mercosul' | 'unknown';
+} {
   // Shape: [1, seq_len, num_classes] ou [seq_len, num_classes]
   let seqLen: number;
   let numClasses: number;
@@ -351,7 +356,7 @@ function decodeCTC(output: Float32Array, outputShape: readonly number[]): { text
     numClasses = outputShape[1];
   } else {
     console.error('Formato de output inesperado:', outputShape);
-    return { text: '', confidence: 0 };
+    return { text: '', confidence: 0, detectedFormat: 'unknown' };
   }
   
   let result = '';
@@ -399,23 +404,33 @@ function decodeCTC(output: Float32Array, outputShape: readonly number[]): { text
   // Guardar texto bruto para log
   const rawText = result.toUpperCase();
   
-  // Aplicar correção heurística de homoglifos
-  const correctedText = heuristicCorrection(rawText);
+  // v1.1.52: Aplicar correção heurística com detecção de formato
+  const { text: correctedText, detectedFormat } = heuristicCorrection(rawText);
   
-  console.log(`🔤 OCR Bruto: "${rawText}" → Corrigido: "${correctedText}" (${(confidence * 100).toFixed(1)}%)`);
+  console.log(`🔤 OCR Bruto: "${rawText}" → Corrigido: "${correctedText}" (${(confidence * 100).toFixed(1)}%) [Formato: ${detectedFormat}]`);
   
-  return { text: correctedText, confidence };
+  return { text: correctedText, confidence, detectedFormat };
 }
 
 /**
- * Correção Heurística de Homoglifos para placas brasileiras v1.1.43
+ * Correção Heurística de Homoglifos para placas brasileiras v1.1.52
  * Corrige confusões de caracteres baseado na posição (formato BR)
  * Limpa ruído e garante máximo 7 caracteres
  * 
- * v1.1.43: Adicionado numToNum para confusões numéricas (9↔2, 2↔7)
- *          Detecção inteligente da posição 4 (Mercosul vs Antiga)
+ * v1.1.52: Detecta formato pelo hífen/traço ANTES de limpar
+ *          Se hífen detectado → Formato ANTIGO forçado (LLL-NNNN)
+ *          Evita conversão errada de EIK-9134 → EIK9I34
  */
-function heuristicCorrection(text: string): string {
+function heuristicCorrection(text: string): { text: string; detectedFormat: 'antiga' | 'mercosul' | 'unknown' } {
+  // v1.1.52: DETECTAR FORMATO PELO HÍFEN/PONTO (ANTES de limpar!)
+  // Placas antigas têm "ABC-1234" ou "ABC.1234" ou "ABC•1234", Mercosul não tem separador
+  const hasSeparator = /[-.\•–—·]/.test(text);
+  const detectedFormat: 'antiga' | 'mercosul' | 'unknown' = hasSeparator ? 'antiga' : 'unknown';
+  
+  if (hasSeparator) {
+    console.log(`🔍 v1.1.52: Separador detectado no OCR bruto: "${text}" → Formato ANTIGO forçado`);
+  }
+  
   // 1. LIMPEZA BÁSICA - Remove caracteres não-alfanuméricos e converte para maiúsculo
   let clean = text.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
   
@@ -434,7 +449,7 @@ function heuristicCorrection(text: string): string {
   clean = clean.substring(0, 7);
   
   // Se muito curto, retornar como está
-  if (clean.length < 3) return clean;
+  if (clean.length < 3) return { text: clean, detectedFormat };
   
   // 3. MAPEAMENTOS DE CORREÇÃO (Homoglifos)
   // Número → Letra (para posições 0, 1, 2 que devem ser letras)
@@ -483,13 +498,20 @@ function heuristicCorrection(text: string): string {
     chars[3] = letterToNum[chars[3]];
   }
   
-  // v1.1.43: Posição 4 - Detecção inteligente Mercosul vs Antiga
-  // Se for número, verificar se pode ser letra confundida (Mercosul)
+  // v1.1.52: Posição 4 - Detecção inteligente Mercosul vs Antiga
+  // Se formato ANTIGO foi detectado pelo hífen, FORÇAR número na posição 4
   if (chars.length > 4) {
     const char4 = chars[4];
     
-    if (/[0-9]/.test(char4)) {
-      // Verificar se convertendo para letra forma um padrão Mercosul válido
+    // v1.1.52: Se formato antigo detectado, NUNCA converter posição 4 para letra
+    if (detectedFormat === 'antiga') {
+      // Forçar posição 4 como número (formato antigo: LLL-NNNN)
+      if (/[A-Z]/.test(char4) && letterToNum[char4]) {
+        console.log(`🔧 v1.1.52: Formato ANTIGO - pos 4: '${char4}' → '${letterToNum[char4]}' (letra→número forçado)`);
+        chars[4] = letterToNum[char4];
+      }
+    } else if (/[0-9]/.test(char4)) {
+      // Lógica original: Verificar se convertendo para letra forma Mercosul válido
       if (numToLetterPos4[char4]) {
         const testMercosul = [...chars];
         testMercosul[4] = numToLetterPos4[char4];
@@ -518,9 +540,11 @@ function heuristicCorrection(text: string): string {
   const isMercosul = /^[A-Z]{3}[0-9][A-Z][0-9]{2}$/.test(currentResult);
   const isAntiga = /^[A-Z]{3}[0-9]{4}$/.test(currentResult);
   
-  // Se já é válido, retornar
+  // Se já é válido, retornar com formato detectado
+  // v1.1.52: Se formato antigo foi detectado pelo hífen, reportar 'antiga' mesmo que seja válido como Mercosul
   if (isMercosul || isAntiga) {
-    return currentResult;
+    const finalFormat = detectedFormat === 'antiga' ? 'antiga' : (isAntiga ? 'antiga' : 'mercosul');
+    return { text: currentResult, detectedFormat: finalFormat };
   }
   
   // Tentar correções de confusão numérica nas posições de números
@@ -544,23 +568,30 @@ function heuristicCorrection(text: string): string {
     }
   }
   
-  return chars.join('');
+  // Retornar resultado final com formato detectado
+  const finalResult = chars.join('');
+  const finalIsMercosul = /^[A-Z]{3}[0-9][A-Z][0-9]{2}$/.test(finalResult);
+  const finalIsAntiga = /^[A-Z]{3}[0-9]{4}$/.test(finalResult);
+  const finalFormat = detectedFormat === 'antiga' ? 'antiga' : (finalIsAntiga ? 'antiga' : (finalIsMercosul ? 'mercosul' : 'unknown'));
+  
+  return { text: finalResult, detectedFormat: finalFormat };
 }
 
 /**
  * Executa OCR com ONNX
+ * v1.1.52: Retorna também o formato detectado pelo hífen
  */
 async function runONNXOCR(
   data: Uint8ClampedArray,
   width: number,
   height: number
-): Promise<{ text: string; confidence: number }> {
+): Promise<{ text: string; confidence: number; detectedFormat: 'antiga' | 'mercosul' | 'unknown' }> {
   if (!onnxSession || !onnxReady) {
     await initONNX();
   }
   
   if (!onnxSession) {
-    return { text: '', confidence: 0 };
+    return { text: '', confidence: 0, detectedFormat: 'unknown' };
   }
   
   try {
@@ -571,7 +602,7 @@ async function runONNXOCR(
     console.log(`📊 Tensor shape: [1, 3, ${processedHeight}, ${processedWidth}]`);
     
     // Criar tensor de entrada
-    const inputTensor = new ort.Tensor('float32', tensor, [1, 3, processedHeight, processedWidth]);
+    const inputTensor = new ort.Tensor('float32', tensor, [1, 3, processedHeight, processedHeight]);
     
     // Executar inferência
     const inputName = onnxSession.inputNames[0];
@@ -586,15 +617,15 @@ async function runONNXOCR(
     console.log(`📊 Output shape: [${outputShape.join(', ')}]`);
     console.log(`📊 Num classes: ${outputShape[outputShape.length - 1]}, Seq len: ${outputShape.length === 3 ? outputShape[1] : outputShape[0]}`);
     
-    // Decodificar CTC
-    const { text, confidence } = decodeCTC(outputData, outputShape);
+    // Decodificar CTC - agora retorna formato detectado
+    const { text, confidence, detectedFormat } = decodeCTC(outputData, outputShape);
     
-    console.log(`🔤 ONNX OCR: "${text}" (Conf: ${(confidence * 100).toFixed(1)}%)`);
+    console.log(`🔤 ONNX OCR: "${text}" (Conf: ${(confidence * 100).toFixed(1)}%) [Formato: ${detectedFormat}]`);
     
-    return { text, confidence };
+    return { text, confidence, detectedFormat };
   } catch (error) {
     console.error('❌ Erro no OCR ONNX:', error);
-    return { text: '', confidence: 0 };
+    return { text: '', confidence: 0, detectedFormat: 'unknown' };
   }
 }
 
@@ -1476,64 +1507,120 @@ function validatePlateFormat(plate: string): { isValid: boolean; format: 'mercos
   return { isValid: false, format: 'unknown' };
 }
 
-function validateAndCorrectPlate(rawText: string): PlateValidationResult {
+/**
+ * Valida e corrige placa
+ * v1.1.52: Aceita formatHint para respeitar formato detectado pelo hífen
+ */
+function validateAndCorrectPlate(rawText: string, formatHint?: 'antiga' | 'mercosul' | 'unknown'): PlateValidationResult {
   const cleaned = rawText.toUpperCase().replace(/[^A-Z0-9]/g, '');
   const candidate = extractPlateCandidate(rawText);
   
-  console.log(`📝 Validação: "${rawText}" → limpo: "${cleaned}" → candidato: "${candidate}"`);
+  console.log(`📝 Validação: "${rawText}" → limpo: "${cleaned}" → candidato: "${candidate}" [formatHint: ${formatHint || 'none'}]`);
+  
+  // v1.1.52: Se formatHint é 'antiga', priorizar formato antigo
+  const preferOld = formatHint === 'antiga';
   
   // Se tem 8 caracteres, testar sem o primeiro
   if (cleaned.length === 8) {
     const withoutFirst = cleaned.slice(1);
     
-    if (MERCOSUL_REGEX.test(withoutFirst)) {
-      const formatted = withoutFirst.substring(0, 3) + '-' + withoutFirst.substring(3);
-      return {
-        isValid: true,
-        original: rawText,
-        corrected: withoutFirst,
-        formatted,
-        format: 'mercosul',
-        confidence: 0.75,
-      };
-    }
-    
-    if (ANTIGA_REGEX.test(withoutFirst)) {
-      const formatted = withoutFirst.substring(0, 3) + '-' + withoutFirst.substring(3);
-      return {
-        isValid: true,
-        original: rawText,
-        corrected: withoutFirst,
-        formatted,
-        format: 'antiga',
-        confidence: 0.75,
-      };
+    // v1.1.52: Se preferir antigo, testar antigo primeiro
+    if (preferOld) {
+      if (ANTIGA_REGEX.test(withoutFirst)) {
+        const formatted = withoutFirst.substring(0, 3) + '-' + withoutFirst.substring(3);
+        return {
+          isValid: true,
+          original: rawText,
+          corrected: withoutFirst,
+          formatted,
+          format: 'antiga',
+          confidence: 0.75,
+        };
+      }
+      if (MERCOSUL_REGEX.test(withoutFirst)) {
+        const formatted = withoutFirst.substring(0, 3) + '-' + withoutFirst.substring(3);
+        return {
+          isValid: true,
+          original: rawText,
+          corrected: withoutFirst,
+          formatted,
+          format: 'mercosul',
+          confidence: 0.75,
+        };
+      }
+    } else {
+      if (MERCOSUL_REGEX.test(withoutFirst)) {
+        const formatted = withoutFirst.substring(0, 3) + '-' + withoutFirst.substring(3);
+        return {
+          isValid: true,
+          original: rawText,
+          corrected: withoutFirst,
+          formatted,
+          format: 'mercosul',
+          confidence: 0.75,
+        };
+      }
+      if (ANTIGA_REGEX.test(withoutFirst)) {
+        const formatted = withoutFirst.substring(0, 3) + '-' + withoutFirst.substring(3);
+        return {
+          isValid: true,
+          original: rawText,
+          corrected: withoutFirst,
+          formatted,
+          format: 'antiga',
+          confidence: 0.75,
+        };
+      }
     }
     
     const variationsWithoutFirst = generateVariations(withoutFirst);
     for (const variation of variationsWithoutFirst) {
-      if (MERCOSUL_REGEX.test(variation)) {
-        const formatted = variation.substring(0, 3) + '-' + variation.substring(3);
-        return {
-          isValid: true,
-          original: rawText,
-          corrected: variation,
-          formatted,
-          format: 'mercosul',
-          confidence: 0.65,
-        };
-      }
-      
-      if (ANTIGA_REGEX.test(variation)) {
-        const formatted = variation.substring(0, 3) + '-' + variation.substring(3);
-        return {
-          isValid: true,
-          original: rawText,
-          corrected: variation,
-          formatted,
-          format: 'antiga',
-          confidence: 0.65,
-        };
+      if (preferOld) {
+        if (ANTIGA_REGEX.test(variation)) {
+          const formatted = variation.substring(0, 3) + '-' + variation.substring(3);
+          return {
+            isValid: true,
+            original: rawText,
+            corrected: variation,
+            formatted,
+            format: 'antiga',
+            confidence: 0.65,
+          };
+        }
+        if (MERCOSUL_REGEX.test(variation)) {
+          const formatted = variation.substring(0, 3) + '-' + variation.substring(3);
+          return {
+            isValid: true,
+            original: rawText,
+            corrected: variation,
+            formatted,
+            format: 'mercosul',
+            confidence: 0.65,
+          };
+        }
+      } else {
+        if (MERCOSUL_REGEX.test(variation)) {
+          const formatted = variation.substring(0, 3) + '-' + variation.substring(3);
+          return {
+            isValid: true,
+            original: rawText,
+            corrected: variation,
+            formatted,
+            format: 'mercosul',
+            confidence: 0.65,
+          };
+        }
+        if (ANTIGA_REGEX.test(variation)) {
+          const formatted = variation.substring(0, 3) + '-' + variation.substring(3);
+          return {
+            isValid: true,
+            original: rawText,
+            corrected: variation,
+            formatted,
+            format: 'antiga',
+            confidence: 0.65,
+          };
+        }
       }
     }
   }
@@ -1552,28 +1639,53 @@ function validateAndCorrectPlate(rawText: string): PlateValidationResult {
   const variations = generateVariations(candidate);
   
   for (const variation of variations) {
-    if (MERCOSUL_REGEX.test(variation)) {
-      const formatted = variation.substring(0, 3) + '-' + variation.substring(3);
-      return {
-        isValid: true,
-        original: rawText,
-        corrected: variation,
-        formatted,
-        format: 'mercosul',
-        confidence: variation === candidate ? 0.95 : 0.85,
-      };
-    }
-    
-    if (ANTIGA_REGEX.test(variation)) {
-      const formatted = variation.substring(0, 3) + '-' + variation.substring(3);
-      return {
-        isValid: true,
-        original: rawText,
-        corrected: variation,
-        formatted,
-        format: 'antiga',
-        confidence: variation === candidate ? 0.95 : 0.85,
-      };
+    // v1.1.52: Se preferir antigo, testar antigo primeiro
+    if (preferOld) {
+      if (ANTIGA_REGEX.test(variation)) {
+        const formatted = variation.substring(0, 3) + '-' + variation.substring(3);
+        return {
+          isValid: true,
+          original: rawText,
+          corrected: variation,
+          formatted,
+          format: 'antiga',
+          confidence: variation === candidate ? 0.95 : 0.85,
+        };
+      }
+      if (MERCOSUL_REGEX.test(variation)) {
+        const formatted = variation.substring(0, 3) + '-' + variation.substring(3);
+        return {
+          isValid: true,
+          original: rawText,
+          corrected: variation,
+          formatted,
+          format: 'mercosul',
+          confidence: variation === candidate ? 0.95 : 0.85,
+        };
+      }
+    } else {
+      if (MERCOSUL_REGEX.test(variation)) {
+        const formatted = variation.substring(0, 3) + '-' + variation.substring(3);
+        return {
+          isValid: true,
+          original: rawText,
+          corrected: variation,
+          formatted,
+          format: 'mercosul',
+          confidence: variation === candidate ? 0.95 : 0.85,
+        };
+      }
+      if (ANTIGA_REGEX.test(variation)) {
+        const formatted = variation.substring(0, 3) + '-' + variation.substring(3);
+        return {
+          isValid: true,
+          original: rawText,
+          corrected: variation,
+          formatted,
+          format: 'antiga',
+          confidence: variation === candidate ? 0.95 : 0.85,
+        };
+      }
     }
   }
   
@@ -1884,7 +1996,8 @@ async function processPlate(
     }
     
     // 3. Executar OCR com ONNX usando imagem otimizada
-    const { text: rawText, confidence: ocrConfidence } = await runONNXOCR(
+    // v1.1.52: Agora retorna também o formato detectado pelo hífen
+    const { text: rawText, confidence: ocrConfidence, detectedFormat } = await runONNXOCR(
       optimized.data,
       optimized.width,
       optimized.height
@@ -1914,7 +2027,8 @@ async function processPlate(
     }
     
     // 4. Validar e corrigir placa
-    const validation = validateAndCorrectPlate(rawText);
+    // v1.1.52: Passa o formato detectado pelo hífen para evitar conversão errada
+    const validation = validateAndCorrectPlate(rawText, detectedFormat);
     
     const processingTimeMs = performance.now() - startTime;
     

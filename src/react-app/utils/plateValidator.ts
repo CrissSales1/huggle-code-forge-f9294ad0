@@ -110,8 +110,11 @@ export function isValidPlate(plate: string): boolean {
  * Tenta corrigir caracteres baseado na posição esperada
  * Formato antigo: L L L N N N N (L=letra, N=número)
  * Formato Mercosul: L L L N L N N
+ * 
+ * v1.1.52: Aceita formatHint para forçar formato específico
+ *          Se formatHint='antiga', NUNCA converte para Mercosul
  */
-export function correctByPosition(plate: string): string {
+export function correctByPosition(plate: string, formatHint?: 'antiga' | 'mercosul' | 'unknown'): string {
   const chars = plate.split('');
   
   if (chars.length !== 7) return plate;
@@ -124,14 +127,21 @@ export function correctByPosition(plate: string): string {
   // Posição 3 deve ser número
   chars[3] = forceToNumber(chars[3]);
   
-  // Posição 4: pode ser letra (Mercosul) ou número (antigo)
-  // Tentamos manter como está e verificar depois
+  // v1.1.52: Se formatHint é 'antiga', forçar formato antigo (LLL-NNNN)
+  if (formatHint === 'antiga') {
+    // Posições 4, 5, 6 DEVEM ser números
+    chars[4] = forceToNumber(chars[4]);
+    chars[5] = forceToNumber(chars[5]);
+    chars[6] = forceToNumber(chars[6]);
+    return chars.join('');
+  }
   
   // Posições 5, 6 devem ser números
   chars[5] = forceToNumber(chars[5]);
   chars[6] = forceToNumber(chars[6]);
   
-  // Verificar posição 4
+  // Posição 4: pode ser letra (Mercosul) ou número (antigo)
+  // Tentamos manter como está e verificar depois
   const withLetterAt4 = [...chars];
   withLetterAt4[4] = forceToLetter(chars[4]);
   
@@ -141,9 +151,17 @@ export function correctByPosition(plate: string): string {
   const mercosulCandidate = withLetterAt4.join('');
   const oldCandidate = withNumberAt4.join('');
   
-  // Preferir Mercosul se válido, senão antigo
-  if (isMercosulFormat(mercosulCandidate)) return mercosulCandidate;
-  if (isOldFormat(oldCandidate)) return oldCandidate;
+  // v1.1.52: Se o caractere original na posição 4 é claramente um número, preferir antigo
+  const originalChar4 = plate[4];
+  if (/[0-9]/.test(originalChar4)) {
+    // Caractere original é número - preferir formato antigo primeiro
+    if (isOldFormat(oldCandidate)) return oldCandidate;
+    if (isMercosulFormat(mercosulCandidate)) return mercosulCandidate;
+  } else {
+    // Caractere original é letra - preferir Mercosul primeiro
+    if (isMercosulFormat(mercosulCandidate)) return mercosulCandidate;
+    if (isOldFormat(oldCandidate)) return oldCandidate;
+  }
   
   // Retornar o que parecer mais correto
   return chars.join('');
@@ -323,18 +341,22 @@ function countChanges(original: string, corrected: string): number {
 
 /**
  * Valida e corrige uma placa
+ * v1.1.52: Aceita formatHint para respeitar formato detectado pelo hífen
  */
-export function validateAndCorrectPlate(rawPlate: string): PlateValidationResult {
+export function validateAndCorrectPlate(rawPlate: string, formatHint?: 'antiga' | 'mercosul' | 'unknown'): PlateValidationResult {
   const cleaned = cleanPlateString(rawPlate);
   
   // Se já é válida, retornar diretamente
+  // v1.1.52: Se formatHint é 'antiga', respeitar mesmo que também seja Mercosul válido
   if (isValidPlate(cleaned)) {
+    const isActuallyOld = isOldFormat(cleaned);
+    const format = formatHint === 'antiga' ? 'antiga' : (isActuallyOld ? 'antiga' : 'mercosul');
     return {
       isValid: true,
       original: rawPlate,
       corrected: cleaned,
       formatted: formatPlateForDisplay(cleaned),
-      format: isOldFormat(cleaned) ? 'antiga' : 'mercosul',
+      format,
       confidence: 1.0,
     };
   }
