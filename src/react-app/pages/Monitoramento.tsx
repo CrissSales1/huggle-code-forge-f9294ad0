@@ -164,9 +164,9 @@ export default function Monitoramento() {
       {showHelp && <MonitoramentoHelp />}
 
       {/* Camera Monitor com Painel de Resultado - Layout responsivo 3 colunas */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 2xl:grid-cols-12 gap-4 2xl:gap-3 mb-4 sm:mb-6 items-stretch 2xl:h-[calc(100vh-280px)] 2xl:min-h-[500px]">
+      <div className="grid grid-cols-1 lg:grid-cols-5 2xl:grid-cols-12 gap-4 mb-4 sm:mb-6">
         {/* Câmera - 3/5 em LG, 6/12 em 2XL */}
-        <div className="lg:col-span-3 2xl:col-span-6 2xl:flex 2xl:flex-col">
+        <div className="lg:col-span-3 2xl:col-span-6">
           <CameraMonitor 
             onDetection={debouncedRefetch} 
             compact 
@@ -198,7 +198,7 @@ export default function Monitoramento() {
             {/* Conteúdo */}
             <div className="flex-1 p-3 2xl:p-4 flex flex-col overflow-hidden">
               {/* Card de resultado principal */}
-              <div className="flex-1 flex flex-col justify-center min-h-0">
+              <div className="flex flex-col justify-start">
                 {!latestDetection ? (
                   /* Aguardando detecção */
                   <div className="text-center py-8 2xl:py-6 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300">
@@ -432,68 +432,8 @@ export default function Monitoramento() {
         </div>
       </div>
       
-      {/* Seção de Veículos Cadastrados - Grid compacto em 2XL */}
-      <div className="hidden 2xl:block mb-4">
-        <div className="bg-white border border-gray-200 rounded-xl p-3">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <Car className="w-4 h-4 text-blue-600" />
-              <h3 className="text-sm font-semibold text-gray-900">Veículos Cadastrados</h3>
-              <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{veiculos.length}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Buscar..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-40 pl-7 pr-2 py-1 border border-gray-300 rounded-lg text-xs focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
-              <button 
-                onClick={() => setShowCadastroModal(true)} 
-                className="flex items-center gap-1 px-2 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-xs"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Novo</span>
-              </button>
-            </div>
-          </div>
-          
-          {veiculos.length === 0 ? (
-            <p className="text-gray-500 text-xs text-center py-4">Nenhum veículo cadastrado</p>
-          ) : (
-            <div className="flex flex-wrap gap-2 max-h-[100px] overflow-y-auto">
-              {veiculosFiltrados.slice(0, 24).map(veiculo => (
-                <div 
-                  key={veiculo.id} 
-                  className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 hover:bg-gray-100 transition-colors group"
-                >
-                  <span className="font-mono text-xs font-bold text-gray-800">{veiculo.placa_veiculo}</span>
-                  <span className="text-[10px] text-gray-500 flex items-center gap-0.5">
-                    <Home className="w-2.5 h-2.5" />
-                    {veiculo.casa}
-                  </span>
-                  <button 
-                    onClick={() => handleEditarVeiculo(veiculo)}
-                    className="opacity-0 group-hover:opacity-100 p-0.5 text-blue-600 hover:bg-blue-100 rounded transition-all"
-                  >
-                    <Edit2 className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
-              {veiculosFiltrados.length > 24 && (
-                <span className="text-xs text-gray-500 self-center">+{veiculosFiltrados.length - 24} mais</span>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Lista de Veículos - Versão expandível para telas menores que 2XL */}
-      <div className="mt-4 sm:mt-6 2xl:hidden">
+      {/* Lista de Veículos - Versão expandível para todas as telas */}
+      <div className="mt-4 sm:mt-6">
         <button onClick={async () => {
         if (!showVeiculosCadastrados) {
           await carregarVeiculos();
