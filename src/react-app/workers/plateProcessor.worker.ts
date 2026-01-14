@@ -3,7 +3,7 @@
  * Move OCR (ONNX Runtime), detecção de placa e motion detection para thread separada
  * Evita bloqueio da UI durante processamento pesado
  * 
- * v1.1.50: Consistência Fuzzy - agrupamento de variantes visuais no buffer OCR
+ * v1.1.51: OCR apenas quando YOLO confirma placa - elimina falsos positivos de heurística
  */
 
 import * as ort from 'onnxruntime-web';
@@ -806,25 +806,7 @@ async function detectPlateWithYOLO(
   }
 }
 
-// ============ CONSTANTES DE DETECÇÃO (Heurística) ============
-
-const PLATE_ASPECT_RATIO_IDEAL = 3.0;
-const PLATE_ASPECT_RATIO_MIN = 2.5;
-const PLATE_ASPECT_RATIO_MAX = 4.0;
-const MIN_PLATE_WIDTH_RATIO = 0.08;
-const MAX_PLATE_WIDTH_RATIO = 0.5;
-const MIN_PLATE_HEIGHT_RATIO = 0.03;
-const MAX_PLATE_HEIGHT_RATIO = 0.2;
-const EDGE_THRESHOLD = 30;
-
-const MIN_EDGE_DENSITY = 0.20;
-const MIN_CONTRAST_SCORE = 0.4;
-const MAX_SATURATION = 0.50;
-const MIN_Y_RATIO = 0.0;
-const MAX_Y_RATIO = 1.0;
-const MIN_X_RATIO = 0.0;
-const MAX_X_RATIO = 1.0;
-
+// v1.1.51: Constantes de heurística removidas - OCR apenas quando YOLO confirma placa
 const FALLBACK_CONFIDENCE_THRESHOLD = 0.60;
 
 // ============ FUNÇÕES DE PROCESSAMENTO DE IMAGEM ============
@@ -1300,7 +1282,7 @@ function optimizeImageForOCR(
   height: number,
   options?: { forceNightMode?: boolean }
 ): { data: Uint8ClampedArray; width: number; height: number } {
-  console.log(`🔄 Pipeline v1.1.50 iniciado: ${width}x${height}px`);
+  console.log(`🔄 Pipeline v1.1.51 iniciado: ${width}x${height}px`);
   
   let processedData = data;
   
@@ -1359,258 +1341,9 @@ function optimizeImageForOCR(
   return { data: new Uint8ClampedArray(processedData), width, height };
 }
 
-function toGrayscale(data: Uint8ClampedArray): Uint8ClampedArray {
-  const grayscale = new Uint8ClampedArray(data.length / 4);
-  for (let i = 0; i < data.length; i += 4) {
-    grayscale[i / 4] = Math.round(
-      data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114
-    );
-  }
-  return grayscale;
-}
-
-function detectEdges(grayscale: Uint8ClampedArray, width: number, height: number): Uint8ClampedArray {
-  const edges = new Uint8ClampedArray(width * height);
-  
-  for (let y = 1; y < height - 1; y++) {
-    for (let x = 1; x < width - 1; x++) {
-      const idx = y * width + x;
-      
-      const gx = 
-        -grayscale[(y - 1) * width + (x - 1)] + grayscale[(y - 1) * width + (x + 1)] +
-        -2 * grayscale[y * width + (x - 1)] + 2 * grayscale[y * width + (x + 1)] +
-        -grayscale[(y + 1) * width + (x - 1)] + grayscale[(y + 1) * width + (x + 1)];
-      
-      const gy = 
-        -grayscale[(y - 1) * width + (x - 1)] - 2 * grayscale[(y - 1) * width + x] - grayscale[(y - 1) * width + (x + 1)] +
-        grayscale[(y + 1) * width + (x - 1)] + 2 * grayscale[(y + 1) * width + x] + grayscale[(y + 1) * width + (x + 1)];
-      
-      const magnitude = Math.sqrt(gx * gx + gy * gy);
-      edges[idx] = magnitude > EDGE_THRESHOLD ? 255 : 0;
-    }
-  }
-  
-  return edges;
-}
-
-function calculateEdgeDensity(
-  edges: Uint8ClampedArray,
-  imageWidth: number,
-  x: number, y: number,
-  width: number, height: number
-): number {
-  let edgeCount = 0;
-  const totalPixels = width * height;
-  
-  for (let dy = 0; dy < height; dy++) {
-    for (let dx = 0; dx < width; dx++) {
-      const idx = (y + dy) * imageWidth + (x + dx);
-      if (edges[idx] > 0) {
-        edgeCount++;
-      }
-    }
-  }
-  
-  return edgeCount / totalPixels;
-}
-
-function calculateRegionSaturation(
-  data: Uint8ClampedArray,
-  imageWidth: number,
-  x: number, y: number,
-  width: number, height: number
-): number {
-  let totalSaturation = 0;
-  let pixelCount = 0;
-  
-  for (let dy = 0; dy < height; dy += 2) {
-    for (let dx = 0; dx < width; dx += 2) {
-      const idx = ((y + dy) * imageWidth + (x + dx)) * 4;
-      const r = data[idx];
-      const g = data[idx + 1];
-      const b = data[idx + 2];
-      
-      const max = Math.max(r, g, b);
-      const min = Math.min(r, g, b);
-      
-      const l = (max + min) / 2;
-      let s = 0;
-      if (max !== min) {
-        s = l > 127 
-          ? (max - min) / (510 - max - min) 
-          : (max - min) / (max + min);
-      }
-      
-      totalSaturation += s;
-      pixelCount++;
-    }
-  }
-  
-  return pixelCount > 0 ? totalSaturation / pixelCount : 0;
-}
-
-function calculateInternalContrast(
-  grayscale: Uint8ClampedArray,
-  imageWidth: number,
-  x: number, y: number,
-  width: number, height: number
-): number {
-  const bins = [0, 0, 0, 0];
-  let pixelCount = 0;
-  
-  for (let dy = 0; dy < height; dy++) {
-    for (let dx = 0; dx < width; dx++) {
-      const idx = (y + dy) * imageWidth + (x + dx);
-      const value = grayscale[idx];
-      const bin = Math.min(3, Math.floor(value / 64));
-      bins[bin]++;
-      pixelCount++;
-    }
-  }
-  
-  if (pixelCount === 0) return 0;
-  
-  const normalized = bins.map(b => b / pixelCount);
-  const darkPixels = normalized[0] + normalized[1];
-  const lightPixels = normalized[2] + normalized[3];
-  const contrastScore = Math.min(darkPixels, lightPixels) * 2;
-  
-  return Math.min(1, contrastScore);
-}
-
-function hasInternalVerticalEdges(
-  edges: Uint8ClampedArray,
-  imageWidth: number,
-  x: number, y: number,
-  width: number, height: number
-): boolean {
-  const colWidth = Math.floor(width / 7);
-  let columnsWithEdges = 0;
-  
-  for (let col = 0; col < 7; col++) {
-    const colX = x + col * colWidth;
-    let edgeCount = 0;
-    
-    for (let dy = 0; dy < height; dy++) {
-      for (let dx = 0; dx < colWidth; dx++) {
-        const idx = (y + dy) * imageWidth + (colX + dx);
-        if (edges[idx] > 0) edgeCount++;
-      }
-    }
-    
-    const colDensity = edgeCount / (colWidth * height);
-    if (colDensity > 0.1) columnsWithEdges++;
-  }
-  
-  return columnsWithEdges >= 4;
-}
-
-function findBestPlateRegion(
-  imageData: ImageData,
-  width: number,
-  height: number
-): BoundingBox | null {
-  const maxProcessSize = 480;
-  let scale = 1;
-  let processWidth = width;
-  let processHeight = height;
-  
-  if (width > maxProcessSize || height > maxProcessSize) {
-    scale = maxProcessSize / Math.max(width, height);
-    processWidth = Math.round(width * scale);
-    processHeight = Math.round(height * scale);
-  }
-  
-  let processData: Uint8ClampedArray;
-  if (scale < 1) {
-    processData = new Uint8ClampedArray(processWidth * processHeight * 4);
-    for (let y = 0; y < processHeight; y++) {
-      for (let x = 0; x < processWidth; x++) {
-        const srcX = Math.floor(x / scale);
-        const srcY = Math.floor(y / scale);
-        const srcIdx = (srcY * width + srcX) * 4;
-        const dstIdx = (y * processWidth + x) * 4;
-        processData[dstIdx] = imageData.data[srcIdx];
-        processData[dstIdx + 1] = imageData.data[srcIdx + 1];
-        processData[dstIdx + 2] = imageData.data[srcIdx + 2];
-        processData[dstIdx + 3] = imageData.data[srcIdx + 3];
-      }
-    }
-  } else {
-    processData = imageData.data;
-    processWidth = width;
-    processHeight = height;
-  }
-  
-  const grayscale = toGrayscale(processData);
-  const edges = detectEdges(grayscale, processWidth, processHeight);
-  
-  const windowWidth = Math.round(processWidth * 0.2);
-  const windowHeight = Math.round(windowWidth / PLATE_ASPECT_RATIO_IDEAL);
-  const stepX = Math.round(windowWidth / 3);
-  const stepY = Math.round(windowHeight / 3);
-  
-  const minY = Math.round(processHeight * MIN_Y_RATIO);
-  const maxY = Math.round(processHeight * MAX_Y_RATIO) - windowHeight;
-  const minX = Math.round(processWidth * MIN_X_RATIO);
-  const maxX = Math.round(processWidth * MAX_X_RATIO) - windowWidth;
-  
-  let bestRegion: BoundingBox | null = null;
-  let bestScore = 0;
-  
-  for (let y = minY; y < maxY; y += stepY) {
-    for (let x = minX; x < maxX; x += stepX) {
-      const aspectRatio = windowWidth / windowHeight;
-      if (aspectRatio < PLATE_ASPECT_RATIO_MIN || aspectRatio > PLATE_ASPECT_RATIO_MAX) {
-        continue;
-      }
-      
-      const relativeWidth = windowWidth / processWidth;
-      const relativeHeight = windowHeight / processHeight;
-      if (relativeWidth < MIN_PLATE_WIDTH_RATIO || relativeWidth > MAX_PLATE_WIDTH_RATIO ||
-          relativeHeight < MIN_PLATE_HEIGHT_RATIO || relativeHeight > MAX_PLATE_HEIGHT_RATIO) {
-        continue;
-      }
-      
-      const density = calculateEdgeDensity(edges, processWidth, x, y, windowWidth, windowHeight);
-      if (density < MIN_EDGE_DENSITY) continue;
-      
-      const saturation = calculateRegionSaturation(processData, processWidth, x, y, windowWidth, windowHeight);
-      if (saturation > MAX_SATURATION) continue;
-      
-      const contrast = calculateInternalContrast(grayscale, processWidth, x, y, windowWidth, windowHeight);
-      if (contrast < MIN_CONTRAST_SCORE) continue;
-      
-      if (!hasInternalVerticalEdges(edges, processWidth, x, y, windowWidth, windowHeight)) continue;
-      
-      const aspectScore = 1 - Math.abs(aspectRatio - PLATE_ASPECT_RATIO_IDEAL) / PLATE_ASPECT_RATIO_IDEAL;
-      
-      // v1.1.48: Penalizar apenas região muito inferior (chão) - >80% = 0.5, 70-80% = 0.75, resto = 1.0
-      const relativeY = y / processHeight;
-      let positionBonus = 1.0;
-      if (relativeY > 0.80) {
-        positionBonus = 0.5; // Muito inferior (chão) - penalidade moderada
-      } else if (relativeY > 0.70) {
-        positionBonus = 0.75; // Inferior - penalidade leve
-      }
-      
-      const score = density * aspectScore * contrast * positionBonus * (1 - saturation * 0.5);
-      
-      if (score > bestScore) {
-        bestScore = score;
-        bestRegion = {
-          x: Math.round(x / scale),
-          y: Math.round(y / scale),
-          width: Math.round(windowWidth / scale),
-          height: Math.round(windowHeight / scale),
-          confidence: score,
-        };
-      }
-    }
-  }
-  
-  return bestRegion;
-}
+// v1.1.51: Funções de heurística removidas - OCR apenas quando YOLO confirma placa
+// toGrayscale, detectEdges, calculateEdgeDensity, calculateRegionSaturation,
+// calculateInternalContrast, hasInternalVerticalEdges, findBestPlateRegion
 
 // ============ VALIDAÇÃO DE PLACA ============
 
@@ -2061,9 +1794,27 @@ async function processPlate(
       }
     }
     
-    // 2. Fallback para heurística
+    // v1.1.51: Sem YOLO = Sem OCR (elimina falsos positivos de heurística)
     if (!plateRegion) {
-      plateRegion = findBestPlateRegion(imageData, width, height);
+      const elapsed = performance.now() - startTime;
+      console.log(`⏭️ YOLO não encontrou placa - pulando OCR (${elapsed.toFixed(0)}ms)`);
+      
+      return {
+        success: false,
+        rawText: '',
+        ocrConfidence: 0,
+        processingTimeMs: elapsed,
+        usedYolo: false,
+        usedFallback: false,
+        validation: {
+          original: '',
+          corrected: '',
+          isValid: false,
+          confidence: 0,
+          format: 'unknown' as const,
+          formatted: ''
+        }
+      };
     }
     
     let processData: Uint8ClampedArray;
@@ -2281,4 +2032,4 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 };
 
 // Notificar que o worker está carregado
-console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.50 - Consistência Fuzzy)');
+console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.51 - YOLO Only)');
