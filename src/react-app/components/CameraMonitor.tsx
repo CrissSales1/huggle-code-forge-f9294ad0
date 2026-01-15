@@ -360,9 +360,9 @@ export default function CameraMonitor({ onDetection, compact = false, onPipeline
         
         <div className="flex items-center gap-2">
           {/* Status Badge */}
-          <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-sm ${getStatusColor(status)}`}>
+          <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-sm whitespace-nowrap max-w-[260px] ${getStatusColor(status)}`}>
             <StatusIcon />
-            <span>{statusMessage}</span>
+            <span className="truncate" title={statusMessage}>{statusMessage}</span>
           </div>
           
           {/* Settings Button */}
