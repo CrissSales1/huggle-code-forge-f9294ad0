@@ -576,7 +576,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     const finalBestPlate = hasConsensus ? bestGroupData.bestVariant : plateText;
     
     if (hasConsensus) {
-      console.log(`✅ Consenso v1.1.50: Grupo "${bestGroupPlate}" com ${matchCount}x → Melhor variante: "${finalBestPlate}" (${(bestGroupData.bestVariantConf * 100).toFixed(1)}%)`);
+      console.log(`✅ Consenso v1.1.63: Grupo "${bestGroupPlate}" com ${matchCount}x → Melhor variante: "${finalBestPlate}" (${(bestGroupData.bestVariantConf * 100).toFixed(1)}%)`);
     } else {
       logger.log(`🔄 Fast-Track Buffer: "${plateText}" score=${bestScore.toFixed(2)} (consenso=${hasConsensus ? '✅' : '❌'})`);
     }
