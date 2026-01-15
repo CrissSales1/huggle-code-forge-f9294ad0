@@ -131,7 +131,7 @@ export default function Monitoramento() {
   }, []);
 
   return (
-    <div className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 lg:py-6 max-w-7xl mx-auto">
+    <div className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 lg:py-4 max-w-7xl mx-auto lg:h-[calc(100vh-120px)] lg:overflow-hidden flex flex-col">
       <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
         <div className="min-w-0 flex-1">
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mb-1 truncate">Monitoramento de Moradores</h1>
@@ -165,7 +165,7 @@ export default function Monitoramento() {
       {showHelp && <MonitoramentoHelp />}
 
       {/* Camera Monitor com Painel de Resultado - Layout responsivo 3 colunas */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 2xl:grid-cols-12 gap-4 mb-4 sm:mb-6 lg:max-h-[calc(100vh-200px)]">
+      <div className="grid grid-cols-1 lg:grid-cols-5 2xl:grid-cols-12 gap-3 flex-1 min-h-0">
         {/* Câmera - 3/5 em LG, 6/12 em 2XL */}
         <div className="lg:col-span-3 2xl:col-span-6">
           <CameraMonitor 
@@ -433,8 +433,8 @@ export default function Monitoramento() {
         </div>
         
         {/* Coluna de Histórico separada - só visível em 2XL */}
-        <div className="hidden 2xl:block 2xl:col-span-2">
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col max-h-[calc(100vh-200px)]">
+        <div className="hidden 2xl:block 2xl:col-span-2 min-h-0">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col h-full">
             <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between bg-gray-50 rounded-t-xl">
               <h3 className="font-semibold text-gray-900 flex items-center gap-2 text-sm">
                 <Clock className="w-4 h-4 text-blue-600" />
@@ -495,7 +495,7 @@ export default function Monitoramento() {
       </div>
       
       {/* Lista de Veículos - Versão expandível para todas as telas */}
-      <div className="mt-4 sm:mt-6">
+      <div className="mt-3 flex-shrink-0">
         <button onClick={async () => {
         if (!showVeiculosCadastrados) {
           await carregarVeiculos();
