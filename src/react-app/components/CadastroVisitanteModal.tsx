@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { Camera, ChevronDown, ArrowLeft, Pencil } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Camera, ChevronDown, ArrowLeft, Pencil, AlertTriangle, UserCheck } from 'lucide-react';
 import Modal from './Modal';
 import CameraModal from './CameraModal';
 import SelecionarVisitanteModal from './SelecionarVisitanteModal';
@@ -11,6 +11,13 @@ interface CadastroVisitanteModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+}
+
+// Tipo para visitante similar encontrado
+interface VisitanteSimilar {
+  visitante: VisitanteType;
+  similaridade: number;
+  totalVisitas: number;
 }
 
 export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: CadastroVisitanteModalProps) {
@@ -30,11 +37,16 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
   const [visitantesEncontrados, setVisitantesEncontrados] = useState<VisitanteType[]>([]);
   const [placaPesquisada, setPlacaPesquisada] = useState('');
   
+  // Estados para detecção de similares v1.1.64
+  const [visitantesSimilares, setVisitantesSimilares] = useState<VisitanteSimilar[]>([]);
+  const [buscandoSimilares, setBuscandoSimilares] = useState(false);
+  const [similarDescartado, setSimilarDescartado] = useState(false);
+  
   const nomeInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   
   const { prismas, loading: loadingPrismas, refetch: refetchPrismas } = usePrismasDisponiveis();
-  const { cadastrarVisitante, buscarVisitantes, loading, error } = useVisitanteActions();
+  const { cadastrarVisitante, buscarVisitantes, buscarVisitantesSimilares, loading, error } = useVisitanteActions();
 
   // Função para validar formato de placa
   const isValidPlaca = (placa: string): boolean => {
@@ -72,11 +84,61 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
     setShowSelecionarVisitante(false);
     setVisitantesEncontrados([]);
     setPlacaPesquisada('');
+    // Resetar estados de similares v1.1.64
+    setVisitantesSimilares([]);
+    setBuscandoSimilares(false);
+    setSimilarDescartado(false);
   };
 
   const handleSelecionarPrisma = (numeroPrisma: number) => {
     setPrismaSelecionado(numeroPrisma);
     setEtapa('dados');
+  };
+
+  // Buscar visitantes similares quando nome ou placa mudar (debounced)
+  const buscarSimilares = useCallback(async (nomeAtual: string, placaAtual: string) => {
+    if (similarDescartado) return; // Usuário já descartou sugestão
+    
+    // Só buscar se tiver nome com 3+ chars ou placa completa
+    if ((nomeAtual.length < 3 && placaAtual.length !== 7)) {
+      setVisitantesSimilares([]);
+      return;
+    }
+    
+    setBuscandoSimilares(true);
+    try {
+      const similares = await buscarVisitantesSimilares(
+        nomeAtual.length >= 3 ? nomeAtual : undefined,
+        placaAtual.length === 7 ? placaAtual : undefined
+      );
+      setVisitantesSimilares(similares);
+    } catch (err) {
+      console.error('Erro ao buscar similares:', err);
+    } finally {
+      setBuscandoSimilares(false);
+    }
+  }, [buscarVisitantesSimilares, similarDescartado]);
+
+  // Usar visitante similar sugerido
+  const handleUsarSimilar = (similar: VisitanteSimilar) => {
+    const v = similar.visitante;
+    setNome(v.nome.toUpperCase());
+    setCasaVisitada(v.casa_visitada.toUpperCase());
+    setPlacaVeiculo(v.placa_veiculo);
+    if (v.observacoes) {
+      setObservacoes(v.observacoes.toUpperCase());
+    }
+    if (v.liberado_por) {
+      setLiberadoPor(v.liberado_por.toUpperCase());
+    }
+    setVisitantesSimilares([]);
+    setSimilarDescartado(true); // Não mostrar mais sugestões
+  };
+
+  // Descartar sugestão de similar
+  const handleDescartarSimilar = () => {
+    setVisitantesSimilares([]);
+    setSimilarDescartado(true);
   };
 
   // Verificar se placa já existe e mostrar opções
@@ -88,6 +150,11 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
 
     // Se a placa estiver completa (7 caracteres) e for válida
     if (placaFormatada.length === 7 && isValidPlaca(placaFormatada)) {
+      // v1.1.64: Buscar similares primeiro
+      if (!similarDescartado) {
+        buscarSimilares(nome, placaFormatada);
+      }
+      
       const visitantes = await buscarVisitantes(placaFormatada);
       const visitantesComPlaca = visitantes.filter(v => 
         v.placa_veiculo === placaFormatada
@@ -116,6 +183,12 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
 
     if (upperValue.length >= 3) {
       setSearchingNome(true);
+      
+      // v1.1.64: Buscar similares
+      if (!similarDescartado) {
+        buscarSimilares(upperValue, placaVeiculo);
+      }
+      
       const visitantes = await buscarVisitantes(upperValue);
       const visitantesFiltrados = visitantes.filter(v => 
         v.nome.toLowerCase().includes(upperValue.toLowerCase())
@@ -141,6 +214,7 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
     } else {
       setNomeOptions([]);
       setShowNomeDropdown(false);
+      setVisitantesSimilares([]); // Limpar similares se nome for curto
     }
   };
 
@@ -419,6 +493,60 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
                 </div>
               )}
             </div>
+
+            {/* v1.1.64: Alerta de visitante similar encontrado */}
+            {visitantesSimilares.length > 0 && !showNomeDropdown && (
+              <div className="bg-amber-50 border-2 border-amber-400 rounded-lg p-4 space-y-3">
+                <div className="flex items-center space-x-2 text-amber-800">
+                  <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+                  <span className="font-bold text-sm">Visitante similar encontrado!</span>
+                  {buscandoSimilares && (
+                    <div className="w-4 h-4 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></div>
+                  )}
+                </div>
+                
+                <div className="space-y-2">
+                  {visitantesSimilares.slice(0, 3).map((similar, index) => (
+                    <div 
+                      key={index}
+                      className="bg-white rounded-lg p-3 border border-amber-200 flex items-center justify-between"
+                    >
+                      <div className="flex-1">
+                        <div className="font-bold text-gray-900 uppercase flex items-center space-x-2">
+                          <UserCheck className="w-4 h-4 text-green-600" />
+                          <span>{similar.visitante.nome}</span>
+                          {similar.similaridade < 100 && (
+                            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                              {similar.similaridade}% similar
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-sm text-gray-600 mt-1 flex items-center space-x-4">
+                          <span>Casa: <strong>{similar.visitante.casa_visitada}</strong></span>
+                          <span>Placa: <strong className="font-mono">{similar.visitante.placa_veiculo}</strong></span>
+                          <span className="text-green-600 font-medium">{similar.totalVisitas} visita{similar.totalVisitas !== 1 ? 's' : ''}</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleUsarSimilar(similar)}
+                        className="px-3 py-1.5 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 transition-colors"
+                      >
+                        Usar este
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                
+                <button
+                  type="button"
+                  onClick={handleDescartarSimilar}
+                  className="w-full text-center text-sm text-amber-700 hover:text-amber-900 font-medium py-1"
+                >
+                  Ignorar e criar novo cadastro
+                </button>
+              </div>
+            )}
 
             {/* Casa Visitada e Placa do Veículo lado a lado */}
             <div className="grid grid-cols-12 gap-4">

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { logger } from '@/react-app/utils/logger';
+import { normalizarNome, similaridade, gerarChaveAgrupamento } from '@/react-app/utils/stringUtils';
 import type {
   CadastroVisitanteType,
   VisitanteAtivo,
@@ -382,7 +383,97 @@ export function useVisitanteActions() {
     }
   };
 
-  return { cadastrarVisitante, registrarSaida, editarVisitante, buscarVisitantes, loading, error };
+  /**
+   * Busca visitantes similares para evitar duplicatas
+   * Busca por placa exata ou nome com similaridade >= 80%
+   */
+  const buscarVisitantesSimilares = async (
+    nome?: string,
+    placa?: string
+  ): Promise<{ visitante: VisitanteType; similaridade: number; totalVisitas: number }[]> => {
+    try {
+      // Buscar visitantes potencialmente similares
+      let query = supabase.from('visitantes').select('*');
+      
+      if (placa && placa.length === 7) {
+        // Buscar por placa exata (mais confiável)
+        query = query.eq('placa_veiculo', placa.toUpperCase());
+      } else if (nome && nome.length >= 3) {
+        // Buscar por nome parecido (primeiras 3 letras)
+        const prefixo = nome.substring(0, 3).toUpperCase();
+        query = query.ilike('nome', `${prefixo}%`);
+      } else {
+        return [];
+      }
+      
+      const { data, error: queryError } = await query
+        .order('hora_entrada', { ascending: false })
+        .limit(100);
+      
+      if (queryError) throw queryError;
+      if (!data || data.length === 0) return [];
+      
+      // Agrupar por visitante único (placa ou nome normalizado)
+      const agrupados: Record<string, { 
+        visitante: VisitanteType; 
+        similaridadeNome: number;
+        totalVisitas: number;
+      }> = {};
+      
+      data.forEach(v => {
+        const chave = gerarChaveAgrupamento(v.placa_veiculo, v.nome);
+        const simNome = nome ? similaridade(nome, v.nome) : 100;
+        
+        // Filtrar por similaridade mínima de 80%
+        if (simNome < 80 && !placa) return;
+        
+        // Converter dados do Supabase para VisitanteType
+        const visitanteConvertido: VisitanteType = {
+          id: v.id,
+          nome: v.nome,
+          casa_visitada: v.casa_visitada,
+          placa_veiculo: v.placa_veiculo,
+          numero_prisma: v.numero_prisma ?? undefined,
+          estacionar_vaga_morador: v.estacionar_vaga_morador ?? false,
+          observacoes: v.observacoes ?? undefined,
+          liberado_por: v.liberado_por ?? undefined,
+          hora_entrada: v.hora_entrada,
+          hora_saida: v.hora_saida ?? undefined,
+          is_ativo: v.is_ativo ?? true,
+        };
+        
+        if (!agrupados[chave]) {
+          agrupados[chave] = {
+            visitante: visitanteConvertido,
+            similaridadeNome: simNome,
+            totalVisitas: 1
+          };
+        } else {
+          agrupados[chave].totalVisitas++;
+          // Manter o registro mais recente
+          const existingEntrada = agrupados[chave].visitante.hora_entrada;
+          if (existingEntrada && new Date(v.hora_entrada) > new Date(existingEntrada)) {
+            agrupados[chave].visitante = visitanteConvertido;
+            agrupados[chave].similaridadeNome = simNome;
+          }
+        }
+      });
+      
+      // Converter para array e ordenar por total de visitas
+      return Object.values(agrupados)
+        .map(g => ({
+          visitante: g.visitante,
+          similaridade: g.similaridadeNome,
+          totalVisitas: g.totalVisitas
+        }))
+        .sort((a, b) => b.totalVisitas - a.totalVisitas);
+    } catch (err) {
+      console.error('Erro ao buscar visitantes similares:', err);
+      return [];
+    }
+  };
+
+  return { cadastrarVisitante, registrarSaida, editarVisitante, buscarVisitantes, buscarVisitantesSimilares, loading, error };
 }
 
 // Hook para relatórios
@@ -724,16 +815,44 @@ export function useEstatisticas(periodo: '7' | '30' | '90') {
           visitantes: visitantes?.filter(v => new Date(v.hora_entrada).getDay() === index).length || 0,
         }));
 
-        // Top visitantes recorrentes (por nome)
-        const visitantesPorNome: { [key: string]: { nome: string; casa_visitada: string; total_visitas: number } } = {};
+        // Top visitantes recorrentes (agrupados por placa OU nome normalizado)
+        // v1.1.64: Agrupamento inteligente que unifica variações de nome (typos)
+        const visitantesPorChave: { [key: string]: { 
+          nome: string; 
+          placa: string;
+          casa_visitada: string; 
+          total_visitas: number;
+          nomes_variantes: Set<string>;
+        } } = {};
+        
         visitantes?.forEach(v => {
-          if (visitantesPorNome[v.nome]) {
-            visitantesPorNome[v.nome].total_visitas++;
+          // Usar placa como chave primária se disponível, senão nome normalizado
+          const chave = v.placa_veiculo && v.placa_veiculo.length === 7
+            ? `placa:${v.placa_veiculo}`
+            : `nome:${normalizarNome(v.nome)}`;
+          
+          if (visitantesPorChave[chave]) {
+            visitantesPorChave[chave].total_visitas++;
+            visitantesPorChave[chave].nomes_variantes.add(v.nome);
           } else {
-            visitantesPorNome[v.nome] = { nome: v.nome, casa_visitada: v.casa_visitada, total_visitas: 1 };
+            visitantesPorChave[chave] = { 
+              nome: v.nome, 
+              placa: v.placa_veiculo,
+              casa_visitada: v.casa_visitada, 
+              total_visitas: 1,
+              nomes_variantes: new Set([v.nome])
+            };
           }
         });
-        const visitantesRecorrentes = Object.values(visitantesPorNome)
+        
+        const visitantesRecorrentes = Object.values(visitantesPorChave)
+          .map(v => ({
+            nome: v.nome,
+            casa_visitada: v.casa_visitada,
+            total_visitas: v.total_visitas,
+            // Indicar se há variações de nome (possíveis typos)
+            variacoes: v.nomes_variantes.size > 1 ? Array.from(v.nomes_variantes) : undefined
+          }))
           .sort((a, b) => b.total_visitas - a.total_visitas)
           .slice(0, 5);
 
