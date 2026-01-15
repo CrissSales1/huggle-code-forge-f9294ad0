@@ -588,10 +588,10 @@ export default function CameraMonitor({ onDetection, compact = false, onPipeline
         </div>
       )}
       
-      {/* Video Container */}
+      {/* Video Container - z-50 durante edição para ficar acima de outros elementos */}
       <div 
         ref={containerRef}
-        className={`relative aspect-video bg-gray-900 ${editMode === 'creating' ? 'cursor-crosshair' : ''}`}
+        className={`relative aspect-video bg-gray-900 ${editMode === 'creating' ? 'cursor-crosshair' : ''} ${editMode !== 'none' ? 'z-50' : ''}`}
         onClick={handleClick}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
