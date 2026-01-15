@@ -165,7 +165,7 @@ export default function Monitoramento() {
       {showHelp && <MonitoramentoHelp />}
 
       {/* Camera Monitor com Painel de Resultado - Layout responsivo 3 colunas */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 2xl:grid-cols-12 gap-4 mb-4 sm:mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-5 2xl:grid-cols-12 gap-4 mb-4 sm:mb-6 lg:max-h-[calc(100vh-200px)]">
         {/* Câmera - 3/5 em LG, 6/12 em 2XL */}
         <div className="lg:col-span-3 2xl:col-span-6">
           <CameraMonitor 
@@ -434,7 +434,7 @@ export default function Monitoramento() {
         
         {/* Coluna de Histórico separada - só visível em 2XL */}
         <div className="hidden 2xl:block 2xl:col-span-2">
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm h-full flex flex-col">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col max-h-[calc(100vh-200px)]">
             <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between bg-gray-50 rounded-t-xl">
               <h3 className="font-semibold text-gray-900 flex items-center gap-2 text-sm">
                 <Clock className="w-4 h-4 text-blue-600" />
@@ -451,7 +451,7 @@ export default function Monitoramento() {
                 </div>
               ) : (
                 <div className="space-y-1.5">
-                  {detectionHistory.slice(0, 20).map((det, idx) => (
+                  {detectionHistory.map((det, idx) => (
                     <div 
                       key={idx} 
                       className={`p-2 rounded-lg border text-xs ${
@@ -515,7 +515,7 @@ export default function Monitoramento() {
           </div>
         </button>
 
-        {showVeiculosCadastrados && <div className="bg-white border sm:border-2 border-t-0 border-gray-200 rounded-b-lg p-3 sm:p-4">
+        {showVeiculosCadastrados && <div className="bg-white border sm:border-2 border-t-0 border-gray-200 rounded-b-lg p-3 sm:p-4 max-h-[300px] overflow-y-auto">
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
               {/* Campo de Busca */}
               <div className="relative flex-1">
