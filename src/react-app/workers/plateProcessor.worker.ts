@@ -3,7 +3,7 @@
  * Move OCR (ONNX Runtime), detecção de placa e motion detection para thread separada
  * Evita bloqueio da UI durante processamento pesado
  * 
- * v1.1.52: Detecta formato por hífen/traço no OCR bruto para distinguir placas antigas de Mercosul
+ * v1.1.62: Logs otimizados - modo silencioso para produção
  */
 
 import * as ort from 'onnxruntime-web';
@@ -479,39 +479,32 @@ function heuristicCorrection(text: string): { text: string; detectedFormat: 'ant
   // Posições 0, 1, 2: SEMPRE letras
   for (let i = 0; i < 3 && i < chars.length; i++) {
     if (/[0-9]/.test(chars[i]) && numToLetter[chars[i]]) {
-      console.log(`🔧 Correção pos ${i}: '${chars[i]}' → '${numToLetter[chars[i]]}' (número→letra)`);
       chars[i] = numToLetter[chars[i]];
     }
   }
   
   // Posição 3: SEMPRE número (tanto Mercosul quanto antiga)
   if (chars.length > 3 && /[A-Z]/.test(chars[3]) && letterToNum[chars[3]]) {
-    console.log(`🔧 Correção pos 3: '${chars[3]}' → '${letterToNum[chars[3]]}' (letra→número)`);
     chars[3] = letterToNum[chars[3]];
   }
   
   // v1.1.52: Posição 4 - Detecção inteligente Mercosul vs Antiga
-  // Se formato ANTIGO foi detectado pelo hífen, FORÇAR número na posição 4
   if (chars.length > 4) {
     const char4 = chars[4];
     
-    // v1.1.52: Se formato antigo detectado, NUNCA converter posição 4 para letra
     if (detectedFormat === 'antiga') {
       // Forçar posição 4 como número (formato antigo: LLL-NNNN)
       if (/[A-Z]/.test(char4) && letterToNum[char4]) {
-        console.log(`🔧 v1.1.52: Formato ANTIGO - pos 4: '${char4}' → '${letterToNum[char4]}' (letra→número forçado)`);
         chars[4] = letterToNum[char4];
       }
     } else if (/[0-9]/.test(char4)) {
-      // Lógica original: Verificar se convertendo para letra forma Mercosul válido
+      // Verificar se convertendo para letra forma Mercosul válido
       if (numToLetterPos4[char4]) {
         const testMercosul = [...chars];
         testMercosul[4] = numToLetterPos4[char4];
         const testStr = testMercosul.join('');
         
-        // Mercosul: LLL N L NN (posições 5,6 devem ser números)
         if (/^[A-Z]{3}[0-9][A-Z][0-9]{2}$/.test(testStr)) {
-          console.log(`🔧 Correção pos 4: '${char4}' → '${numToLetterPos4[char4]}' (número→letra Mercosul detectado)`);
           chars[4] = numToLetterPos4[char4];
         }
       }
@@ -521,7 +514,6 @@ function heuristicCorrection(text: string): { text: string; detectedFormat: 'ant
   // Posições 5, 6: SEMPRE números
   for (let i = 5; i <= 6 && i < chars.length; i++) {
     if (/[A-Z]/.test(chars[i]) && letterToNum[chars[i]]) {
-      console.log(`🔧 Correção pos ${i}: '${chars[i]}' → '${letterToNum[chars[i]]}' (letra→número)`);
       chars[i] = letterToNum[chars[i]];
     }
   }
@@ -2125,4 +2117,4 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 };
 
 // Notificar que o worker está carregado
-console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.51 - YOLO Only)');
+console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.62 - YOLO Only)');
