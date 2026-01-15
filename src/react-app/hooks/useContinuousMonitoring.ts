@@ -557,9 +557,8 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
     
     setMotionPercent(result.motionPercent);
     
-    // Auto-atualizar referência se necessário
+    // Auto-atualizar referência se necessário (silencioso)
     if (result.shouldUpdateReference) {
-      console.log('🔄 Auto-atualizando referência...');
       captureReferenceFrame();
     }
     

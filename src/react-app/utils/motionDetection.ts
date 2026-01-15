@@ -394,7 +394,7 @@ export class MotionDetector {
   
   // Controle para evitar log excessivo de referência
   private lastReferenceCaptureTime: number = 0;
-  private static readonly MIN_REFERENCE_LOG_INTERVAL = 5000; // 5 segundos entre logs
+  private static readonly MIN_REFERENCE_LOG_INTERVAL = 60000; // 60 segundos entre logs (produção)
   
   constructor(config: Partial<MotionDetectionConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
