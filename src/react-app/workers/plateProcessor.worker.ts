@@ -261,8 +261,7 @@ function preprocessForONNX(
   const cropBottom = Math.round(srcHeight * cropBottomRatio);
   const usefulHeight = srcHeight - cropTop - cropBottom;
   
-  console.log(`📐 Center Crop: ${srcWidth}x${srcHeight} → crop top=${cropTop}px, bottom=${cropBottom}px → útil=${srcWidth}x${usefulHeight}px`);
-  console.log(`📐 Stretch "Emagrecido": ${srcWidth}x${usefulHeight} → ${drawWidth}x${targetHeight} centralizado em ${targetWidth}x${targetHeight}`);
+  // v1.1.62: Logs de crop/stretch removidos - muito verbosos
   
   // 2. CRIAR CANVAS TEMPORÁRIO COM IMAGEM ORIGINAL
   const srcCanvas = new OffscreenCanvas(srcWidth, srcHeight);
@@ -309,14 +308,7 @@ function preprocessForONNX(
     tensor[2 * pixels + i] = ((r / 255.0) - 0.5) / 0.5;
   }
   
-  // Debug: mostrar range do tensor
-  let minVal = Infinity, maxVal = -Infinity;
-  for (let j = 0; j < tensor.length; j++) {
-    if (tensor[j] < minVal) minVal = tensor[j];
-    if (tensor[j] > maxVal) maxVal = tensor[j];
-  }
-  console.log(`📊 Tensor BGR [-1, 1] (sem contraste): min=${minVal.toFixed(2)}, max=${maxVal.toFixed(2)}`);
-  console.log(`📊 Layout: 30px padding | 260px conteúdo | 30px padding`);
+  // v1.1.62: Logs de tensor range removidos - muito verbosos
   
   return { tensor, width: targetWidth, height: targetHeight };
 }
@@ -407,7 +399,10 @@ function decodeCTC(output: Float32Array, outputShape: readonly number[]): {
   // v1.1.52: Aplicar correção heurística com detecção de formato
   const { text: correctedText, detectedFormat } = heuristicCorrection(rawText);
   
-  console.log(`🔤 OCR Bruto: "${rawText}" → Corrigido: "${correctedText}" (${(confidence * 100).toFixed(1)}%) [Formato: ${detectedFormat}]`);
+  // v1.1.62: Log consolidado único
+  if (correctedText.length >= 7) {
+    console.log(`🔤 OCR: "${correctedText}" (${(confidence * 100).toFixed(0)}%)`);
+  }
   
   return { text: correctedText, confidence, detectedFormat };
 }
@@ -427,20 +422,17 @@ function heuristicCorrection(text: string): { text: string; detectedFormat: 'ant
   const hasSeparator = /[-.\•–—·]/.test(text);
   const detectedFormat: 'antiga' | 'mercosul' | 'unknown' = hasSeparator ? 'antiga' : 'unknown';
   
-  if (hasSeparator) {
-    console.log(`🔍 v1.1.52: Separador detectado no OCR bruto: "${text}" → Formato ANTIGO forçado`);
-  }
+  // v1.1.62: Log de separador removido - muito verboso
   
   // 1. LIMPEZA BÁSICA - Remove caracteres não-alfanuméricos e converte para maiúsculo
   let clean = text.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
   
   // 2. REMOÇÃO DE RUÍDO DE BORDA (Ex: "BFC2846" -> "FC2846")
   // Se tiver 8+ chars, e removendo o primeiro parece uma placa válida (3 letras no início)
+  // v1.1.62: Remoção de ruído de borda silenciosa
   if (clean.length > 7) {
     const withoutFirst = clean.substring(1);
-    // Regex: 3 letras no começo (padrão de placa brasileira)
     if (/^[A-Z]{3}/.test(withoutFirst)) {
-      console.log(`🔧 Ruído de borda removido: '${clean[0]}' (${clean} → ${withoutFirst})`);
       clean = withoutFirst;
     }
   }
@@ -559,7 +551,7 @@ function heuristicCorrection(text: string): { text: string; detectedFormat: 'ant
           const testStr = testChars.join('');
           
           if (/^[A-Z]{3}[0-9][A-Z][0-9]{2}$/.test(testStr) || /^[A-Z]{3}[0-9]{4}$/.test(testStr)) {
-            console.log(`🔧 Correção numérica pos ${pos}: '${chars[pos]}' → '${alt}' (confusão ${chars[pos]}↔${alt})`);
+            // v1.1.62: Correção silenciosa
             chars[pos] = alt;
             break;
           }
@@ -598,8 +590,7 @@ async function runONNXOCR(
     // Pré-processar imagem
     const { tensor, width: processedWidth, height: processedHeight } = preprocessForONNX(data, width, height);
     
-    console.log(`📊 Input image: ${width}x${height} → preprocessed: ${processedWidth}x${processedHeight}`);
-    console.log(`📊 Tensor shape: [1, 3, ${processedHeight}, ${processedWidth}]`);
+    // v1.1.62: Logs de dimensões removidos - muito verbosos
     
     // Criar tensor de entrada
     const inputTensor = new ort.Tensor('float32', tensor, [1, 3, processedHeight, processedWidth]);
@@ -614,14 +605,12 @@ async function runONNXOCR(
     const outputData = outputTensor.data as Float32Array;
     const outputShape = outputTensor.dims;
     
-    console.log(`📊 Output shape: [${outputShape.join(', ')}]`);
-    console.log(`📊 Num classes: ${outputShape[outputShape.length - 1]}, Seq len: ${outputShape.length === 3 ? outputShape[1] : outputShape[0]}`);
+    // v1.1.62: Logs de output shape removidos - muito verbosos
     
     // Decodificar CTC - agora retorna formato detectado
     const { text, confidence, detectedFormat } = decodeCTC(outputData, outputShape);
     
-    console.log(`🔤 ONNX OCR: "${text}" (Conf: ${(confidence * 100).toFixed(1)}%) [Formato: ${detectedFormat}]`);
-    
+    // v1.1.62: Log único do OCR (substituído por log consolidado no final)
     return { text, confidence, detectedFormat };
   } catch (error) {
     console.error('❌ Erro no OCR ONNX:', error);
@@ -764,8 +753,7 @@ async function detectPlateWithYOLO(
       return null;
     }
     
-    // v1.1.48: Log de debug para diagnóstico
-    console.log(`🔍 YOLO encontrou ${detections.length} detecções brutas`);
+    // v1.1.62: Log condensado - removido spam de detecções brutas
     
     let bestBox: BoundingBox | null = null;
     let bestConfidence = YOLO_CONFIDENCE_THRESHOLD;
@@ -800,18 +788,10 @@ async function detectPlateWithYOLO(
         
         const aspectRatio = boxW / boxH;
         
-        // v1.1.48: Log de cada box detectada para diagnóstico
-        console.log(`📦 YOLO box: ${boxW}x${boxH}px @ (${boxX},${boxY}) conf=${(confidence*100).toFixed(0)}% ratio=${aspectRatio.toFixed(2)}`);
-        
-        // v1.1.48: Filtros mais relaxados (1.5-8.0) pois YOLO pode incluir área ao redor
-        if (aspectRatio < 1.5 || aspectRatio > 8.0) {
-          console.log(`⚠️ YOLO: placa descartada por proporção ${aspectRatio.toFixed(2)} (esperado 1.5-8.0)`);
-          continue;
-        }
-        if (boxW < 50 || boxH < 12) {
-          console.log(`⚠️ YOLO: placa descartada por tamanho ${boxW}x${boxH}px (mín 50x12)`);
-          continue;
-        }
+        // v1.1.62: Logs removidos - muito spam por frame
+        // Filtros mais relaxados (1.5-8.0) pois YOLO pode incluir área ao redor
+        if (aspectRatio < 1.5 || aspectRatio > 8.0) continue;
+        if (boxW < 50 || boxH < 12) continue;
         
         bestBox = {
           x: boxX,
@@ -1129,8 +1109,7 @@ function detectNightCondition(
     avgLuminance < 80 || 
     (luminanceVariance > 60 && darkRatio > 0.15 && brightRatio > 0.05);
   
-  console.log(`🌙 Detecção noturna: avg=${avgLuminance.toFixed(1)}, var=${luminanceVariance.toFixed(1)}, ` +
-    `dark=${(darkRatio*100).toFixed(1)}%, bright=${(brightRatio*100).toFixed(1)}% → ${isNight ? '🌙 NOTURNA' : '☀️ diurna'}`);
+  // v1.1.62: Log de detecção noturna removido - muito verboso
   
   return { isNight, avgLuminance, luminanceVariance };
 }
@@ -1288,7 +1267,7 @@ function applyNightCorrection(
   // Recupera bordas dos caracteres que podem ter sido suavizadas
   const final = applyLightSharpening(afterCLAHE, width, height);
   
-  console.log(`🌙 v1.1.47 Correção noturna aplicada: anti-glare → gamma=${gamma.toFixed(2)} → CLAHE(1.5) → sharpen`);
+  // v1.1.62: Log de correção noturna removido
   
   return final;
 }
@@ -1313,7 +1292,7 @@ function optimizeImageForOCR(
   height: number,
   options?: { forceNightMode?: boolean }
 ): { data: Uint8ClampedArray; width: number; height: number } {
-  console.log(`🔄 Pipeline v1.1.51 iniciado: ${width}x${height}px`);
+  // v1.1.62: Log de pipeline iniciado removido
   
   let processedData = data;
   
@@ -1322,7 +1301,7 @@ function optimizeImageForOCR(
   const nightAnalysis = detectNightCondition(data, width, height);
   
   if (forceNight || nightAnalysis.isNight) {
-    console.log(`🌙 Modo noturno ${forceNight ? 'FORÇADO ✋' : 'automático 🤖'} - aplicando correções`);
+    // v1.1.62: Log de modo noturno removido
     processedData = applyNightCorrection(
       data, width, height, 
       nightAnalysis.avgLuminance
@@ -1339,7 +1318,7 @@ function optimizeImageForOCR(
     const newWidth = width * UPSCALE_FACTOR;
     const newHeight = height * UPSCALE_FACTOR;
     
-    console.log(`📏 Upscale ${UPSCALE_FACTOR}x: ${width}x${height} → ${newWidth}x${newHeight}px`);
+    // v1.1.62: Log de upscale removido
     
     // Criar canvas source com os dados processados
     const srcCanvas = new OffscreenCanvas(width, height);
@@ -1357,7 +1336,7 @@ function optimizeImageForOCR(
     
     const upscaledData = dstCtx.getImageData(0, 0, newWidth, newHeight);
     
-    console.log(`📏 Passando para tensor dinâmico (BGR + resize direto)`);
+    // v1.1.62: Log removido
     
     return { 
       data: new Uint8ClampedArray(upscaledData.data), 
@@ -1366,8 +1345,7 @@ function optimizeImageForOCR(
     };
   }
   
-  console.log(`📏 Tamanho adequado (>=${MIN_WIDTH_FOR_OCR}px), sem upscale`);
-  console.log(`📏 Passando para tensor dinâmico (BGR + resize direto)`);
+  // v1.1.62: Logs removidos
   
   return { data: new Uint8ClampedArray(processedData), width, height };
 }
@@ -1469,7 +1447,7 @@ function extractPlateCandidate(rawText: string): string {
     for (const c of candidates) {
       const tempValidation = validatePlateFormat(c);
       if (tempValidation.isValid) {
-        console.log(`🔍 Extraído candidato válido: "${c}" de "${cleaned}"`);
+        // v1.1.62: Log removido
         return c;
       }
     }
@@ -1479,7 +1457,7 @@ function extractPlateCandidate(rawText: string): string {
       for (const v of variations) {
         const tempValidation = validatePlateFormat(v);
         if (tempValidation.isValid) {
-          console.log(`🔍 Extraído candidato com variação: "${v}" de "${cleaned}"`);
+          // v1.1.62: Log removido
           return v;
         }
       }
@@ -1515,7 +1493,7 @@ function validateAndCorrectPlate(rawText: string, formatHint?: 'antiga' | 'merco
   const cleaned = rawText.toUpperCase().replace(/[^A-Z0-9]/g, '');
   const candidate = extractPlateCandidate(rawText);
   
-  console.log(`📝 Validação: "${rawText}" → limpo: "${cleaned}" → candidato: "${candidate}" [formatHint: ${formatHint || 'none'}]`);
+  // v1.1.62: Log de validação removido
   
   // v1.1.52: Se formatHint é 'antiga', priorizar formato antigo
   const preferOld = formatHint === 'antiga';
@@ -1901,15 +1879,16 @@ async function processPlate(
     if (modelReady) {
       plateRegion = await detectPlateWithYOLO(imageData, width, height);
       usedYolo = plateRegion !== null;
-      if (usedYolo) {
-        console.log(`🧠 YOLO detectou placa com ${Math.round((plateRegion?.confidence || 0) * 100)}% confiança`);
+      if (usedYolo && plateRegion) {
+        // v1.1.62: Log único consolidado de YOLO
+        console.log(`🧠 YOLO: ${plateRegion.width}x${plateRegion.height}px (${Math.round(plateRegion.confidence * 100)}%)`);
       }
     }
     
     // v1.1.51: Sem YOLO = Sem OCR (elimina falsos positivos de heurística)
     if (!plateRegion) {
       const elapsed = performance.now() - startTime;
-      console.log(`⏭️ YOLO não encontrou placa - pulando OCR (${elapsed.toFixed(0)}ms)`);
+      // v1.1.62: Log silencioso quando não encontra placa
       
       return {
         success: false,
@@ -1956,7 +1935,7 @@ async function processPlate(
         }
       }
       
-      console.log(`🔲 Região recortada: ${processWidth}x${processHeight}px`);
+      // v1.1.62: Log de região recortada removido
       
       // v1.1.34: Unwarp desabilitado temporariamente - estava distorcendo ao invés de corrigir
       // O algoritmo aplicava transformação na imagem recortada bruta, encontrando cantos errados

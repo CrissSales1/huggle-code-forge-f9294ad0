@@ -620,18 +620,11 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       // Combinar e remover duplicatas
       const todasVariacoes = [...new Set([...variacoesSimples, ...variacoesAgressivas])];
       
-      // v1.1.49: Log COMPLETO das variações geradas para diagnóstico
-      console.log(`🔍 Fuzzy Match: "${placaLimpa}" → ${todasVariacoes.length} variações:`);
-      console.log(`   Simples: [${variacoesSimples.join(', ')}]`);
-      console.log(`   Agressivas: [${variacoesAgressivas.join(', ')}]`);
+      // v1.1.62: Log condensado de variações
+      console.log(`🔍 Fuzzy: ${placaLimpa} → ${todasVariacoes.length} variações`);
       
-      // Se a placa original contém '2', mostrar especificamente se '9' foi gerado
-      if (placaLimpa.includes('2')) {
-        const variacoesCom9 = todasVariacoes.filter(v => v !== placaLimpa && v.includes('9'));
-        console.log(`   ↳ Variações com 9 (correção 2→9): [${variacoesCom9.join(', ')}]`);
-      }
+      logger.log(`🔍 Buscando morador com ${todasVariacoes.length} variações de "${placaLimpa}"`);
       
-      logger.log(`🔍 Buscando morador com ${todasVariacoes.length} variações de "${placaLimpa}":`, todasVariacoes.slice(0, 8));
       
       if (todasVariacoes.length > 1) {
         const { data: fuzzyMatch, error: fuzzyError } = await supabase
