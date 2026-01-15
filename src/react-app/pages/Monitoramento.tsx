@@ -165,9 +165,9 @@ export default function Monitoramento() {
       {showHelp && <MonitoramentoHelp />}
 
       {/* Camera Monitor com Painel de Resultado - Layout responsivo 3 colunas */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 2xl:grid-cols-12 gap-3 lg:h-[530px]">
+      <div className="grid grid-cols-1 lg:grid-cols-5 2xl:grid-cols-12 gap-3 lg:min-h-[530px]">
         {/* Câmera - 3/5 em LG, 6/12 em 2XL */}
-        <div className="lg:col-span-3 2xl:col-span-6 lg:h-full lg:max-h-[530px]">
+        <div className="lg:col-span-3 2xl:col-span-6 lg:min-h-[530px]">
           <CameraMonitor 
             onDetection={debouncedRefetch} 
             compact 

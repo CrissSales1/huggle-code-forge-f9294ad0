@@ -322,7 +322,7 @@ export default function CameraMonitor({ onDetection, compact = false, onPipeline
   const displayPoints = editMode !== 'none' ? tempPoints : getPolygonPoints(virtualArea);
   
   return (
-    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden h-full flex flex-col">
+    <div className={`bg-white border border-gray-200 rounded-xl h-full flex flex-col ${editMode !== 'none' ? 'overflow-visible' : 'overflow-hidden'}`}>
       {/* Header */}
       <div className="flex items-center justify-between p-3 border-b border-gray-200 bg-gray-50">
         <div className="flex items-center gap-2">
