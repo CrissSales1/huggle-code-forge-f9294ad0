@@ -495,7 +495,8 @@ export default function Monitoramento() {
       </div>
       
       {/* Lista de Veículos - Versão expandível para todas as telas */}
-      <div className="mt-4">
+      {/* z-10 garante que fica abaixo do vídeo durante edição de polígono (z-50) */}
+      <div className="mt-4 relative z-10">
         <button onClick={async () => {
         if (!showVeiculosCadastrados) {
           await carregarVeiculos();
