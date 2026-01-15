@@ -463,19 +463,19 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
           console.log(`⏳ Aguardando consenso: ${placa} (${matchCount}/${CONSISTENCY_THRESHOLD} necessário)`);
           finishProcessingTimer();
           setStatus('monitoring');
-          setStatusMessage(`🔄 Coletando leituras: ${matchCount}/${CONSISTENCY_THRESHOLD}...`);
+          setStatusMessage(`🔄 Leituras: ${matchCount}/${CONSISTENCY_THRESHOLD}`);
           return false;
         }
       } else {
         finishProcessingTimer();
-        setStatusMessage('❌ Placa não reconhecida - tentando novamente...');
+        setStatusMessage('❌ Não reconhecida');
         console.log('❌ OCR falhou, permitindo re-tentativa...');
         return false;
       }
     } catch (e) {
       console.error('Erro ao processar OCR:', e);
       finishProcessingTimer();
-      setStatusMessage('❌ Erro no processamento - tentando novamente...');
+      setStatusMessage('❌ Erro OCR');
       return false;
     }
     

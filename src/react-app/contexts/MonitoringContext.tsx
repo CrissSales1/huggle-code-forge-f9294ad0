@@ -826,7 +826,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
           // Sem consenso ainda - continuar coletando leituras
           finishProcessingTimer();
           setStatus('monitoring');
-          setStatusMessage(`🔄 Coletando: ${matchCount}/${CONSISTENCY_THRESHOLD} (${placa})`);
+          setStatusMessage(`🔄 Leituras: ${matchCount}/${CONSISTENCY_THRESHOLD}`);
           
           // Não marca como sucesso de OCR para continuar tentando
           return false;
@@ -912,26 +912,27 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         finishProcessingTimer();
         motionDetectorRef.current.markOcrSuccess();
         
-        // v1.1.40: Exibir placa cadastrada para moradores/visitantes
+        // v1.1.61: Mensagens compactas (1 linha só)
         if (isMorador) {
-          setStatusMessage(`✅ Morador: ${placaFinal} - Casa ${casa} (Fast-Track)`);
+          setStatusMessage(`✅ ${placaFinal} - Casa ${casa}`);
         } else if (isVisitante) {
-          setStatusMessage(`🧑 Visitante: ${nomeVisitante} - Casa ${casaFinal} (Fast-Track)`);
+          const primeiroNome = nomeVisitante?.split(' ')[0] || 'Visitante';
+          setStatusMessage(`🧑 ${primeiroNome} - Casa ${casaFinal}`);
         } else {
-          setStatusMessage(`⚠️ Não cadastrado: ${placaConfirmada}`); // Desconhecidos usam placa confirmada
+          setStatusMessage(`⚠️ ${placaConfirmada}`);
         }
         
         return true;
       } else {
         finishProcessingTimer();
-        setStatusMessage('❌ Placa não reconhecida - tentando novamente...');
+        setStatusMessage('❌ Não reconhecida');
         setStatus('monitoring');
         return false;
       }
     } catch (e) {
       console.error('Erro ao processar OCR:', e);
       finishProcessingTimer();
-      setStatusMessage('❌ Erro no processamento - tentando novamente...');
+      setStatusMessage('❌ Erro OCR');
       setStatus('monitoring');
       return false;
     }
@@ -1093,12 +1094,14 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         
         finishProcessingTimer();
         
+        // v1.1.61: Mensagens compactas
         if (isMorador) {
-          setStatusMessage(`✅ Morador: ${placa} - Casa ${casa}`);
+          setStatusMessage(`✅ ${placa} - Casa ${casa}`);
         } else if (isVisitante) {
-          setStatusMessage(`🧑 Visitante: ${nomeVisitante} - Casa ${casaFinal}`);
+          const primeiroNome = nomeVisitante?.split(' ')[0] || 'Visitante';
+          setStatusMessage(`🧑 ${primeiroNome} - Casa ${casaFinal}`);
         } else {
-          setStatusMessage(`⚠️ Não cadastrado: ${placa}`);
+          setStatusMessage(`⚠️ ${placa}`);
         }
         
         setTimeout(() => {
@@ -1110,7 +1113,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         return true;
       } else {
         finishProcessingTimer();
-        setStatusMessage(`❌ Placa não reconhecida${result.rawText ? ` (texto: ${result.rawText})` : ''}`);
+        setStatusMessage('❌ Não reconhecida');
         
         setTimeout(() => {
           if (isActiveRef.current) {
