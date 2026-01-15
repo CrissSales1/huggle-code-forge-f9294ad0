@@ -176,8 +176,8 @@ export default function Monitoramento() {
         </div>
         
         {/* Painel de Resultado + Pipeline - 2/5 em LG, 4/12 em 2XL */}
-        <div className="lg:col-span-2 2xl:col-span-4 flex flex-col gap-4">
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm h-full flex flex-col">
+        <div className="lg:col-span-2 2xl:col-span-4 flex flex-col gap-3">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col">
             {/* Header */}
             <div className="px-4 py-2.5 2xl:py-2 border-b border-gray-100 flex items-center justify-between">
               <h3 className="font-semibold text-gray-900 flex items-center gap-2 text-sm 2xl:text-base">
@@ -198,7 +198,7 @@ export default function Monitoramento() {
             </div>
             
             {/* Conteúdo */}
-            <div className="flex-1 p-3 2xl:p-4 flex flex-col overflow-hidden">
+            <div className="p-3 2xl:p-4 flex flex-col">
               {/* Card de resultado principal */}
               <div className="flex flex-col justify-start">
                 {!latestDetection ? (
