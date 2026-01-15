@@ -3,7 +3,7 @@
  * Move OCR (ONNX Runtime), detecção de placa e motion detection para thread separada
  * Evita bloqueio da UI durante processamento pesado
  * 
- * v1.1.62: Logs otimizados - modo silencioso para produção
+ * v1.1.64: Anti-Duplicatas + Métricas Inteligentes
  */
 
 import * as ort from 'onnxruntime-web';
