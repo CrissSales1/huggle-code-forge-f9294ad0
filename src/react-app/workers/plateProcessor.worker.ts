@@ -602,7 +602,7 @@ async function runONNXOCR(
     console.log(`📊 Tensor shape: [1, 3, ${processedHeight}, ${processedWidth}]`);
     
     // Criar tensor de entrada
-    const inputTensor = new ort.Tensor('float32', tensor, [1, 3, processedHeight, processedHeight]);
+    const inputTensor = new ort.Tensor('float32', tensor, [1, 3, processedHeight, processedWidth]);
     
     // Executar inferência
     const inputName = onnxSession.inputNames[0];
