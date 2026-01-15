@@ -39,13 +39,29 @@ interface CameraMonitorProps {
   onDetection?: (placa: string, isMorador: boolean, casa?: string) => void;
   /** Modo compacto: esconde resultado interno e detecções recentes */
   compact?: boolean;
+  /** Callback para expor dados do pipeline OCR para o componente pai */
+  onPipelineUpdate?: (data: PipelineData | null) => void;
+}
+
+/** Dados do pipeline OCR expostos para o componente pai */
+export interface PipelineData {
+  debugImages: { preprocessed?: string; final?: string } | null;
+  rawText: string;
+  ocrConfidence: number;
+  stage: string;
+  stageLabel: string;
+  usedYolo: boolean;
+  plateRegion?: { width: number; height: number; confidence: number };
+  currentTimeMs: number;
+  lastOcrTimeMs: number;
+  avgTimeMs: number;
 }
 
 type EditMode = 'none' | 'creating' | 'adjusting';
 
 // Removido VideoPortal - agora renderizamos o vídeo diretamente no container
 
-export default function CameraMonitor({ onDetection, compact = false }: CameraMonitorProps) {
+export default function CameraMonitor({ onDetection, compact = false, onPipelineUpdate }: CameraMonitorProps) {
   const {
     status,
     statusMessage,
@@ -129,6 +145,30 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
     
     return () => video.removeEventListener('loadedmetadata', updateDimensions);
   }, [videoRef]);
+  
+  // Expor dados do pipeline para o componente pai
+  useEffect(() => {
+    if (onPipelineUpdate && isActive && debugModeEnabled) {
+      onPipelineUpdate({
+        debugImages: processingInfo.debugImages || null,
+        rawText: processingInfo.rawText || '',
+        ocrConfidence: processingInfo.ocrConfidence || 0,
+        stage: processingInfo.stage,
+        stageLabel: processingInfo.stageLabel,
+        usedYolo: processingInfo.usedYolo || false,
+        plateRegion: processingInfo.plateRegion ? {
+          width: processingInfo.plateRegion.width,
+          height: processingInfo.plateRegion.height,
+          confidence: processingInfo.plateRegion.confidence,
+        } : undefined,
+        currentTimeMs: processingInfo.currentTimeMs,
+        lastOcrTimeMs: processingInfo.lastOcrTimeMs,
+        avgTimeMs: processingInfo.avgTimeMs,
+      });
+    } else if (onPipelineUpdate && (!isActive || !debugModeEnabled)) {
+      onPipelineUpdate(null);
+    }
+  }, [onPipelineUpdate, isActive, debugModeEnabled, processingInfo]);
   
   // Toggle de visibilidade da área poligonal
   const [showPolygonOverlay, setShowPolygonOverlay] = useState<boolean>(() => {
@@ -833,69 +873,7 @@ export default function CameraMonitor({ onDetection, compact = false }: CameraMo
               )}
             </div>
           </div>
-          
-          {/* Debug Pipeline - 2 etapas visuais otimizadas v1.1.42 */}
-          {debugModeEnabled && (
-            <div className="mt-3 pt-3 border-t border-gray-200">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-xs font-medium text-purple-700">🔍 Pipeline de Processamento OCR</span>
-                {processingInfo.rawText && (
-                  <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">
-                    OCR: "{processingInfo.rawText}" ({Math.round((processingInfo.ocrConfidence || 0) * 100)}%)
-                  </span>
-                )}
-              </div>
-              
-              <div className="grid grid-cols-2 gap-3">
-                {/* Placa Processada (antes: Otimizado) */}
-                <div className="bg-gray-800 rounded-lg overflow-hidden">
-                  <div className="text-xs text-center text-gray-300 py-1.5 bg-gray-900 font-medium">
-                    Placa Processada
-                  </div>
-                  {processingInfo.debugImages?.preprocessed ? (
-                    <img 
-                      src={processingInfo.debugImages.preprocessed} 
-                      alt="Placa Processada" 
-                      className="w-full h-32 object-contain bg-gray-900" 
-                    />
-                  ) : (
-                    <div className="h-32 flex items-center justify-center text-gray-500 text-sm">
-                      Aguardando detecção...
-                    </div>
-                  )}
-                </div>
-                
-                {/* Resultado OCR (antes: Detecção) */}
-                <div className="bg-gray-800 rounded-lg overflow-hidden border-2 border-green-500">
-                  <div className="text-xs text-center text-green-400 py-1.5 bg-gray-900 font-medium">
-                    Resultado OCR
-                  </div>
-                  {processingInfo.debugImages?.final ? (
-                    <img 
-                      src={processingInfo.debugImages.final} 
-                      alt="Resultado OCR" 
-                      className="w-full h-32 object-contain bg-gray-900" 
-                    />
-                  ) : (
-                    <div className="h-32 flex items-center justify-center text-gray-500 text-sm">
-                      Aguardando leitura...
-                    </div>
-                  )}
-                </div>
-              </div>
-              
-              {/* Info adicional */}
-              <div className="flex items-center gap-4 mt-2 text-[10px] text-gray-500">
-                <span>Fonte: {processingInfo.usedYolo ? '🧠 YOLO' : '📐 Heurística'}</span>
-                {processingInfo.plateRegion && (
-                  <span>Região: {processingInfo.plateRegion.width}x{processingInfo.plateRegion.height}px</span>
-                )}
-                {processingInfo.plateRegion && (
-                  <span>Proporção: {(processingInfo.plateRegion.width / processingInfo.plateRegion.height).toFixed(2)}:1</span>
-                )}
-              </div>
-            </div>
-          )}
+          {/* Pipeline agora é renderizado em Monitoramento.tsx via onPipelineUpdate */}
         </div>
       )}
       
