@@ -165,9 +165,9 @@ export default function Monitoramento() {
       {showHelp && <MonitoramentoHelp />}
 
       {/* Camera Monitor com Painel de Resultado - Layout responsivo 3 colunas */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 2xl:grid-cols-12 gap-3 lg:h-[450px]">
+      <div className="grid grid-cols-1 lg:grid-cols-5 2xl:grid-cols-12 gap-3 lg:h-[530px]">
         {/* Câmera - 3/5 em LG, 6/12 em 2XL */}
-        <div className="lg:col-span-3 2xl:col-span-6 lg:h-full lg:max-h-[450px]">
+        <div className="lg:col-span-3 2xl:col-span-6 lg:h-full lg:max-h-[530px]">
           <CameraMonitor 
             onDetection={debouncedRefetch} 
             compact 
@@ -176,7 +176,7 @@ export default function Monitoramento() {
         </div>
         
         {/* Painel de Resultado + Pipeline - 2/5 em LG, 4/12 em 2XL */}
-        <div className="lg:col-span-2 2xl:col-span-4 flex flex-col gap-3 lg:h-full lg:max-h-[450px] lg:overflow-hidden">
+        <div className="lg:col-span-2 2xl:col-span-4 flex flex-col gap-3 lg:h-full lg:max-h-[530px] lg:overflow-hidden">
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col">
             {/* Header */}
             <div className="px-4 py-2.5 2xl:py-2 border-b border-gray-100 flex items-center justify-between">
@@ -433,7 +433,7 @@ export default function Monitoramento() {
         </div>
         
         {/* Coluna de Histórico separada - só visível em 2XL */}
-        <div className="hidden 2xl:block 2xl:col-span-2 h-full max-h-[450px]">
+        <div className="hidden 2xl:block 2xl:col-span-2 h-full max-h-[530px]">
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col h-full overflow-hidden">
             <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between bg-gray-50 rounded-t-xl">
               <h3 className="font-semibold text-gray-900 flex items-center gap-2 text-sm">
