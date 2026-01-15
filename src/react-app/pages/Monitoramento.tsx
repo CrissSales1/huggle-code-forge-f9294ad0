@@ -6,7 +6,7 @@ import CadastroMoradorModal from '@/react-app/components/CadastroMoradorModal';
 import EditarVeiculoMoradorModal from '@/react-app/components/EditarVeiculoMoradorModal';
 import MonitoramentoHelp from '@/react-app/pages/MonitoramentoHelp';
 import PlacaVeiculo from '@/react-app/components/PlacaVeiculo';
-import CameraMonitor from '@/react-app/components/CameraMonitor';
+import CameraMonitor, { PipelineData } from '@/react-app/components/CameraMonitor';
 
 interface VeiculoMorador {
   id: number;
@@ -22,6 +22,7 @@ export default function Monitoramento() {
   const [veiculos, setVeiculos] = useState<VeiculoMorador[]>([]);
   const [veiculoSelecionado, setVeiculoSelecionado] = useState<VeiculoMorador | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [pipelineData, setPipelineData] = useState<PipelineData | null>(null);
 
   // Filtragem e ordenação numérica dos veículos
   const veiculosFiltrados = useMemo(() => {
@@ -170,11 +171,12 @@ export default function Monitoramento() {
           <CameraMonitor 
             onDetection={debouncedRefetch} 
             compact 
+            onPipelineUpdate={setPipelineData}
           />
         </div>
         
-        {/* Painel de Resultado - 2/5 em LG, 4/12 em 2XL */}
-        <div className="lg:col-span-2 2xl:col-span-4">
+        {/* Painel de Resultado + Pipeline - 2/5 em LG, 4/12 em 2XL */}
+        <div className="lg:col-span-2 2xl:col-span-4 flex flex-col gap-4">
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm h-full flex flex-col">
             {/* Header */}
             <div className="px-4 py-2.5 2xl:py-2 border-b border-gray-100 flex items-center justify-between">
@@ -368,6 +370,66 @@ export default function Monitoramento() {
               )}
             </div>
           </div>
+          
+          {/* Pipeline de Processamento OCR - aparece quando monitoramento ativo + debug habilitado */}
+          {pipelineData && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-medium text-purple-700">🔍 Pipeline de Processamento OCR</span>
+                {pipelineData.rawText && (
+                  <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">
+                    OCR: "{pipelineData.rawText}" ({Math.round(pipelineData.ocrConfidence * 100)}%)
+                  </span>
+                )}
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3">
+                {/* Placa Processada */}
+                <div className="bg-gray-800 rounded-lg overflow-hidden">
+                  <div className="text-xs text-center text-gray-300 py-1 bg-gray-900 font-medium">
+                    Placa Processada
+                  </div>
+                  {pipelineData.debugImages?.preprocessed ? (
+                    <img 
+                      src={pipelineData.debugImages.preprocessed} 
+                      alt="Placa Processada" 
+                      className="w-full h-20 object-contain bg-gray-900" 
+                    />
+                  ) : (
+                    <div className="h-20 flex items-center justify-center text-gray-500 text-xs">
+                      Aguardando detecção...
+                    </div>
+                  )}
+                </div>
+                
+                {/* Resultado OCR */}
+                <div className="bg-gray-800 rounded-lg overflow-hidden border-2 border-green-500">
+                  <div className="text-xs text-center text-green-400 py-1 bg-gray-900 font-medium">
+                    Resultado OCR
+                  </div>
+                  {pipelineData.debugImages?.final ? (
+                    <img 
+                      src={pipelineData.debugImages.final} 
+                      alt="Resultado OCR" 
+                      className="w-full h-20 object-contain bg-gray-900" 
+                    />
+                  ) : (
+                    <div className="h-20 flex items-center justify-center text-gray-500 text-xs">
+                      Aguardando leitura...
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              {/* Info adicional */}
+              <div className="flex items-center gap-4 mt-2 text-[10px] text-gray-500">
+                <span>Fonte: {pipelineData.usedYolo ? '🧠 YOLO' : '📐 Heurística'}</span>
+                {pipelineData.plateRegion && (
+                  <span>Região: {pipelineData.plateRegion.width}x{pipelineData.plateRegion.height}px</span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
         
         {/* Coluna de Histórico separada - só visível em 2XL */}
