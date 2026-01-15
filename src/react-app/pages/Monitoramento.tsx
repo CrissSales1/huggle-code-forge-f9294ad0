@@ -131,7 +131,7 @@ export default function Monitoramento() {
   }, []);
 
   return (
-    <div className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 lg:py-4 max-w-7xl mx-auto lg:h-[calc(100vh-120px)] lg:overflow-hidden flex flex-col">
+    <div className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 lg:py-4 max-w-7xl mx-auto">
       <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
         <div className="min-w-0 flex-1">
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mb-1 truncate">Monitoramento de Moradores</h1>
@@ -165,9 +165,9 @@ export default function Monitoramento() {
       {showHelp && <MonitoramentoHelp />}
 
       {/* Camera Monitor com Painel de Resultado - Layout responsivo 3 colunas */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 2xl:grid-cols-12 gap-3 flex-1 min-h-0">
+      <div className="grid grid-cols-1 lg:grid-cols-5 2xl:grid-cols-12 gap-3 lg:h-[450px]">
         {/* Câmera - 3/5 em LG, 6/12 em 2XL */}
-        <div className="lg:col-span-3 2xl:col-span-6">
+        <div className="lg:col-span-3 2xl:col-span-6 lg:h-full lg:max-h-[450px]">
           <CameraMonitor 
             onDetection={debouncedRefetch} 
             compact 
@@ -176,7 +176,7 @@ export default function Monitoramento() {
         </div>
         
         {/* Painel de Resultado + Pipeline - 2/5 em LG, 4/12 em 2XL */}
-        <div className="lg:col-span-2 2xl:col-span-4 flex flex-col gap-3">
+        <div className="lg:col-span-2 2xl:col-span-4 flex flex-col gap-3 lg:h-full lg:max-h-[450px] lg:overflow-hidden">
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col">
             {/* Header */}
             <div className="px-4 py-2.5 2xl:py-2 border-b border-gray-100 flex items-center justify-between">
@@ -433,8 +433,8 @@ export default function Monitoramento() {
         </div>
         
         {/* Coluna de Histórico separada - só visível em 2XL */}
-        <div className="hidden 2xl:block 2xl:col-span-2 min-h-0">
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col h-full">
+        <div className="hidden 2xl:block 2xl:col-span-2 h-full max-h-[450px]">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col h-full overflow-hidden">
             <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between bg-gray-50 rounded-t-xl">
               <h3 className="font-semibold text-gray-900 flex items-center gap-2 text-sm">
                 <Clock className="w-4 h-4 text-blue-600" />
@@ -495,7 +495,7 @@ export default function Monitoramento() {
       </div>
       
       {/* Lista de Veículos - Versão expandível para todas as telas */}
-      <div className="mt-3 flex-shrink-0">
+      <div className="mt-4">
         <button onClick={async () => {
         if (!showVeiculosCadastrados) {
           await carregarVeiculos();
@@ -515,7 +515,7 @@ export default function Monitoramento() {
           </div>
         </button>
 
-        {showVeiculosCadastrados && <div className="bg-white border sm:border-2 border-t-0 border-gray-200 rounded-b-lg p-3 sm:p-4 max-h-[300px] overflow-y-auto">
+        {showVeiculosCadastrados && <div className="bg-white border sm:border-2 border-t-0 border-gray-200 rounded-b-lg p-3 sm:p-4 max-h-[350px] overflow-y-auto">
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
               {/* Campo de Busca */}
               <div className="relative flex-1">
