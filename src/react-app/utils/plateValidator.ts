@@ -27,8 +27,8 @@ const OCR_CORRECTIONS: Record<string, string[]> = {
   'F': ['E', 'P', 'T'],
   'G': ['6', '9', 'C', '0'],
   'H': ['4', 'N', 'M'],
-  'I': ['1', 'L', 'T', '|'],
-  'J': ['1', ']'],
+  'I': ['1', 'L', 'T', '|', 'J'],   // v1.1.68: adiciona J
+  'J': ['1', ']', 'I'],              // v1.1.68: adiciona I
   'L': ['1', 'I', '7'],
   'M': ['N', 'H', 'W'],
   'N': ['M', 'H'],
@@ -53,7 +53,7 @@ const VISUAL_SIMILAR: Record<string, string[]> = {
   'O': ['0', 'D', 'Q', '6'],             // v1.1.38: adicionado '6'
   '0': ['O', 'D', 'Q', '6', '8'],        // v1.1.38: adicionado '6' e '8'
   '1': ['I', 'L', '7', 'T', '|'],
-  'I': ['1', 'L', '|'],
+  'I': ['1', 'L', '|', 'J'],         // v1.1.68: adiciona J
   '4': ['A', 'H'],
   'A': ['4', 'H'],
   '8': ['B', '3', '0'],                   // v1.1.38: adicionado '0'
@@ -71,7 +71,7 @@ const VISUAL_SIMILAR: Record<string, string[]> = {
   'U': ['0', 'O', 'D', 'V'],
   'F': ['E', 'P', 'T'],
   'H': ['4', 'N', 'M'],
-  'J': ['1', '2', '3', ']'],              // v1.1.43: adicionado '2', '3' (confusão noturna)
+  'J': ['1', '2', '3', ']', 'I'],         // v1.1.68: adiciona I (confusão J↔I)
 };
 
 /**

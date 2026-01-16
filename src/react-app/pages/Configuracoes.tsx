@@ -1058,7 +1058,7 @@ export default function Configuracoes() {
       {/* Rodapé com versão */}
       <div className="mt-8 pt-4 border-t border-gray-200 text-center">
         <p className="text-xs text-gray-400">
-          Versão do Sistema: <span className="font-mono font-medium text-gray-500">1.1.67</span> <span className="text-emerald-500">(Fix: Monitoramento Background)</span>
+          Versão do Sistema: <span className="font-mono font-medium text-gray-500">1.1.68</span> <span className="text-emerald-500">(Fix: Confusão J↔I)</span>
         </p>
       </div>
     </div>
