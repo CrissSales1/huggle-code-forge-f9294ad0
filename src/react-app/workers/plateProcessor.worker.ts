@@ -454,6 +454,15 @@ function heuristicCorrection(text: string): { text: string; detectedFormat: 'ant
     'O': '0', 'I': '1', 'Z': '2', 'J': '3', 'A': '4', 'S': '5', 'G': '6', 'T': '7', 'B': '8', 'D': '0', 'Q': '0'
   };
   
+  // v1.1.66: Mapeamento específico para posição 3 (4º caractere)
+  // Prioriza confusões A/I → 1 porque OCR confunde 1 com A frequentemente
+  const letterToNumPos3: Record<string, string> = {
+    'O': '0', 'I': '1', 'L': '1', 
+    'A': '1',  // v1.1.66: A parece 1, não 4 (confusão OCR comum)
+    'Z': '2', 'J': '3', 'S': '5', 
+    'G': '6', 'T': '7', 'B': '8', 'D': '0', 'Q': '0'
+  };
+  
   // v1.1.47: Confusões entre números (iluminação noturna/fonte similar)
   // Atualizado com 9↔2 bidirecional mais forte
   const numToNum: Record<string, string[]> = {
@@ -462,9 +471,10 @@ function heuristicCorrection(text: string): { text: string; detectedFormat: 'ant
     '9': ['2', '6', '0'],   // v1.1.47: 9 parece 2, 6 ou 0
     '6': ['9', '0', '8'],   // v1.1.47: 6 parece 9, 0 ou 8
     '0': ['6', '8', '9'],   // v1.1.47: 0 parece 6, 8 ou 9
-    '1': ['7'],             // 1 parece 7
+    '1': ['7', '4'],        // v1.1.66: 1 também parece 4
     '5': ['6', '8'],        // v1.1.47: 5 parece 6 ou 8
     '8': ['0', '6'],        // v1.1.47: 8 parece 0 ou 6
+    '4': ['1', 'A'],        // v1.1.66: 4 parece 1 ou A
   };
   
   // Número → Letra (posição 4 específica para Mercosul)
@@ -484,8 +494,9 @@ function heuristicCorrection(text: string): { text: string; detectedFormat: 'ant
   }
   
   // Posição 3: SEMPRE número (tanto Mercosul quanto antiga)
-  if (chars.length > 3 && /[A-Z]/.test(chars[3]) && letterToNum[chars[3]]) {
-    chars[3] = letterToNum[chars[3]];
+  // v1.1.66: Usa letterToNumPos3 que prioriza A→1 ao invés de A→4
+  if (chars.length > 3 && /[A-Z]/.test(chars[3]) && letterToNumPos3[chars[3]]) {
+    chars[3] = letterToNumPos3[chars[3]];
   }
   
   // v1.1.52: Posição 4 - Detecção inteligente Mercosul vs Antiga
