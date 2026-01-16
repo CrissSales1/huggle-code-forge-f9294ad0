@@ -437,18 +437,21 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     const VISUAL_PAIRS: Record<string, string[]> = {
       '0': ['O', 'Q', 'D'],
       'O': ['0', 'Q', 'D'],
-      '1': ['I', 'L', 'T', '7'],
+      '1': ['I', 'L', 'T', '7', '4'],  // v1.1.66: Adiciona confusão 1↔4
       'I': ['1', 'L', 'T'],
       '2': ['Z', '7', '9'],  // 9↔2 é confusão MUITO comum
       '9': ['2', '0', 'Q'],
       '7': ['1', '2', 'T'],
+      '4': ['A', 'H', '1'],  // v1.1.66: 4 confunde com A, H e 1
       '5': ['S', '6'],
       '6': ['G', '8', '5'],
       '8': ['B', '6', '0'],
+      'A': ['4', 'H'],       // v1.1.66: A confunde com 4 e H
       'B': ['8', '6'],
       'D': ['0', 'O'],
       'E': ['F'],
       'G': ['6', 'C'],
+      'H': ['4', 'A'],       // v1.1.66: H confunde com 4 e A
       'Q': ['0', 'O', '9'],
       'S': ['5'],
       'T': ['1', '7', 'I'],
