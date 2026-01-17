@@ -50,7 +50,7 @@ const OCR_CORRECTIONS: Record<string, string[]> = {
 const VISUAL_SIMILAR: Record<string, string[]> = {
   // Muito similares - altíssima confusão
   'D': ['0', 'O', 'Q'],
-  'O': ['0', 'D', 'Q', '6'],             // v1.1.38: adicionado '6'
+  'O': ['0', 'D', 'Q', '6', 'U'],        // v1.1.69: adiciona U
   '0': ['O', 'D', 'Q', '6', '8'],        // v1.1.38: adicionado '6' e '8'
   '1': ['I', 'L', '7', 'T', '|'],
   'I': ['1', 'L', '|', 'J'],         // v1.1.68: adiciona J
