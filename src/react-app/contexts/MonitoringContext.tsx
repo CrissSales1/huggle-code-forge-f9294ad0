@@ -449,8 +449,8 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       '6': ['G', '8', '5'],
       '8': ['B', '6', '0'],
       'A': ['4', 'H'],       // v1.1.66: A confunde com 4 e H
-      'B': ['8', '6'],
-      'D': ['0', 'O'],
+      'B': ['8', '6', 'D'],        // v1.1.70: adiciona confusão B↔D
+      'D': ['0', 'O', 'B'],        // v1.1.70: adiciona confusão D↔B
       'E': ['F'],
       'G': ['6', 'C'],
       'H': ['4', 'A'],       // v1.1.66: H confunde com 4 e A

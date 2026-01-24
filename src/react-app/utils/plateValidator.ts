@@ -20,9 +20,9 @@ const OCR_CORRECTIONS: Record<string, string[]> = {
   
   // Letras → possíveis confusões
   'A': ['4', 'H'],
-  'B': ['8', '6', '3'],
+  'B': ['8', '6', '3', 'D'],              // v1.1.70: adiciona D
   'C': ['0', 'G', '('],
-  'D': ['0', 'O'],
+  'D': ['0', 'O', 'B'],                    // v1.1.70: adiciona B
   'E': ['3', 'F', 'B'],                  // v1.1.38: adicionado 'B'
   'F': ['E', 'P', 'T'],
   'G': ['6', '9', 'C', '0'],
@@ -49,7 +49,7 @@ const OCR_CORRECTIONS: Record<string, string[]> = {
 // Inclui confusões 0↔6↔9, E↔B, 2↔7, 9↔2 para melhor matching no banco
 const VISUAL_SIMILAR: Record<string, string[]> = {
   // Muito similares - altíssima confusão
-  'D': ['0', 'O', 'Q'],
+  'D': ['0', 'O', 'Q', 'B'],              // v1.1.70: adiciona B
   'O': ['0', 'D', 'Q', '6', 'U'],        // v1.1.69: adiciona U
   '0': ['O', 'D', 'Q', '6', '8'],        // v1.1.38: adicionado '6' e '8'
   '1': ['I', 'L', '7', 'T', '|'],
@@ -57,7 +57,7 @@ const VISUAL_SIMILAR: Record<string, string[]> = {
   '4': ['A', 'H'],
   'A': ['4', 'H'],
   '8': ['B', '3', '0'],                   // v1.1.38: adicionado '0'
-  'B': ['8', '3', '6', 'E'],              // v1.1.38: adicionado 'E'
+  'B': ['8', '3', '6', 'E', 'D'],         // v1.1.70: adiciona D
   '5': ['S', '6'],                        // v1.1.38: adicionado '6'
   'S': ['5'],
   '6': ['G', 'B', '0', '9', '5'],         // v1.1.38: adicionado '0', '9', '5'
