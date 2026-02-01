@@ -172,6 +172,7 @@ const STORAGE_KEYS = {
 
 // Singleton do AudioContext (criado sob demanda)
 let audioContext: AudioContext | null = null;
+let isUnlocked = false;
 
 /**
  * Obtém ou cria o AudioContext
@@ -188,6 +189,41 @@ function getAudioContext(): AudioContext {
   }
   
   return audioContext;
+}
+
+/**
+ * Desbloqueia o AudioContext após interação do usuário
+ * Deve ser chamado em resposta a um evento de usuário (click, touch, etc.)
+ */
+export function unlockAudioContext(): void {
+  if (isUnlocked) return;
+  
+  try {
+    const ctx = getAudioContext();
+    
+    // Tocar um som silencioso para desbloquear
+    const oscillator = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+    
+    gainNode.gain.setValueAtTime(0, ctx.currentTime); // Volume zero
+    oscillator.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    
+    oscillator.start(ctx.currentTime);
+    oscillator.stop(ctx.currentTime + 0.001);
+    
+    isUnlocked = true;
+    console.log('[NotificationSounds] AudioContext desbloqueado com sucesso');
+  } catch (err) {
+    console.warn('[NotificationSounds] Erro ao desbloquear AudioContext:', err);
+  }
+}
+
+/**
+ * Verifica se o AudioContext está desbloqueado
+ */
+export function isAudioUnlocked(): boolean {
+  return isUnlocked;
 }
 
 /**
