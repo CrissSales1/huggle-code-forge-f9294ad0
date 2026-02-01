@@ -84,35 +84,34 @@ export default function DetectionToast() {
       }`}
     >
       <div 
-        className={`relative rounded-xl shadow-2xl border-2 overflow-hidden ${
-          isMorador 
-            ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-400' 
-            : 'bg-gradient-to-r from-red-50 to-orange-50 border-red-400'
-        }`}
+        className={`relative rounded-xl shadow-2xl border-2 overflow-hidden bg-gradient-to-r ${colors.bg} ${colors.border}`}
       >
         {/* Barra superior colorida */}
-        <div className={`h-1 w-full ${isMorador ? 'bg-green-500' : 'bg-red-500'}`} />
+        <div className={`h-1 w-full ${colors.bar}`} />
         
         {/* Conteúdo */}
         <div className="p-4">
           {/* Header com ícone e botão fechar */}
           <div className="flex items-start justify-between mb-3">
             <div className="flex items-center gap-2">
-              <div className={`p-1.5 rounded-full ${
-                isMorador ? 'bg-green-100' : 'bg-red-100'
-              }`}>
+              <div className={`p-1.5 rounded-full ${colors.icon}`}>
                 {isMorador ? (
-                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  <CheckCircle className={`w-5 h-5 ${colors.iconText}`} />
+                ) : isVisitante ? (
+                  <User className={`w-5 h-5 ${colors.iconText}`} />
                 ) : (
-                  <XCircle className="w-5 h-5 text-red-600" />
+                  <XCircle className={`w-5 h-5 ${colors.iconText}`} />
                 )}
               </div>
               <div>
-                <span className={`font-semibold text-sm ${
-                  isMorador ? 'text-green-700' : 'text-red-700'
-                }`}>
-                  {isMorador ? 'Morador Autorizado' : 'Veículo Desconhecido'}
+                <span className={`font-semibold text-sm ${colors.text}`}>
+                  {isMorador ? 'Morador Autorizado' : isVisitante ? 'Visitante Ativo' : 'Veículo Desconhecido'}
                 </span>
+                {isVisitante && visibleDetection.nomeVisitante && (
+                  <div className={`text-xs font-medium ${colors.text}`}>
+                    {visibleDetection.nomeVisitante}
+                  </div>
+                )}
                 <div className="flex items-center gap-1 text-xs text-gray-500">
                   <Activity className="w-3 h-3" />
                   <span>Detecção automática</span>
@@ -139,14 +138,14 @@ export default function DetectionToast() {
           
           {/* Info adicional */}
           <div className="flex items-center justify-between text-sm">
-            {isMorador && visibleDetection.casa && (
-              <div className="flex items-center gap-1.5 text-green-700">
+            {isIdentificado && visibleDetection.casa && (
+              <div className={`flex items-center gap-1.5 ${colors.text}`}>
                 <Home className="w-4 h-4" />
                 <span className="font-semibold">Casa {visibleDetection.casa}</span>
               </div>
             )}
             
-            {!isMorador && (
+            {!isIdentificado && (
               <div className="text-red-600 text-xs font-medium">
                 Verifique antes de liberar
               </div>
@@ -168,7 +167,7 @@ export default function DetectionToast() {
         {/* Barra de progresso */}
         <div className="h-1 bg-gray-200">
           <div 
-            className={`h-full ${isMorador ? 'bg-green-400' : 'bg-red-400'} animate-shrink-width`}
+            className={`h-full ${colors.progress} animate-shrink-width`}
             style={{ animationDuration: `${TOAST_DURATION_MS}ms` }}
           />
         </div>
