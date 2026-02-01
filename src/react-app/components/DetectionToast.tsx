@@ -63,6 +63,17 @@ export default function DetectionToast() {
   if (!isVisible || !visibleDetection) return null;
   
   const isMorador = visibleDetection.isMorador;
+  const isVisitante = visibleDetection.isVisitante;
+  const isIdentificado = isMorador || isVisitante;
+  
+  // Determinar cores baseado no tipo
+  const getColorScheme = () => {
+    if (isMorador) return { bg: 'from-green-50 to-emerald-50', border: 'border-green-400', bar: 'bg-green-500', icon: 'bg-green-100', iconText: 'text-green-600', text: 'text-green-700', progress: 'bg-green-400' };
+    if (isVisitante) return { bg: 'from-amber-50 to-yellow-50', border: 'border-amber-400', bar: 'bg-amber-500', icon: 'bg-amber-100', iconText: 'text-amber-600', text: 'text-amber-700', progress: 'bg-amber-400' };
+    return { bg: 'from-red-50 to-orange-50', border: 'border-red-400', bar: 'bg-red-500', icon: 'bg-red-100', iconText: 'text-red-600', text: 'text-red-700', progress: 'bg-red-400' };
+  };
+  
+  const colors = getColorScheme();
   
   return (
     <div 
