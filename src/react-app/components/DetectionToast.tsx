@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router';
 import { CheckCircle, XCircle, Home, Activity, X, User } from 'lucide-react';
 import { useMonitoring, Detection } from '@/react-app/contexts/MonitoringContext';
+import { playNotificationSound, loadSoundEnabled } from '@/react-app/utils/notificationSounds';
 
 const TOAST_DURATION_MS = 6000;
 
@@ -27,6 +28,17 @@ export default function DetectionToast() {
       setVisibleDetection(lastDetection);
       setIsExiting(false);
       setIsVisible(true);
+      
+      // Tocar som baseado no tipo de detecção
+      if (loadSoundEnabled()) {
+        if (lastDetection.isMorador) {
+          playNotificationSound('morador');
+        } else if (lastDetection.isVisitante) {
+          playNotificationSound('visitante');
+        } else {
+          playNotificationSound('desconhecido');
+        }
+      }
       
       // Auto-hide após duração
       const hideTimer = setTimeout(() => {
