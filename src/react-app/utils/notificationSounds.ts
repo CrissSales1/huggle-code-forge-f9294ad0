@@ -1,9 +1,11 @@
 /**
  * Sistema de sons de notificação usando Web Audio API
  * Sons gerados dinamicamente sem necessidade de arquivos externos
+ * Suporta múltiplos presets personalizáveis por tipo de detecção
  */
 
 export type SoundType = 'morador' | 'visitante' | 'desconhecido';
+export type SoundPresetId = string;
 
 interface SoundConfig {
   frequencies: number[];
@@ -12,35 +14,160 @@ interface SoundConfig {
   gainMultiplier?: number;
 }
 
-// Configuração dos sons para cada tipo de detecção
-const SOUND_CONFIG: Record<SoundType, SoundConfig> = {
-  morador: {
-    // Som alegre: duas notas ascendentes (C5 → E5)
-    frequencies: [523, 659],
-    durations: [150, 200],
-    waveform: 'sine',
-    gainMultiplier: 1,
-  },
-  visitante: {
-    // Som neutro: uma nota simples (A4)
-    frequencies: [440],
-    durations: [200],
-    waveform: 'sine',
-    gainMultiplier: 0.9,
-  },
-  desconhecido: {
-    // Som de alerta: duas notas descendentes (A4 → E4)
-    frequencies: [440, 330],
-    durations: [150, 250],
-    waveform: 'square',
-    gainMultiplier: 0.5, // Square wave é mais alto, reduzir volume
-  },
+export interface SoundPreset {
+  id: SoundPresetId;
+  name: string;
+  description: string;
+  config: SoundConfig;
+}
+
+// Presets disponíveis para cada tipo de detecção
+export const SOUND_PRESETS: Record<SoundType, SoundPreset[]> = {
+  morador: [
+    {
+      id: 'padrao',
+      name: 'Padrão',
+      description: 'Duas notas ascendentes',
+      config: {
+        frequencies: [523, 659], // C5 → E5
+        durations: [150, 200],
+        waveform: 'sine',
+        gainMultiplier: 1,
+      },
+    },
+    {
+      id: 'alegre',
+      name: 'Alegre',
+      description: 'Acorde maior completo',
+      config: {
+        frequencies: [523, 659, 784], // C5 → E5 → G5
+        durations: [120, 120, 180],
+        waveform: 'sine',
+        gainMultiplier: 0.9,
+      },
+    },
+    {
+      id: 'suave',
+      name: 'Suave',
+      description: 'Nota única prolongada',
+      config: {
+        frequencies: [440],
+        durations: [350],
+        waveform: 'sine',
+        gainMultiplier: 0.7,
+      },
+    },
+    {
+      id: 'confirmacao',
+      name: 'Confirmação',
+      description: 'Bip duplo rápido',
+      config: {
+        frequencies: [880, 880],
+        durations: [80, 80],
+        waveform: 'sine',
+        gainMultiplier: 0.8,
+      },
+    },
+  ],
+  visitante: [
+    {
+      id: 'padrao',
+      name: 'Padrão',
+      description: 'Nota simples',
+      config: {
+        frequencies: [440], // A4
+        durations: [200],
+        waveform: 'sine',
+        gainMultiplier: 0.9,
+      },
+    },
+    {
+      id: 'campainha',
+      name: 'Campainha',
+      description: 'Ding-dong clássico',
+      config: {
+        frequencies: [659, 523], // E5 → C5
+        durations: [200, 300],
+        waveform: 'sine',
+        gainMultiplier: 0.85,
+      },
+    },
+    {
+      id: 'atencao',
+      name: 'Atenção',
+      description: 'Três notas de aviso',
+      config: {
+        frequencies: [587, 659, 587], // D5 → E5 → D5
+        durations: [100, 100, 150],
+        waveform: 'sine',
+        gainMultiplier: 0.8,
+      },
+    },
+    {
+      id: 'melodico',
+      name: 'Melódico',
+      description: 'Sequência harmônica',
+      config: {
+        frequencies: [392, 440, 494], // G4 → A4 → B4
+        durations: [120, 120, 200],
+        waveform: 'triangle',
+        gainMultiplier: 0.9,
+      },
+    },
+  ],
+  desconhecido: [
+    {
+      id: 'padrao',
+      name: 'Padrão',
+      description: 'Notas descendentes',
+      config: {
+        frequencies: [440, 330], // A4 → E4
+        durations: [150, 250],
+        waveform: 'square',
+        gainMultiplier: 0.5,
+      },
+    },
+    {
+      id: 'alerta',
+      name: 'Alerta',
+      description: 'Sirene curta',
+      config: {
+        frequencies: [880, 660, 880, 660],
+        durations: [100, 100, 100, 150],
+        waveform: 'sawtooth',
+        gainMultiplier: 0.35,
+      },
+    },
+    {
+      id: 'grave',
+      name: 'Grave',
+      description: 'Tom grave de aviso',
+      config: {
+        frequencies: [220, 165], // A3 → E3
+        durations: [200, 300],
+        waveform: 'square',
+        gainMultiplier: 0.6,
+      },
+    },
+    {
+      id: 'urgente',
+      name: 'Urgente',
+      description: 'Bips rápidos de alerta',
+      config: {
+        frequencies: [800, 600, 800],
+        durations: [80, 80, 120],
+        waveform: 'square',
+        gainMultiplier: 0.45,
+      },
+    },
+  ],
 };
 
 // Chaves para localStorage
 const STORAGE_KEYS = {
   enabled: 'portacerta_sound_enabled',
   volume: 'portacerta_sound_volume',
+  presets: 'portacerta_sound_presets', // Novo: armazena presets selecionados
 };
 
 // Singleton do AudioContext (criado sob demanda)
@@ -103,20 +230,32 @@ async function playNotes(
 }
 
 /**
+ * Obtém o preset selecionado para um tipo de detecção
+ */
+function getSelectedPreset(type: SoundType): SoundPreset {
+  const presets = loadSoundPresets();
+  const presetId = presets[type];
+  const availablePresets = SOUND_PRESETS[type];
+  
+  const found = availablePresets.find(p => p.id === presetId);
+  return found || availablePresets[0]; // Fallback para padrão
+}
+
+/**
  * Toca o som de notificação para um tipo de detecção
  */
 export function playNotificationSound(type: SoundType): void {
   if (!loadSoundEnabled()) return;
   
-  const config = SOUND_CONFIG[type];
+  const preset = getSelectedPreset(type);
   const volume = loadSoundVolume();
   
   playNotes(
-    config.frequencies,
-    config.durations,
-    config.waveform,
+    preset.config.frequencies,
+    preset.config.durations,
+    preset.config.waveform,
     volume,
-    config.gainMultiplier
+    preset.config.gainMultiplier
   ).catch((err) => {
     console.warn('Erro ao tocar som de notificação:', err);
   });
@@ -174,19 +313,81 @@ export function saveSoundVolume(volume: number): void {
 }
 
 /**
+ * Carrega os presets selecionados para cada tipo
+ */
+export function loadSoundPresets(): Record<SoundType, SoundPresetId> {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEYS.presets);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  
+  // Presets padrão
+  return {
+    morador: 'padrao',
+    visitante: 'padrao',
+    desconhecido: 'padrao',
+  };
+}
+
+/**
+ * Salva os presets selecionados
+ */
+export function saveSoundPresets(presets: Record<SoundType, SoundPresetId>): void {
+  try {
+    localStorage.setItem(STORAGE_KEYS.presets, JSON.stringify(presets));
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+/**
+ * Salva um preset individual para um tipo
+ */
+export function saveSoundPreset(type: SoundType, presetId: SoundPresetId): void {
+  const current = loadSoundPresets();
+  current[type] = presetId;
+  saveSoundPresets(current);
+}
+
+/**
  * Testa um som específico (para a tela de configurações)
+ * Usa o preset selecionado atualmente
  */
 export function testSound(type: SoundType): void {
-  const config = SOUND_CONFIG[type];
+  const preset = getSelectedPreset(type);
   const volume = loadSoundVolume();
   
   playNotes(
-    config.frequencies,
-    config.durations,
-    config.waveform,
+    preset.config.frequencies,
+    preset.config.durations,
+    preset.config.waveform,
     volume,
-    config.gainMultiplier
+    preset.config.gainMultiplier
   ).catch((err) => {
     console.warn('Erro ao testar som:', err);
+  });
+}
+
+/**
+ * Testa um preset específico (para preview antes de selecionar)
+ */
+export function testPreset(type: SoundType, presetId: SoundPresetId): void {
+  const preset = SOUND_PRESETS[type].find(p => p.id === presetId);
+  if (!preset) return;
+  
+  const volume = loadSoundVolume();
+  
+  playNotes(
+    preset.config.frequencies,
+    preset.config.durations,
+    preset.config.waveform,
+    volume,
+    preset.config.gainMultiplier
+  ).catch((err) => {
+    console.warn('Erro ao testar preset:', err);
   });
 }
