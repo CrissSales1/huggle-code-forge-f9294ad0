@@ -20,7 +20,6 @@ import {
   loadSoundVolume, 
   saveSoundVolume, 
   testSound,
-  type SoundType 
 } from '@/react-app/utils/notificationSounds';
 
 interface BackupData {
