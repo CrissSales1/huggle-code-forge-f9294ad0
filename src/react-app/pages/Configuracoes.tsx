@@ -1068,10 +1068,127 @@ export default function Configuracoes() {
         </div>
       </div>
 
+      {/* Notificações Sonoras */}
+      <div className="bg-white rounded-lg sm:rounded-xl border border-gray-200 mb-4 sm:mb-6 lg:mb-8">
+        <div className="p-3 sm:p-4 lg:p-6 border-b border-gray-200">
+          <div className="flex items-center space-x-2">
+            <Volume2 className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" />
+            <h2 className="text-base sm:text-lg lg:text-xl font-semibold text-gray-900">Notificações Sonoras</h2>
+          </div>
+          <p className="text-gray-600 mt-0.5 sm:mt-1 text-xs sm:text-sm">
+            Configure os sons de alerta para detecções de placas
+          </p>
+        </div>
+        
+        <div className="p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6">
+          {/* Toggle habilitar/desabilitar */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              {soundEnabled ? (
+                <Volume2 className="w-5 h-5 text-blue-600" />
+              ) : (
+                <VolumeX className="w-5 h-5 text-gray-400" />
+              )}
+              <div>
+                <p className="text-sm font-medium text-gray-900">Sons de Notificação</p>
+                <p className="text-xs text-gray-500">Tocar som ao detectar veículos</p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                const newValue = !soundEnabled;
+                setSoundEnabled(newValue);
+                saveSoundEnabled(newValue);
+              }}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                soundEnabled ? 'bg-blue-600' : 'bg-gray-300'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  soundEnabled ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+          
+          {/* Controle de Volume */}
+          {soundEnabled && (
+            <>
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-medium text-gray-700">Volume</label>
+                  <span className="text-sm text-gray-500 font-mono">{Math.round(soundVolume)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={soundVolume}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value);
+                    setSoundVolume(value);
+                    saveSoundVolume(value / 100);
+                  }}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                />
+                <div className="flex justify-between text-xs text-gray-400 mt-1">
+                  <span>0%</span>
+                  <span>50%</span>
+                  <span>100%</span>
+                </div>
+              </div>
+              
+              {/* Botões de Teste */}
+              <div>
+                <p className="text-sm font-medium text-gray-700 mb-3">Testar Sons</p>
+                <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                  {/* Som Morador */}
+                  <button
+                    onClick={() => testSound('morador')}
+                    className="flex flex-col items-center gap-1.5 p-3 rounded-lg border-2 border-green-200 bg-green-50 hover:bg-green-100 transition-colors"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center">
+                      <Home className="w-4 h-4 text-white" />
+                    </div>
+                    <span className="text-xs font-medium text-green-700">Morador</span>
+                    <Play className="w-3 h-3 text-green-600" />
+                  </button>
+                  
+                  {/* Som Visitante */}
+                  <button
+                    onClick={() => testSound('visitante')}
+                    className="flex flex-col items-center gap-1.5 p-3 rounded-lg border-2 border-amber-200 bg-amber-50 hover:bg-amber-100 transition-colors"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center">
+                      <User className="w-4 h-4 text-white" />
+                    </div>
+                    <span className="text-xs font-medium text-amber-700">Visitante</span>
+                    <Play className="w-3 h-3 text-amber-600" />
+                  </button>
+                  
+                  {/* Som Desconhecido */}
+                  <button
+                    onClick={() => testSound('desconhecido')}
+                    className="flex flex-col items-center gap-1.5 p-3 rounded-lg border-2 border-red-200 bg-red-50 hover:bg-red-100 transition-colors"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-red-500 flex items-center justify-center">
+                      <AlertCircle className="w-4 h-4 text-white" />
+                    </div>
+                    <span className="text-xs font-medium text-red-700">Desconhecido</span>
+                    <Play className="w-3 h-3 text-red-600" />
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
       {/* Rodapé com versão */}
       <div className="mt-8 pt-4 border-t border-gray-200 text-center">
         <p className="text-xs text-gray-400">
-          Versão do Sistema: <span className="font-mono font-medium text-gray-500">1.1.71</span> <span className="text-emerald-500">(Fix: Toast Visitante)</span>
+          Versão do Sistema: <span className="font-mono font-medium text-gray-500">1.1.72</span> <span className="text-emerald-500">(Sons de Notificação)</span>
         </p>
       </div>
     </div>
