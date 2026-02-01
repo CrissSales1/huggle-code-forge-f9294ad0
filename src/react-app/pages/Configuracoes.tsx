@@ -47,6 +47,11 @@ export default function Configuracoes() {
   const [sensibilidade, setSensibilidade] = useState<MotionSensitivity>(loadMotionSensitivity());
   const [customSensitivity, setCustomSensitivity] = useState<CustomSensitivity>(loadCustomSensitivity());
   const [usarApenasOCRLocal, setUsarApenasOCRLocal] = useState(!loadFallbackEnabled());
+  
+  // Estados para configuração de som
+  const [soundEnabled, setSoundEnabled] = useState(loadSoundEnabled());
+  const [soundVolume, setSoundVolume] = useState(loadSoundVolume() * 100); // Converter para 0-100
+  
   // Estados para proteção da exclusão
   const [exclusaoDesbloqueada, setExclusaoDesbloqueada] = useState(false);
   const [senhaExclusao, setSenhaExclusao] = useState('');
