@@ -4,7 +4,7 @@
  */
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router';
-import { CheckCircle, XCircle, Home, Activity, X } from 'lucide-react';
+import { CheckCircle, XCircle, Home, Activity, X, User } from 'lucide-react';
 import { useMonitoring, Detection } from '@/react-app/contexts/MonitoringContext';
 
 const TOAST_DURATION_MS = 6000;
