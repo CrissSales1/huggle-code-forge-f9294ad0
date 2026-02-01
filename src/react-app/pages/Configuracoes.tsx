@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Save, Trash2, AlertTriangle, Settings as SettingsIcon, Hash, Car, CheckCircle, Upload, Download, Database, Loader2, FileJson, HardDrive, Lock, ShieldCheck, Gauge, Zap } from 'lucide-react';
+import { Save, Trash2, AlertTriangle, Settings as SettingsIcon, Hash, Car, CheckCircle, Upload, Download, Database, Loader2, FileJson, HardDrive, Lock, ShieldCheck, Gauge, Zap, Volume2, VolumeX, Play, Home, User, AlertCircle } from 'lucide-react';
 import { useConfiguracoes } from '@/react-app/hooks/useApi';
 import StatsCard from '@/react-app/components/StatsCard';
 import { supabase } from '@/integrations/supabase/client';
@@ -14,6 +14,14 @@ import {
   type CustomSensitivity,
 } from '@/react-app/utils/motionDetection';
 import { loadFallbackEnabled, saveFallbackEnabled } from '@/react-app/hooks/usePlateRecognition';
+import { 
+  loadSoundEnabled, 
+  saveSoundEnabled, 
+  loadSoundVolume, 
+  saveSoundVolume, 
+  testSound,
+  type SoundType 
+} from '@/react-app/utils/notificationSounds';
 
 interface BackupData {
   metadata: {
