@@ -24,7 +24,6 @@ import {
   loadSoundPresets,
   saveSoundPreset,
   SOUND_PRESETS,
-  type SoundType,
 } from '@/react-app/utils/notificationSounds';
 
 interface BackupData {
