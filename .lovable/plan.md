@@ -1,123 +1,129 @@
 
-# Plano: Mostrar Placa Cadastrada ao Invés da Detectada - v1.1.74
 
-## Diagnóstico
+# Plano: Sons de Notificação Diferenciados v1.1.72
 
-Analisando os dados do banco e o screenshot:
+## Objetivo
 
-### Situação Atual
-| Cadastro | Detecção | Resultado | Problema |
-|----------|----------|-----------|----------|
-| `SUI2I25` | `SOI2125` | ❌ Não encontrado | Duas diferenças: O↔U e 1↔I |
-| `SUI2I25` | `SOI2I25` | ✅ Morador Casa 85 | Apenas O↔U (match funciona) |
+Adicionar feedback sonoro diferenciado para cada tipo de detecção:
+- **Morador**: Som agradável de confirmação (tom verde)
+- **Visitante**: Som neutro de atenção (tom âmbar)
+- **Desconhecido**: Som de alerta (tom vermelho)
 
-### Causa Raiz
-1. **Variações limitadas**: As funções `generateVariations` e `generateAggressiveVariations` fazem apenas **uma substituição por vez**
-2. **Combinações não cobertas**: Quando OCR erra **dois caracteres** (O↔U e 1↔I), a placa cadastrada não é encontrada
-3. **Placa detectada salva**: Mesmo quando match funciona, `placaCadastrada` não está sendo usada corretamente em alguns casos
+## Abordagem Técnica
 
-### O que verificamos no banco:
-- Cadastrada: `SUI2I25` (Casa 85)
-- Detecção salva: `SOI2I25` (detectada, não cadastrada) ← **Bug!**
+Usar **Web Audio API** para gerar sons diretamente no navegador:
+- Sem necessidade de arquivos de áudio externos
+- Carregamento instantâneo
+- Controle total sobre frequência, duração e volume
+- Funciona mesmo offline (PWA)
 
 ---
 
-## Correções Necessárias
+## Arquivos a Criar/Modificar
 
-### 1. Corrigir `OCR_CORRECTIONS` para incluir O↔U bidirecional
+### 1. Criar `src/react-app/utils/notificationSounds.ts` (NOVO)
 
-**Arquivo**: `src/react-app/utils/plateValidator.ts`
-
-Adicionar `U` nas confusões de `O` e vice-versa:
+Utilitário para geração de sons via Web Audio API:
 
 ```typescript
-// Linha ~35
-'O': ['0', 'Q', 'D', 'C', 'U'],  // Adicionar 'U'
+// Tipos de som disponíveis
+type SoundType = 'morador' | 'visitante' | 'desconhecido';
 
-// Linha ~41
-'U': ['V', 'W', '0', 'O'],  // Adicionar 'O'
+// Configuração de cada som
+const SOUND_CONFIG = {
+  morador: {
+    // Som alegre: duas notas ascendentes
+    frequencies: [523, 659], // C5, E5
+    durations: [150, 200],
+    type: 'sine',
+  },
+  visitante: {
+    // Som neutro: uma nota simples
+    frequencies: [440], // A4
+    durations: [200],
+    type: 'sine',
+  },
+  desconhecido: {
+    // Som de alerta: duas notas descendentes
+    frequencies: [440, 330], // A4, E4
+    durations: [150, 250],
+    type: 'square',
+  },
+};
+
+// Função principal para tocar som
+export function playNotificationSound(type: SoundType): void;
+
+// Helpers para persistência
+export function loadSoundEnabled(): boolean;
+export function saveSoundEnabled(enabled: boolean): void;
+export function loadSoundVolume(): number;
+export function saveSoundVolume(volume: number): void;
 ```
 
-### 2. Gerar variações combinadas (até 2 substituições)
+### 2. Modificar `src/react-app/components/DetectionToast.tsx`
 
-Atualmente só gera variações com 1 substituição. Para capturar erros múltiplos do OCR, precisamos de combinações:
-
-```typescript
-// Nova função: generateCombinedVariations
-// Gera variações com ATÉ 2 substituições simultâneas
-// Ex: SOI2125 → SUI2I25 (troca O→U e 1→I)
-```
-
-### 3. Garantir que `placaCadastrada` seja sempre usada quando disponível
-
-Adicionar log de debug e verificar se `checkIfMorador` está retornando `placaCadastrada` corretamente.
-
----
-
-## Arquivos a Modificar
-
-| Arquivo | Mudança |
-|---------|---------|
-| `src/react-app/utils/plateValidator.ts` | Corrigir OCR_CORRECTIONS (O↔U) + nova função para combinações |
-| `src/react-app/contexts/MonitoringContext.tsx` | Adicionar logs para debug de placaCadastrada |
-| `src/react-app/pages/Configuracoes.tsx` | Versão 1.1.74 |
-
----
-
-## Detalhes Técnicos
-
-### Nova função `generateCombinedVariations`
+Adicionar reprodução de som ao mostrar toast:
 
 ```typescript
-export function generateCombinedVariations(plate: string): string[] {
-  const variations = new Set<string>();
-  const chars = plate.split('');
-  
-  // Primeira passada: variações simples (1 substituição)
-  const simpleVariations = generateAggressiveVariations(plate);
-  simpleVariations.forEach(v => variations.add(v));
-  
-  // Segunda passada: combinar variações (2 substituições)
-  // Para cada variação simples, gerar variações dela
-  for (const variant1 of simpleVariations) {
-    const variantChars = variant1.split('');
+import { playNotificationSound, loadSoundEnabled } from '@/react-app/utils/notificationSounds';
+
+useEffect(() => {
+  if (lastDetection && isActive && !isOnMonitoringPage) {
+    // ... código existente ...
     
-    // Apenas posições de letras (0, 1, 2) e posição 4
-    for (let i = 0; i < 3; i++) {
-      const alternatives = VISUAL_SIMILAR[variantChars[i]] || [];
-      for (const alt of alternatives) {
-        if (/[A-Z]/.test(alt) && alt !== variantChars[i]) {
-          const variant2 = [...variantChars];
-          variant2[i] = alt;
-          variations.add(correctByPosition(variant2.join('')));
-        }
+    // Tocar som baseado no tipo
+    if (loadSoundEnabled()) {
+      if (lastDetection.isMorador) {
+        playNotificationSound('morador');
+      } else if (lastDetection.isVisitante) {
+        playNotificationSound('visitante');
+      } else {
+        playNotificationSound('desconhecido');
       }
     }
   }
-  
-  // Limitar para evitar explosão combinatória
-  return Array.from(variations).slice(0, 100);
-}
+}, [lastDetection?.timestamp, isActive, isOnMonitoringPage]);
 ```
 
-### Exemplo de funcionamento
+### 3. Modificar `src/react-app/pages/Configuracoes.tsx`
 
-Placa detectada: `SOI2125`
+Adicionar seção de configuração de som:
 
-**Variações geradas (com combinações):**
-1. `SOI2125` (original)
-2. `S0I2125` (O→0)
-3. `SDI2125` (O→D)
-4. `SUI2125` (O→U) ← **Importante!**
-5. `SOI2I25` (1→I)
-6. `SUI2I25` (O→U + 1→I) ← **Match com cadastrada!**
+Nova seção "Notificações Sonoras":
+- Toggle para habilitar/desabilitar sons
+- Slider de volume (0-100%)
+- Botões de teste para cada tipo de som
+- Versão atualizada para 1.1.72
+
+---
+
+## Características dos Sons
+
+| Tipo | Frequências | Duração | Waveform | Sensação |
+|------|-------------|---------|----------|----------|
+| Morador | C5→E5 (523→659Hz) | 350ms total | Sine | Alegre, confirmação |
+| Visitante | A4 (440Hz) | 200ms | Sine | Neutro, atenção |
+| Desconhecido | A4→E4 (440→330Hz) | 400ms total | Square | Alerta, preocupação |
+
+---
+
+## Resumo das Mudanças
+
+| Arquivo | Ação |
+|---------|------|
+| `src/react-app/utils/notificationSounds.ts` | CRIAR - geração de sons via Web Audio API |
+| `src/react-app/components/DetectionToast.tsx` | MODIFICAR - tocar som ao exibir toast |
+| `src/react-app/pages/Configuracoes.tsx` | MODIFICAR - adicionar seção de configuração de sons + versão 1.1.72 |
 
 ---
 
 ## Resultado Esperado
 
-1. Quando OCR detectar `SOI2125` ou `SOI2I25`
-2. Sistema encontra match com `SUI2I25` (cadastrada)
-3. UI mostra **`SUI2125`** (placa cadastrada) ao invés da detectada
-4. Banco salva **`SUI2125`** para consistência
-5. Usuário vê a placa que cadastrou, não a leitura OCR com erros
+1. Ao detectar um **morador**: som alegre de duas notas ascendentes
+2. Ao detectar um **visitante**: som neutro de uma nota
+3. Ao detectar **desconhecido**: som de alerta com duas notas descendentes
+4. Usuário pode habilitar/desabilitar nas Configurações
+5. Usuário pode ajustar volume
+6. Botões de teste para ouvir cada som
+
