@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Save, Trash2, AlertTriangle, Settings as SettingsIcon, Hash, Car, CheckCircle, Upload, Download, Database, Loader2, FileJson, HardDrive, Lock, ShieldCheck, Gauge, Zap, Volume2, VolumeX, Play, Home, User, AlertCircle } from 'lucide-react';
+import { Save, Trash2, AlertTriangle, Settings as SettingsIcon, Hash, Car, CheckCircle, Upload, Download, Database, Loader2, FileJson, HardDrive, Lock, ShieldCheck, Gauge, Zap, Volume2, VolumeX, Play, Home, User, AlertCircle, Music } from 'lucide-react';
 import { useConfiguracoes } from '@/react-app/hooks/useApi';
 import StatsCard from '@/react-app/components/StatsCard';
 import { supabase } from '@/integrations/supabase/client';
@@ -20,6 +20,10 @@ import {
   loadSoundVolume, 
   saveSoundVolume, 
   testSound,
+  testPreset,
+  loadSoundPresets,
+  saveSoundPreset,
+  SOUND_PRESETS,
 } from '@/react-app/utils/notificationSounds';
 
 interface BackupData {
@@ -50,6 +54,7 @@ export default function Configuracoes() {
   // Estados para configuração de som
   const [soundEnabled, setSoundEnabled] = useState(loadSoundEnabled());
   const [soundVolume, setSoundVolume] = useState(loadSoundVolume() * 100); // Converter para 0-100
+  const [soundPresets, setSoundPresets] = useState(loadSoundPresets());
   
   // Estados para proteção da exclusão
   const [exclusaoDesbloqueada, setExclusaoDesbloqueada] = useState(false);
@@ -1138,9 +1143,128 @@ export default function Configuracoes() {
                 </div>
               </div>
               
-              {/* Botões de Teste */}
+              {/* Seleção de Presets por Tipo */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Music className="w-4 h-4 text-gray-600" />
+                  <p className="text-sm font-medium text-gray-700">Escolha o Som para Cada Tipo</p>
+                </div>
+                
+                {/* Preset Morador */}
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
+                      <Home className="w-3 h-3 text-white" />
+                    </div>
+                    <span className="text-sm font-medium text-green-800">Morador</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {SOUND_PRESETS.morador.map((preset) => (
+                      <button
+                        key={preset.id}
+                        onClick={() => {
+                          setSoundPresets(prev => ({ ...prev, morador: preset.id }));
+                          saveSoundPreset('morador', preset.id);
+                          testPreset('morador', preset.id);
+                        }}
+                        className={`flex items-center justify-between p-2 rounded-lg border-2 transition-all ${
+                          soundPresets.morador === preset.id
+                            ? 'border-green-500 bg-green-100'
+                            : 'border-green-200 bg-white hover:border-green-300'
+                        }`}
+                      >
+                        <div className="text-left">
+                          <p className="text-xs font-medium text-green-900">{preset.name}</p>
+                          <p className="text-[10px] text-green-600">{preset.description}</p>
+                        </div>
+                        {soundPresets.morador === preset.id ? (
+                          <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" />
+                        ) : (
+                          <Play className="w-3 h-3 text-green-400 flex-shrink-0" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Preset Visitante */}
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-6 h-6 rounded-full bg-amber-500 flex items-center justify-center">
+                      <User className="w-3 h-3 text-white" />
+                    </div>
+                    <span className="text-sm font-medium text-amber-800">Visitante</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {SOUND_PRESETS.visitante.map((preset) => (
+                      <button
+                        key={preset.id}
+                        onClick={() => {
+                          setSoundPresets(prev => ({ ...prev, visitante: preset.id }));
+                          saveSoundPreset('visitante', preset.id);
+                          testPreset('visitante', preset.id);
+                        }}
+                        className={`flex items-center justify-between p-2 rounded-lg border-2 transition-all ${
+                          soundPresets.visitante === preset.id
+                            ? 'border-amber-500 bg-amber-100'
+                            : 'border-amber-200 bg-white hover:border-amber-300'
+                        }`}
+                      >
+                        <div className="text-left">
+                          <p className="text-xs font-medium text-amber-900">{preset.name}</p>
+                          <p className="text-[10px] text-amber-600">{preset.description}</p>
+                        </div>
+                        {soundPresets.visitante === preset.id ? (
+                          <CheckCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                        ) : (
+                          <Play className="w-3 h-3 text-amber-400 flex-shrink-0" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Preset Desconhecido */}
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center">
+                      <AlertCircle className="w-3 h-3 text-white" />
+                    </div>
+                    <span className="text-sm font-medium text-red-800">Desconhecido</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {SOUND_PRESETS.desconhecido.map((preset) => (
+                      <button
+                        key={preset.id}
+                        onClick={() => {
+                          setSoundPresets(prev => ({ ...prev, desconhecido: preset.id }));
+                          saveSoundPreset('desconhecido', preset.id);
+                          testPreset('desconhecido', preset.id);
+                        }}
+                        className={`flex items-center justify-between p-2 rounded-lg border-2 transition-all ${
+                          soundPresets.desconhecido === preset.id
+                            ? 'border-red-500 bg-red-100'
+                            : 'border-red-200 bg-white hover:border-red-300'
+                        }`}
+                      >
+                        <div className="text-left">
+                          <p className="text-xs font-medium text-red-900">{preset.name}</p>
+                          <p className="text-[10px] text-red-600">{preset.description}</p>
+                        </div>
+                        {soundPresets.desconhecido === preset.id ? (
+                          <CheckCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
+                        ) : (
+                          <Play className="w-3 h-3 text-red-400 flex-shrink-0" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Botões de Teste Rápido */}
               <div>
-                <p className="text-sm font-medium text-gray-700 mb-3">Testar Sons</p>
+                <p className="text-sm font-medium text-gray-700 mb-3">Testar Sons Selecionados</p>
                 <div className="grid grid-cols-3 gap-2 sm:gap-3">
                   {/* Som Morador */}
                   <button
@@ -1187,7 +1311,7 @@ export default function Configuracoes() {
       {/* Rodapé com versão */}
       <div className="mt-8 pt-4 border-t border-gray-200 text-center">
         <p className="text-xs text-gray-400">
-          Versão do Sistema: <span className="font-mono font-medium text-gray-500">1.1.72</span> <span className="text-emerald-500">(Sons de Notificação)</span>
+          Versão do Sistema: <span className="font-mono font-medium text-gray-500">1.1.73</span> <span className="text-emerald-500">(Presets de Som)</span>
         </p>
       </div>
     </div>
