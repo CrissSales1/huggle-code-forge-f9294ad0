@@ -131,6 +131,44 @@ export default function Monitoramento() {
     carregarVeiculos();
   }, []);
 
+  // Desbloquear AudioContext na primeira interação do usuário
+  useEffect(() => {
+    const handleUserInteraction = () => {
+      unlockAudioContext();
+      // Remover listeners após desbloqueio
+      document.removeEventListener('click', handleUserInteraction);
+      document.removeEventListener('touchstart', handleUserInteraction);
+    };
+    
+    document.addEventListener('click', handleUserInteraction);
+    document.addEventListener('touchstart', handleUserInteraction);
+    
+    return () => {
+      document.removeEventListener('click', handleUserInteraction);
+      document.removeEventListener('touchstart', handleUserInteraction);
+    };
+  }, []);
+
+  // Tocar som quando houver nova detecção
+  const lastDetectionIdRef = useRef<number | null>(null);
+  
+  useEffect(() => {
+    if (latestDetection && latestDetection.id !== lastDetectionIdRef.current) {
+      lastDetectionIdRef.current = latestDetection.id;
+      
+      // Tocar som baseado no tipo de detecção
+      if (loadSoundEnabled()) {
+        if (latestDetection.morador) {
+          playNotificationSound('morador');
+        } else if (latestDetection.visitante) {
+          playNotificationSound('visitante');
+        } else {
+          playNotificationSound('desconhecido');
+        }
+      }
+    }
+  }, [latestDetection]);
+
   return (
     <div className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 lg:py-4 max-w-7xl mx-auto">
       <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
