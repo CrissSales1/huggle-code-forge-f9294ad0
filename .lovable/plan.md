@@ -1,76 +1,129 @@
 
-# Plano: Corrigir DetectionToast para Mostrar Visitantes v1.1.71
 
-## Diagnóstico
+# Plano: Sons de Notificação Diferenciados v1.1.72
 
-Analisando os screenshots e o código:
+## Objetivo
 
-### O que está acontecendo
-1. **Página Monitoramento**: Mostra corretamente "VISITANTE ATIVO" para GAE7B96 (Isabel, Casa 05)
-2. **Dashboard Toast**: Mostra "Veículo Desconhecido" para a mesma placa
+Adicionar feedback sonoro diferenciado para cada tipo de detecção:
+- **Morador**: Som agradável de confirmação (tom verde)
+- **Visitante**: Som neutro de atenção (tom âmbar)
+- **Desconhecido**: Som de alerta (tom vermelho)
 
-### Causa Raiz
-O componente `DetectionToast.tsx` (linha 65) verifica apenas `isMorador`:
+## Abordagem Técnica
 
-```typescript
-const isMorador = visibleDetection.isMorador;
-```
-
-Quando é um **visitante ativo** (`isVisitante: true, isMorador: false`), o toast trata como "desconhecido" porque:
-- `isMorador = false` → mostra vermelho "Veículo Desconhecido"
-
-O banco de dados está correto (`is_visitante: true, nome_visitante: ISABEL`), mas o toast ignora completamente a propriedade `isVisitante`.
+Usar **Web Audio API** para gerar sons diretamente no navegador:
+- Sem necessidade de arquivos de áudio externos
+- Carregamento instantâneo
+- Controle total sobre frequência, duração e volume
+- Funciona mesmo offline (PWA)
 
 ---
 
-## Correções Necessárias
+## Arquivos a Criar/Modificar
 
-### 1. `src/react-app/components/DetectionToast.tsx`
+### 1. Criar `src/react-app/utils/notificationSounds.ts` (NOVO)
 
-Adicionar lógica para reconhecer visitantes ativos:
+Utilitário para geração de sons via Web Audio API:
 
-**Mudanças:**
-- Verificar `isVisitante` além de `isMorador`
-- Adicionar estilo âmbar/amarelo para visitantes (consistente com Monitoramento)
-- Mostrar nome do visitante quando disponível
-
-**Antes (linha 65):**
 ```typescript
-const isMorador = visibleDetection.isMorador;
+// Tipos de som disponíveis
+type SoundType = 'morador' | 'visitante' | 'desconhecido';
+
+// Configuração de cada som
+const SOUND_CONFIG = {
+  morador: {
+    // Som alegre: duas notas ascendentes
+    frequencies: [523, 659], // C5, E5
+    durations: [150, 200],
+    type: 'sine',
+  },
+  visitante: {
+    // Som neutro: uma nota simples
+    frequencies: [440], // A4
+    durations: [200],
+    type: 'sine',
+  },
+  desconhecido: {
+    // Som de alerta: duas notas descendentes
+    frequencies: [440, 330], // A4, E4
+    durations: [150, 250],
+    type: 'square',
+  },
+};
+
+// Função principal para tocar som
+export function playNotificationSound(type: SoundType): void;
+
+// Helpers para persistência
+export function loadSoundEnabled(): boolean;
+export function saveSoundEnabled(enabled: boolean): void;
+export function loadSoundVolume(): number;
+export function saveSoundVolume(volume: number): void;
 ```
 
-**Depois:**
+### 2. Modificar `src/react-app/components/DetectionToast.tsx`
+
+Adicionar reprodução de som ao mostrar toast:
+
 ```typescript
-const isMorador = visibleDetection.isMorador;
-const isVisitante = visibleDetection.isVisitante;
-const isIdentificado = isMorador || isVisitante;
+import { playNotificationSound, loadSoundEnabled } from '@/react-app/utils/notificationSounds';
+
+useEffect(() => {
+  if (lastDetection && isActive && !isOnMonitoringPage) {
+    // ... código existente ...
+    
+    // Tocar som baseado no tipo
+    if (loadSoundEnabled()) {
+      if (lastDetection.isMorador) {
+        playNotificationSound('morador');
+      } else if (lastDetection.isVisitante) {
+        playNotificationSound('visitante');
+      } else {
+        playNotificationSound('desconhecido');
+      }
+    }
+  }
+}, [lastDetection?.timestamp, isActive, isOnMonitoringPage]);
 ```
 
-**Visual:**
-- Verde: Morador autorizado
-- Âmbar: Visitante ativo  
-- Vermelho: Veículo desconhecido
+### 3. Modificar `src/react-app/pages/Configuracoes.tsx`
 
-### 2. `src/react-app/pages/Configuracoes.tsx`
+Adicionar seção de configuração de som:
 
-Atualizar versão para `1.1.71 (Fix: Toast Visitante)`
+Nova seção "Notificações Sonoras":
+- Toggle para habilitar/desabilitar sons
+- Slider de volume (0-100%)
+- Botões de teste para cada tipo de som
+- Versão atualizada para 1.1.72
+
+---
+
+## Características dos Sons
+
+| Tipo | Frequências | Duração | Waveform | Sensação |
+|------|-------------|---------|----------|----------|
+| Morador | C5→E5 (523→659Hz) | 350ms total | Sine | Alegre, confirmação |
+| Visitante | A4 (440Hz) | 200ms | Sine | Neutro, atenção |
+| Desconhecido | A4→E4 (440→330Hz) | 400ms total | Square | Alerta, preocupação |
 
 ---
 
 ## Resumo das Mudanças
 
-| Arquivo | Mudança |
-|---------|---------|
-| `DetectionToast.tsx` | Adicionar verificação de `isVisitante` e estilo âmbar para visitantes |
-| `Configuracoes.tsx` | Versão 1.1.71 |
+| Arquivo | Ação |
+|---------|------|
+| `src/react-app/utils/notificationSounds.ts` | CRIAR - geração de sons via Web Audio API |
+| `src/react-app/components/DetectionToast.tsx` | MODIFICAR - tocar som ao exibir toast |
+| `src/react-app/pages/Configuracoes.tsx` | MODIFICAR - adicionar seção de configuração de sons + versão 1.1.72 |
 
 ---
 
 ## Resultado Esperado
 
-Após a correção:
-1. Detecção de GAE7B96 no Dashboard
-2. Toast aparece em **âmbar** (não vermelho)
-3. Mostra "Visitante Ativo" + nome "ISABEL"
-4. Mostra "Casa 05"
-5. Consistente com a página de Monitoramento
+1. Ao detectar um **morador**: som alegre de duas notas ascendentes
+2. Ao detectar um **visitante**: som neutro de uma nota
+3. Ao detectar **desconhecido**: som de alerta com duas notas descendentes
+4. Usuário pode habilitar/desabilitar nas Configurações
+5. Usuário pode ajustar volume
+6. Botões de teste para ouvir cada som
+
