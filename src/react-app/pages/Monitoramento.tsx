@@ -7,6 +7,7 @@ import EditarVeiculoMoradorModal from '@/react-app/components/EditarVeiculoMorad
 import MonitoramentoHelp from '@/react-app/pages/MonitoramentoHelp';
 import PlacaVeiculo from '@/react-app/components/PlacaVeiculo';
 import CameraMonitor, { PipelineData } from '@/react-app/components/CameraMonitor';
+import { playNotificationSound, loadSoundEnabled, unlockAudioContext } from '@/react-app/utils/notificationSounds';
 
 interface VeiculoMorador {
   id: number;
