@@ -55,6 +55,7 @@ export default function Configuracoes() {
   // Estados para configuração de som
   const [soundEnabled, setSoundEnabled] = useState(loadSoundEnabled());
   const [soundVolume, setSoundVolume] = useState(loadSoundVolume() * 100); // Converter para 0-100
+  const [soundPresets, setSoundPresets] = useState(loadSoundPresets());
   
   // Estados para proteção da exclusão
   const [exclusaoDesbloqueada, setExclusaoDesbloqueada] = useState(false);
