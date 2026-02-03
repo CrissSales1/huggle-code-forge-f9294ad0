@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Download, FileText, Clock, TrendingUp, ChevronLeft, ChevronRight, FileDown } from 'lucide-react';
+import { Search, Download, FileText, Clock, TrendingUp, ChevronLeft, ChevronRight, FileDown, ChevronDown, ChevronUp, X, Plus, Filter } from 'lucide-react';
 import { useRelatorios } from '@/react-app/hooks/useApi';
 import { normalizarNumeroCasa } from '@/react-app/utils/formatters';
 import PlacaVeiculo from '@/react-app/components/PlacaVeiculo';
@@ -15,7 +15,16 @@ export default function Relatorios() {
     placa_veiculo: '',
     pagina: 1,
     limite: 100,
+    excluir_observacoes: [],
+    excluir_nomes: [],
+    excluir_placas: [],
   });
+  
+  // Estados para inputs temporários de exclusão
+  const [novaExclusaoObs, setNovaExclusaoObs] = useState('');
+  const [novaExclusaoNome, setNovaExclusaoNome] = useState('');
+  const [novaExclusaoPlaca, setNovaExclusaoPlaca] = useState('');
+  const [mostrarFiltrosExclusao, setMostrarFiltrosExclusao] = useState(false);
   const [resultado, setResultado] = useState<RelatorioResultado>({
     visitantes: [],
     total_registros: 0,
@@ -47,7 +56,13 @@ export default function Relatorios() {
       placa_veiculo: '',
       pagina: 1,
       limite: 100,
+      excluir_observacoes: [],
+      excluir_nomes: [],
+      excluir_placas: [],
     });
+    setNovaExclusaoObs('');
+    setNovaExclusaoNome('');
+    setNovaExclusaoPlaca('');
     setResultado({
       visitantes: [],
       total_registros: 0,
@@ -56,6 +71,66 @@ export default function Relatorios() {
       limite_por_pagina: 100,
     });
   };
+
+  // Funções para adicionar/remover exclusões
+  const adicionarExclusaoObs = () => {
+    if (novaExclusaoObs.trim() && !filtros.excluir_observacoes?.includes(novaExclusaoObs.trim().toUpperCase())) {
+      setFiltros({
+        ...filtros,
+        excluir_observacoes: [...(filtros.excluir_observacoes || []), novaExclusaoObs.trim().toUpperCase()],
+        pagina: 1
+      });
+      setNovaExclusaoObs('');
+    }
+  };
+
+  const removerExclusaoObs = (termo: string) => {
+    setFiltros({
+      ...filtros,
+      excluir_observacoes: filtros.excluir_observacoes?.filter(t => t !== termo) || [],
+      pagina: 1
+    });
+  };
+
+  const adicionarExclusaoNome = () => {
+    if (novaExclusaoNome.trim() && !filtros.excluir_nomes?.includes(novaExclusaoNome.trim().toUpperCase())) {
+      setFiltros({
+        ...filtros,
+        excluir_nomes: [...(filtros.excluir_nomes || []), novaExclusaoNome.trim().toUpperCase()],
+        pagina: 1
+      });
+      setNovaExclusaoNome('');
+    }
+  };
+
+  const removerExclusaoNome = (nome: string) => {
+    setFiltros({
+      ...filtros,
+      excluir_nomes: filtros.excluir_nomes?.filter(n => n !== nome) || [],
+      pagina: 1
+    });
+  };
+
+  const adicionarExclusaoPlaca = () => {
+    if (novaExclusaoPlaca.trim() && !filtros.excluir_placas?.includes(novaExclusaoPlaca.trim().toUpperCase())) {
+      setFiltros({
+        ...filtros,
+        excluir_placas: [...(filtros.excluir_placas || []), novaExclusaoPlaca.trim().toUpperCase()],
+        pagina: 1
+      });
+      setNovaExclusaoPlaca('');
+    }
+  };
+
+  const removerExclusaoPlaca = (placa: string) => {
+    setFiltros({
+      ...filtros,
+      excluir_placas: filtros.excluir_placas?.filter(p => p !== placa) || [],
+      pagina: 1
+    });
+  };
+
+  const totalExclusoes = (filtros.excluir_observacoes?.length || 0) + (filtros.excluir_nomes?.length || 0) + (filtros.excluir_placas?.length || 0);
 
   const handleMudarPagina = (novaPagina: number) => {
     if (novaPagina >= 1 && novaPagina <= resultado.total_paginas) {
@@ -318,7 +393,163 @@ export default function Relatorios() {
           </div>
         </div>
         
-        <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
+        {/* Filtros de Exclusão (colapsável) */}
+        <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-gray-200">
+          <button
+            onClick={() => setMostrarFiltrosExclusao(!mostrarFiltrosExclusao)}
+            className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors"
+          >
+            <Filter className="w-4 h-4" />
+            <span>Filtros de Exclusão</span>
+            {totalExclusoes > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 text-xs bg-red-100 text-red-700 rounded-full">
+                {totalExclusoes}
+              </span>
+            )}
+            {mostrarFiltrosExclusao ? (
+              <ChevronUp className="w-4 h-4 ml-1" />
+            ) : (
+              <ChevronDown className="w-4 h-4 ml-1" />
+            )}
+          </button>
+          
+          {mostrarFiltrosExclusao && (
+            <div className="mt-3 p-3 sm:p-4 bg-red-50/50 border border-red-100 rounded-lg space-y-3 sm:space-y-4">
+              <p className="text-xs text-gray-500">
+                Use os filtros abaixo para <strong>ocultar</strong> visitantes específicos dos resultados.
+              </p>
+              
+              {/* Excluir por Observação */}
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
+                  Excluir por Observação
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={novaExclusaoObs}
+                    onChange={(e) => setNovaExclusaoObs(e.target.value.toUpperCase())}
+                    onKeyDown={(e) => e.key === 'Enter' && adicionarExclusaoObs()}
+                    placeholder="Ex: PERSONAL, ENTREGA..."
+                    className="flex-1 px-2 sm:px-3 py-1.5 sm:py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 uppercase"
+                  />
+                  <button
+                    onClick={adicionarExclusaoObs}
+                    disabled={!novaExclusaoObs.trim()}
+                    className="px-3 py-1.5 sm:py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+                {filtros.excluir_observacoes && filtros.excluir_observacoes.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {filtros.excluir_observacoes.map((termo) => (
+                      <span
+                        key={termo}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full"
+                      >
+                        {termo}
+                        <button
+                          onClick={() => removerExclusaoObs(termo)}
+                          className="hover:text-red-600"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+              
+              {/* Excluir por Nome */}
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
+                  Excluir por Nome
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={novaExclusaoNome}
+                    onChange={(e) => setNovaExclusaoNome(e.target.value.toUpperCase())}
+                    onKeyDown={(e) => e.key === 'Enter' && adicionarExclusaoNome()}
+                    placeholder="Ex: TIAGO, ADRIANO..."
+                    className="flex-1 px-2 sm:px-3 py-1.5 sm:py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 uppercase"
+                  />
+                  <button
+                    onClick={adicionarExclusaoNome}
+                    disabled={!novaExclusaoNome.trim()}
+                    className="px-3 py-1.5 sm:py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+                {filtros.excluir_nomes && filtros.excluir_nomes.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {filtros.excluir_nomes.map((nome) => (
+                      <span
+                        key={nome}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full"
+                      >
+                        {nome}
+                        <button
+                          onClick={() => removerExclusaoNome(nome)}
+                          className="hover:text-red-600"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+              
+              {/* Excluir por Placa */}
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
+                  Excluir por Placa
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={novaExclusaoPlaca}
+                    onChange={(e) => setNovaExclusaoPlaca(e.target.value.toUpperCase())}
+                    onKeyDown={(e) => e.key === 'Enter' && adicionarExclusaoPlaca()}
+                    placeholder="Ex: XXE7J66..."
+                    maxLength={7}
+                    className="flex-1 px-2 sm:px-3 py-1.5 sm:py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 uppercase"
+                  />
+                  <button
+                    onClick={adicionarExclusaoPlaca}
+                    disabled={!novaExclusaoPlaca.trim()}
+                    className="px-3 py-1.5 sm:py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+                {filtros.excluir_placas && filtros.excluir_placas.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {filtros.excluir_placas.map((placa) => (
+                      <span
+                        key={placa}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full"
+                      >
+                        {placa}
+                        <button
+                          onClick={() => removerExclusaoPlaca(placa)}
+                          className="hover:text-red-600"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+        
+        <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-3 mt-4">
           <button
             onClick={handleLimparFiltros}
             className="px-3 sm:px-4 py-2 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"

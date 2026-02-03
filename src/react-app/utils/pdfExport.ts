@@ -7,6 +7,9 @@ interface FiltrosAplicados {
   nome?: string;
   casa_visitada?: string;
   placa_veiculo?: string;
+  excluir_observacoes?: string[];
+  excluir_nomes?: string[];
+  excluir_placas?: string[];
 }
 
 interface Estatisticas {
@@ -66,6 +69,9 @@ export function exportarRelatorioPDF(
   if (filtros.nome) filtrosAtivos.push(`Nome: ${filtros.nome}`);
   if (filtros.casa_visitada) filtrosAtivos.push(`Casa: ${filtros.casa_visitada}`);
   if (filtros.placa_veiculo) filtrosAtivos.push(`Placa: ${filtros.placa_veiculo}`);
+  if (filtros.excluir_observacoes?.length) filtrosAtivos.push(`Excluindo obs: ${filtros.excluir_observacoes.join(', ')}`);
+  if (filtros.excluir_nomes?.length) filtrosAtivos.push(`Excluindo nomes: ${filtros.excluir_nomes.join(', ')}`);
+  if (filtros.excluir_placas?.length) filtrosAtivos.push(`Excluindo placas: ${filtros.excluir_placas.join(', ')}`);
   
   if (filtrosAtivos.length > 0) {
     doc.setFillColor(243, 244, 246); // gray-100
