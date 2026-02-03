@@ -75,6 +75,10 @@ export const FiltroRelatorioSchema = z.object({
   placa_veiculo: z.string().optional(),
   pagina: z.number().min(1).default(1),
   limite: z.number().min(1).max(1000).default(100),
+  // Filtros de exclusão
+  excluir_observacoes: z.array(z.string()).optional(),
+  excluir_nomes: z.array(z.string()).optional(),
+  excluir_placas: z.array(z.string()).optional(),
 });
 
 export const PrismaMagneticoSchema = z.object({

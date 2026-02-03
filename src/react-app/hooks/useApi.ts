@@ -515,6 +515,23 @@ export function useRelatorios() {
         query = query.ilike('placa_veiculo', `%${filtros.placa_veiculo}%`);
       }
 
+      // Filtros de exclusão
+      if (filtros.excluir_observacoes?.length) {
+        for (const termo of filtros.excluir_observacoes) {
+          query = query.not('observacoes', 'ilike', `%${termo}%`);
+        }
+      }
+      if (filtros.excluir_nomes?.length) {
+        for (const nome of filtros.excluir_nomes) {
+          query = query.not('nome', 'ilike', `%${nome}%`);
+        }
+      }
+      if (filtros.excluir_placas?.length) {
+        for (const placa of filtros.excluir_placas) {
+          query = query.not('placa_veiculo', 'eq', placa.toUpperCase());
+        }
+      }
+
       // Paginação
       const limite = filtros.limite || 100;
       const pagina = filtros.pagina || 1;
