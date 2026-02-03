@@ -21,6 +21,7 @@ interface VisitantePDF {
   casa_visitada: string;
   placa_veiculo: string;
   numero_prisma: number | null;
+  observacoes: string | null;
   hora_entrada: string;
   hora_saida: string | null;
   is_ativo: boolean;
@@ -32,7 +33,7 @@ export function exportarRelatorioPDF(
   filtros: FiltrosAplicados,
   estatisticas: Estatisticas | null
 ) {
-  const doc = new jsPDF();
+  const doc = new jsPDF({ orientation: 'landscape' });
   const pageWidth = doc.internal.pageSize.getWidth();
   
   // === CABEÇALHO ===
@@ -42,7 +43,7 @@ export function exportarRelatorioPDF(
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(24);
   doc.setFont('helvetica', 'bold');
-  doc.text('PortaCerta', pageWidth / 2, 18, { align: 'center' });
+  doc.text('Condomínio Aguas da Fonte', pageWidth / 2, 18, { align: 'center' });
   
   doc.setFontSize(12);
   doc.setFont('helvetica', 'normal');
@@ -114,6 +115,7 @@ export function exportarRelatorioPDF(
     v.casa_visitada,
     v.placa_veiculo,
     v.numero_prisma?.toString() || '-',
+    v.observacoes || '-',
     v.hora_entrada,
     v.hora_saida || '-',
     v.permanencia,
@@ -122,7 +124,7 @@ export function exportarRelatorioPDF(
   
   autoTable(doc, {
     startY: yPosition,
-    head: [['Nome', 'Casa', 'Placa', 'Prisma', 'Entrada', 'Saída', 'Permanência', 'Status']],
+    head: [['Nome', 'Casa', 'Placa', 'Prisma', 'Observações', 'Entrada', 'Saída', 'Permanência', 'Status']],
     body: dadosTabela,
     theme: 'striped',
     styles: { fontSize: 9, cellPadding: 3 },
@@ -132,12 +134,13 @@ export function exportarRelatorioPDF(
       fontStyle: 'bold'
     },
     columnStyles: {
-      0: { cellWidth: 35 }, // Nome
-      7: { halign: 'center' } // Status
+      0: { cellWidth: 40 }, // Nome
+      4: { cellWidth: 55 }, // Observações
+      8: { halign: 'center' } // Status
     },
     // Colorir status
     didParseCell: function(data) {
-      if (data.column.index === 7 && data.section === 'body') {
+      if (data.column.index === 8 && data.section === 'body') {
         if (data.cell.raw === 'Ativo') {
           data.cell.styles.textColor = [22, 163, 74]; // green-600
           data.cell.styles.fontStyle = 'bold';
@@ -153,7 +156,7 @@ export function exportarRelatorioPDF(
       doc.setFontSize(8);
       doc.setTextColor(150);
       doc.text(
-        `Página ${data.pageNumber} de ${pageCount} • PortaCerta v1.1.75`,
+        `Página ${data.pageNumber} de ${pageCount} • v1.1.76`,
         pageWidth / 2,
         doc.internal.pageSize.getHeight() - 10,
         { align: 'center' }
