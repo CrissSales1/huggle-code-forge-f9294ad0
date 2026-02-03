@@ -1,32 +1,38 @@
 
-# Plano: Filtros de Exclusão Avançados para Relatórios - v1.1.77
+
+# Plano: Corrigir Contagem e Exportação Completa - v1.1.78
 
 ## Problema Identificado
 
-Analisando o PDF enviado (casa 17), identifiquei o padrão:
+Analisando o PDF da Casa 17:
+- **Total Visitas**: 133 ✓ (correto, vem do `count`)
+- **Finalizadas**: 100 ✗ (incorreto, limitado pela paginação)
+- **PDF**: Apenas 100 registros ✗ (deveria ter todos os 133)
 
-| Visitante | Observação | Frequência | Problema |
-|-----------|------------|------------|----------|
-| TIAGO | PERSONAL | ~15 visitas | Congestiona relatório |
-| ADRIANO | PERSONAL | ~12 visitas | Congestiona relatório |
-| RONALDO CESAR | RG... PORTO SEGURO | 2 visitas | Visita real |
+### Causa Raiz
 
-O síndico quer ver apenas as visitas "reais" (não recorrentes), filtrando profissionais como personal trainers.
+O código atual calcula estatísticas e exporta PDF usando apenas `resultado.visitantes`, que é limitado a 100 registros por página:
+
+```typescript
+// calcularEstatisticas() - PROBLEMA
+visitasFinalizadas: resultado.visitantes.filter(v => v.hora_saida).length,
+// ↑ Apenas conta os 100 da página atual, não os 133 totais
+
+// exportarPDF() - PROBLEMA  
+const visitantesFormatados = resultado.visitantes.map(v => ({...}));
+// ↑ Apenas exporta os 100 da página atual
+```
 
 ---
 
-## Solução Proposta: Filtros de Exclusão
+## Solução
 
-Criar uma seção "Filtros Avançados" na página de Busca com opções para **excluir** registros específicos:
+### Duas abordagens necessárias:
 
-### Tipos de Filtros de Exclusão
-
-| Filtro | Descrição | Exemplo de Uso |
-|--------|-----------|----------------|
-| **Por Observação** | Excluir visitantes cuja observação contenha determinado texto | "PERSONAL", "ENTREGA", "UBER" |
-| **Por Nome** | Excluir visitantes com nome específico | "TIAGO", "ADRIANO" |
-| **Por Placa** | Excluir veículos específicos | "XXE7J66", "EYA1328" |
-| **Visitantes Frequentes** | Excluir quem tem mais de X visitas no período | Mais de 5 visitas = frequente |
+| Funcionalidade | Solução |
+|----------------|---------|
+| **Estatísticas** | Calcular no banco via query de agregação |
+| **Exportar PDF** | Buscar TODOS os registros (sem paginação) antes de exportar |
 
 ---
 
@@ -34,170 +40,154 @@ Criar uma seção "Filtros Avançados" na página de Busca com opções para **e
 
 | Arquivo | Mudanças |
 |---------|----------|
-| `src/shared/types.ts` | Adicionar campos de exclusão ao FiltroRelatorioSchema |
-| `src/react-app/pages/Relatorios.tsx` | Adicionar UI de filtros de exclusão |
-| `src/react-app/hooks/useApi.ts` | Implementar lógica de exclusão na query |
-| `src/react-app/utils/pdfExport.ts` | Incluir exclusões nos filtros do PDF |
-| `src/react-app/pages/Configuracoes.tsx` | Versão 1.1.77 |
-
----
-
-## Interface do Usuário
-
-### Nova Seção: Filtros de Exclusão (colapsável)
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│ 🔍 Filtros de Busca                                         │
-│ ┌───────────┐ ┌───────────┐ ┌───────────────┐ ┌───────────┐ │
-│ │Data Inicial│ │Data Final│ │Nome Visitante│ │Casa      │ │
-│ └───────────┘ └───────────┘ └───────────────┘ └───────────┘ │
-│                                                             │
-│ ▼ Filtros de Exclusão (ocultar visitantes indesejados)     │
-│ ┌─────────────────────────────────────────────────────────┐ │
-│ │ Excluir por Observação:  [___PERSONAL___] [+ Adicionar] │ │
-│ │   Tags: [PERSONAL ×] [ENTREGA ×] [UBER ×]              │ │
-│ │                                                         │ │
-│ │ Excluir por Nome:       [_______________] [+ Adicionar] │ │
-│ │   Tags: [TIAGO ×] [ADRIANO ×]                          │ │
-│ │                                                         │ │
-│ │ ☐ Excluir visitantes frequentes (mais de [5] visitas)  │ │
-│ └─────────────────────────────────────────────────────────┘ │
-│                                                             │
-│                          [Limpar] [🔍 Buscar]              │
-└─────────────────────────────────────────────────────────────┘
-```
+| `src/react-app/hooks/useApi.ts` | Adicionar função para buscar estatísticas e todos os dados |
+| `src/react-app/pages/Relatorios.tsx` | Usar nova função para estatísticas e exportação |
+| `src/react-app/pages/Configuracoes.tsx` | Versão 1.1.78 |
 
 ---
 
 ## Detalhes Técnicos
 
-### 1. Atualizar `FiltroRelatorioSchema` em `types.ts`
+### 1. Nova função em `useApi.ts`: `buscarTodosVisitantes`
+
+Buscar TODOS os registros (sem limite de 100) para exportação:
 
 ```typescript
-export const FiltroRelatorioSchema = z.object({
-  // Filtros existentes
-  data_inicial: z.string().optional(),
-  data_final: z.string().optional(),
-  nome: z.string().optional(),
-  casa_visitada: z.string().optional(),
-  placa_veiculo: z.string().optional(),
-  pagina: z.number().min(1).default(1),
-  limite: z.number().min(1).max(1000).default(100),
+const buscarTodosParaExportar = async (filtros: FiltroRelatorioType): Promise<VisitanteType[]> => {
+  // Query sem paginação (limite alto ou múltiplas chamadas)
+  let query = supabase
+    .from('visitantes')
+    .select('*');
   
-  // NOVOS: Filtros de exclusão
-  excluir_observacoes: z.array(z.string()).optional(), // ["PERSONAL", "ENTREGA"]
-  excluir_nomes: z.array(z.string()).optional(),       // ["TIAGO", "ADRIANO"]
-  excluir_placas: z.array(z.string()).optional(),      // ["XXE7J66"]
-  excluir_frequentes: z.boolean().optional(),          // true/false
-  limite_frequencia: z.number().min(1).optional(),     // 5 (padrão)
-});
+  // Aplicar mesmos filtros...
+  
+  // Buscar em lotes de 1000 para evitar limite do Supabase
+  const BATCH_SIZE = 1000;
+  let allData: VisitanteType[] = [];
+  let offset = 0;
+  let hasMore = true;
+  
+  while (hasMore) {
+    const { data } = await query.range(offset, offset + BATCH_SIZE - 1);
+    if (data && data.length > 0) {
+      allData.push(...data);
+      offset += BATCH_SIZE;
+      hasMore = data.length === BATCH_SIZE;
+    } else {
+      hasMore = false;
+    }
+  }
+  
+  return allData;
+};
 ```
 
-### 2. Lógica de Exclusão em `useApi.ts`
+### 2. Calcular estatísticas corretas
 
-A exclusão será aplicada em duas etapas:
-
-**Etapa 1 - Exclusão por texto (observações, nomes, placas):**
-- Usar filtros `not.ilike` do Supabase para excluir
-- Aplicar antes da paginação
-
-**Etapa 2 - Exclusão de frequentes (opcional):**
-- Buscar contagem de visitas por visitante
-- Filtrar localmente após receber dados
-- Ajustar contagem total para paginação correta
+A função `gerarRelatorio` retornará também as contagens corretas do banco:
 
 ```typescript
-// Exclusão por observação (cada termo)
-if (filtros.excluir_observacoes?.length) {
-  for (const termo of filtros.excluir_observacoes) {
-    query = query.not('observacoes', 'ilike', `%${termo}%`);
-  }
-}
+// Adicionar contagens separadas por status
+const { count: countFinalizadas } = await supabase
+  .from('visitantes')
+  .select('*', { count: 'exact', head: true })
+  .eq('is_ativo', false)
+  // ... mesmos filtros aplicados
 
-// Exclusão por nome
-if (filtros.excluir_nomes?.length) {
-  for (const nome of filtros.excluir_nomes) {
-    query = query.not('nome', 'ilike', `%${nome}%`);
-  }
-}
+const { count: countAtivas } = await supabase
+  .from('visitantes')
+  .select('*', { count: 'exact', head: true })
+  .eq('is_ativo', true)
+  // ... mesmos filtros aplicados
 
-// Exclusão por placa
-if (filtros.excluir_placas?.length) {
-  for (const placa of filtros.excluir_placas) {
-    query = query.not('placa_veiculo', 'eq', placa.toUpperCase());
-  }
-}
+return {
+  visitantes: data,
+  total_registros: totalRegistros,
+  total_finalizadas: countFinalizadas || 0,  // NOVO
+  total_ativas: countAtivas || 0,            // NOVO
+  // ...
+};
 ```
 
-### 3. Interface de Tags em `Relatorios.tsx`
-
-Componente de tags com input e remoção:
-
-```tsx
-// Estado para exclusões
-const [excluirObservacoes, setExcluirObservacoes] = useState<string[]>([]);
-const [excluirNomes, setExcluirNomes] = useState<string[]>([]);
-const [novaExclusaoObs, setNovaExclusaoObs] = useState('');
-const [novaExclusaoNome, setNovaExclusaoNome] = useState('');
-const [excluirFrequentes, setExcluirFrequentes] = useState(false);
-const [limiteFrequencia, setLimiteFrequencia] = useState(5);
-const [mostrarFiltrosExclusao, setMostrarFiltrosExclusao] = useState(false);
-
-// Componente de tag
-const Tag = ({ texto, onRemove }) => (
-  <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 
-                   text-red-800 text-xs rounded-full">
-    {texto}
-    <button onClick={onRemove} className="hover:text-red-600">
-      <X className="w-3 h-3" />
-    </button>
-  </span>
-);
-```
-
-### 4. Atualizar PDF para mostrar exclusões
+### 3. Modificar `exportarPDF` em `Relatorios.tsx`
 
 ```typescript
-// Em pdfExport.ts - adicionar exclusões aos filtros mostrados
-if (filtros.excluir_observacoes?.length) {
-  filtrosAtivos.push(`Excluindo obs: ${filtros.excluir_observacoes.join(', ')}`);
-}
-if (filtros.excluir_nomes?.length) {
-  filtrosAtivos.push(`Excluindo nomes: ${filtros.excluir_nomes.join(', ')}`);
+const exportarPDF = async () => {
+  if (resultado.total_registros === 0) {
+    alert('Não há dados para exportar.');
+    return;
+  }
+
+  // Buscar TODOS os registros (não apenas os da página atual)
+  const todosVisitantes = await buscarTodosParaExportar(filtros);
+  
+  const visitantesFormatados = todosVisitantes.map(v => ({...}));
+  
+  // Usar estatísticas corretas do banco
+  exportarRelatorioPDF(visitantesFormatados, filtros, {
+    totalVisitas: resultado.total_registros,
+    visitasFinalizadas: resultado.total_finalizadas,  // Do banco
+    visitasAtivas: resultado.total_ativas,            // Do banco
+    tempoMedioPermanencia: tempoMedio
+  });
+};
+```
+
+### 4. Atualizar tipo `RelatorioResultado`
+
+```typescript
+export interface RelatorioResultado {
+  visitantes: VisitanteType[];
+  total_registros: number;
+  total_finalizadas: number;  // NOVO
+  total_ativas: number;       // NOVO
+  pagina_atual: number;
+  total_paginas: number;
+  limite_por_pagina: number;
 }
 ```
 
 ---
 
-## Fluxo do Usuário
+## Fluxo Corrigido
 
-1. Síndico acessa página de Busca
-2. Filtra por Casa = "17" e período desejado
-3. Expande "Filtros de Exclusão"
-4. Digita "PERSONAL" e clica "Adicionar" (ou Enter)
-5. Tag [PERSONAL ×] aparece
-6. Opcionalmente adiciona nomes específicos
-7. Clica "Buscar"
-8. Resultado mostra apenas visitas reais (sem personal trainers)
-9. PDF gerado inclui nota "Excluindo obs: PERSONAL"
+```text
+Usuário busca Casa 17
+        ↓
+┌─────────────────────────────────┐
+│ Query com count: 133 registros  │
+│ Query finalizadas: 133          │  ← Estatísticas do banco
+│ Query ativas: 0                 │
+│ Dados página 1: 100 registros   │  ← Paginação normal
+└─────────────────────────────────┘
+        ↓
+Tela mostra: Total 133 | Finalizadas 133 | Ativas 0
+        ↓
+Usuário clica "Exportar PDF"
+        ↓
+┌─────────────────────────────────┐
+│ Buscar TODOS (sem paginação)    │
+│ → 133 registros                 │
+└─────────────────────────────────┘
+        ↓
+PDF gerado com 133 registros ✓
+```
 
 ---
 
-## Benefícios
+## Resultado Esperado
 
-| Benefício | Descrição |
-|-----------|-----------|
-| **Flexibilidade** | Síndico controla exatamente o que quer ver |
-| **Múltiplas exclusões** | Pode excluir várias categorias simultaneamente |
-| **Persistente no PDF** | Relatório documenta quais exclusões foram aplicadas |
-| **Não destrutivo** | Dados não são alterados, apenas filtrados da visualização |
-| **Reutilizável** | Tags ficam visíveis para referência |
+| Antes | Depois |
+|-------|--------|
+| Total: 133 ✓ | Total: 133 ✓ |
+| Finalizadas: 100 ✗ | Finalizadas: 133 ✓ |
+| PDF: 100 registros ✗ | PDF: 133 registros ✓ |
 
 ---
 
 ## Versão
 
 ```
-Versão 1.1.77 (Filtros de Exclusão)
+Versão 1.1.78 (Exportação Completa)
 ```
+
