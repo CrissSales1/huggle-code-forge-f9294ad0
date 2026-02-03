@@ -119,6 +119,7 @@ export default function Relatorios() {
       casa_visitada: v.casa_visitada || '',
       placa_veiculo: v.placa_veiculo || '',
       numero_prisma: v.numero_prisma || null,
+      observacoes: v.observacoes || null,
       hora_entrada: formatarDataHora(v.hora_entrada!),
       hora_saida: v.hora_saida ? formatarDataHora(v.hora_saida) : null,
       is_ativo: !!v.is_ativo,
