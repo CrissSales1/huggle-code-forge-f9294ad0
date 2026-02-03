@@ -25,9 +25,12 @@ export default function Monitoramento() {
   const [searchTerm, setSearchTerm] = useState('');
   const [pipelineData, setPipelineData] = useState<PipelineData | null>(null);
   
-  // v1.1.79: Estados para histórico clicável
+  // v1.1.80: Estados para histórico clicável
   const [selectedDetectionId, setSelectedDetectionId] = useState<number | null>(null);
-  const [pipelineHistory, setPipelineHistory] = useState<Map<number, PipelineData>>(new Map());
+  // v1.1.80: Buffer de pipeline por placa (mais confiável que por ID devido ao delay do realtime)
+  const [pipelineByPlate, setPipelineByPlate] = useState<Map<string, PipelineData>>(new Map());
+  // v1.1.80: Ref para detectar nova detecção e resetar seleção
+  const prevLatestIdRef = useRef<number | null>(null);
 
   // Filtragem e ordenação numérica dos veículos
   const veiculosFiltrados = useMemo(() => {
@@ -173,31 +176,39 @@ export default function Monitoramento() {
     }
   }, [latestDetection]);
 
-  // v1.1.79: Armazenar pipeline da última detecção
+  // v1.1.80: Resetar seleção quando nova detecção chegar (prioridade é saber quem está chegando)
   useEffect(() => {
-    if (latestDetection?.id && pipelineData) {
-      setPipelineHistory(prev => {
-        const updated = new Map(prev);
-        // Guardar pipeline para esta detecção
-        updated.set(latestDetection.id, { ...pipelineData });
-        
-        // Manter apenas os 10 mais recentes (baseado no histórico atual)
-        if (updated.size > 10) {
-          const idsNoHistorico = new Set(detectionHistory.map(d => d?.id).filter(Boolean));
-          idsNoHistorico.add(latestDetection.id); // Incluir o atual
-          for (const key of updated.keys()) {
-            if (!idsNoHistorico.has(key)) {
-              updated.delete(key);
-            }
-          }
-        }
-        
-        return updated;
-      });
+    if (latestDetection?.id && latestDetection.id !== prevLatestIdRef.current) {
+      prevLatestIdRef.current = latestDetection.id;
+      // Nova detecção chegou - voltar ao modo automático
+      if (selectedDetectionId !== null) {
+        setSelectedDetectionId(null);
+      }
     }
-  }, [latestDetection?.id, pipelineData, detectionHistory]);
+  }, [latestDetection?.id]);
 
-  // v1.1.79: Limpar seleção se o item selecionado não está mais no histórico
+  // v1.1.80: Salvar pipeline por placa (mais confiável que por ID)
+  useEffect(() => {
+    if (pipelineData?.rawText) {
+      const placa = pipelineData.rawText.replace(/[^A-Z0-9]/g, '').toUpperCase();
+      if (placa.length >= 7) {
+        setPipelineByPlate(prev => {
+          const updated = new Map(prev);
+          updated.set(placa, { ...pipelineData });
+          
+          // Manter apenas as 15 mais recentes
+          if (updated.size > 15) {
+            const oldest = updated.keys().next().value;
+            if (oldest) updated.delete(oldest);
+          }
+          
+          return updated;
+        });
+      }
+    }
+  }, [pipelineData]);
+
+  // v1.1.80: Limpar seleção se o item selecionado não está mais no histórico
   useEffect(() => {
     if (selectedDetectionId !== null) {
       const aindaNoHistorico = detectionHistory.some(d => d.id === selectedDetectionId);
@@ -225,11 +236,17 @@ export default function Monitoramento() {
     return fromHistory || latestDetection;
   }, [selectedDetectionId, latestDetection, detectionHistory]);
 
-  // v1.1.79: Determinar qual pipeline exibir
+  // v1.1.80: Determinar qual pipeline exibir (por placa para evitar problemas de timing)
   const displayedPipeline = useMemo(() => {
     if (selectedDetectionId === null) return pipelineData;
-    return pipelineHistory.get(selectedDetectionId) || null;
-  }, [selectedDetectionId, pipelineData, pipelineHistory]);
+    
+    const detection = detectionHistory.find(d => d.id === selectedDetectionId);
+    if (!detection) return pipelineData;
+    
+    // Buscar pipeline pela placa (mais confiável que por ID)
+    const placaLimpa = detection.placa.replace(/[^A-Z0-9]/g, '').toUpperCase();
+    return pipelineByPlate.get(placaLimpa) || null;
+  }, [selectedDetectionId, pipelineData, detectionHistory, pipelineByPlate]);
 
   return (
     <div className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 lg:py-4 max-w-7xl mx-auto">
