@@ -1,16 +1,32 @@
 
-
-# Plano: Corrigir PDF de Relatórios - v1.1.76
+# Plano: Filtros de Exclusão Avançados para Relatórios - v1.1.77
 
 ## Problema Identificado
 
-O usuário identificou 3 problemas no PDF de relatórios:
+Analisando o PDF enviado (casa 17), identifiquei o padrão:
 
-| Problema | Situação Atual | Correção |
-|----------|----------------|----------|
-| Nome do sistema | "PortaCerta" | "Condomínio Aguas da Fonte" |
-| Coluna Observações | Ausente no PDF | Adicionar coluna |
-| Orientação | Retrato (estreito) | Paisagem (horizontal) |
+| Visitante | Observação | Frequência | Problema |
+|-----------|------------|------------|----------|
+| TIAGO | PERSONAL | ~15 visitas | Congestiona relatório |
+| ADRIANO | PERSONAL | ~12 visitas | Congestiona relatório |
+| RONALDO CESAR | RG... PORTO SEGURO | 2 visitas | Visita real |
+
+O síndico quer ver apenas as visitas "reais" (não recorrentes), filtrando profissionais como personal trainers.
+
+---
+
+## Solução Proposta: Filtros de Exclusão
+
+Criar uma seção "Filtros Avançados" na página de Busca com opções para **excluir** registros específicos:
+
+### Tipos de Filtros de Exclusão
+
+| Filtro | Descrição | Exemplo de Uso |
+|--------|-----------|----------------|
+| **Por Observação** | Excluir visitantes cuja observação contenha determinado texto | "PERSONAL", "ENTREGA", "UBER" |
+| **Por Nome** | Excluir visitantes com nome específico | "TIAGO", "ADRIANO" |
+| **Por Placa** | Excluir veículos específicos | "XXE7J66", "EYA1328" |
+| **Visitantes Frequentes** | Excluir quem tem mais de X visitas no período | Mais de 5 visitas = frequente |
 
 ---
 
@@ -18,114 +34,170 @@ O usuário identificou 3 problemas no PDF de relatórios:
 
 | Arquivo | Mudanças |
 |---------|----------|
-| `src/react-app/utils/pdfExport.ts` | Trocar nome, adicionar observações, orientação paisagem |
-| `src/react-app/pages/Relatorios.tsx` | Passar observações para o PDF |
-| `src/react-app/pages/Configuracoes.tsx` | Versão 1.1.76 |
+| `src/shared/types.ts` | Adicionar campos de exclusão ao FiltroRelatorioSchema |
+| `src/react-app/pages/Relatorios.tsx` | Adicionar UI de filtros de exclusão |
+| `src/react-app/hooks/useApi.ts` | Implementar lógica de exclusão na query |
+| `src/react-app/utils/pdfExport.ts` | Incluir exclusões nos filtros do PDF |
+| `src/react-app/pages/Configuracoes.tsx` | Versão 1.1.77 |
+
+---
+
+## Interface do Usuário
+
+### Nova Seção: Filtros de Exclusão (colapsável)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 🔍 Filtros de Busca                                         │
+│ ┌───────────┐ ┌───────────┐ ┌───────────────┐ ┌───────────┐ │
+│ │Data Inicial│ │Data Final│ │Nome Visitante│ │Casa      │ │
+│ └───────────┘ └───────────┘ └───────────────┘ └───────────┘ │
+│                                                             │
+│ ▼ Filtros de Exclusão (ocultar visitantes indesejados)     │
+│ ┌─────────────────────────────────────────────────────────┐ │
+│ │ Excluir por Observação:  [___PERSONAL___] [+ Adicionar] │ │
+│ │   Tags: [PERSONAL ×] [ENTREGA ×] [UBER ×]              │ │
+│ │                                                         │ │
+│ │ Excluir por Nome:       [_______________] [+ Adicionar] │ │
+│ │   Tags: [TIAGO ×] [ADRIANO ×]                          │ │
+│ │                                                         │ │
+│ │ ☐ Excluir visitantes frequentes (mais de [5] visitas)  │ │
+│ └─────────────────────────────────────────────────────────┘ │
+│                                                             │
+│                          [Limpar] [🔍 Buscar]              │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ---
 
 ## Detalhes Técnicos
 
-### 1. `pdfExport.ts` - Mudanças
+### 1. Atualizar `FiltroRelatorioSchema` em `types.ts`
 
-**Orientação paisagem:**
 ```typescript
-// Antes
-const doc = new jsPDF();
-
-// Depois
-const doc = new jsPDF({ orientation: 'landscape' });
+export const FiltroRelatorioSchema = z.object({
+  // Filtros existentes
+  data_inicial: z.string().optional(),
+  data_final: z.string().optional(),
+  nome: z.string().optional(),
+  casa_visitada: z.string().optional(),
+  placa_veiculo: z.string().optional(),
+  pagina: z.number().min(1).default(1),
+  limite: z.number().min(1).max(1000).default(100),
+  
+  // NOVOS: Filtros de exclusão
+  excluir_observacoes: z.array(z.string()).optional(), // ["PERSONAL", "ENTREGA"]
+  excluir_nomes: z.array(z.string()).optional(),       // ["TIAGO", "ADRIANO"]
+  excluir_placas: z.array(z.string()).optional(),      // ["XXE7J66"]
+  excluir_frequentes: z.boolean().optional(),          // true/false
+  limite_frequencia: z.number().min(1).optional(),     // 5 (padrão)
+});
 ```
 
-**Nome do sistema (cabeçalho):**
+### 2. Lógica de Exclusão em `useApi.ts`
+
+A exclusão será aplicada em duas etapas:
+
+**Etapa 1 - Exclusão por texto (observações, nomes, placas):**
+- Usar filtros `not.ilike` do Supabase para excluir
+- Aplicar antes da paginação
+
+**Etapa 2 - Exclusão de frequentes (opcional):**
+- Buscar contagem de visitas por visitante
+- Filtrar localmente após receber dados
+- Ajustar contagem total para paginação correta
+
 ```typescript
-// Antes
-doc.text('PortaCerta', pageWidth / 2, 18, { align: 'center' });
+// Exclusão por observação (cada termo)
+if (filtros.excluir_observacoes?.length) {
+  for (const termo of filtros.excluir_observacoes) {
+    query = query.not('observacoes', 'ilike', `%${termo}%`);
+  }
+}
 
-// Depois
-doc.text('Condomínio Aguas da Fonte', pageWidth / 2, 18, { align: 'center' });
-```
+// Exclusão por nome
+if (filtros.excluir_nomes?.length) {
+  for (const nome of filtros.excluir_nomes) {
+    query = query.not('nome', 'ilike', `%${nome}%`);
+  }
+}
 
-**Rodapé:**
-```typescript
-// Antes
-`Página ${data.pageNumber} de ${pageCount} • PortaCerta v1.1.75`
-
-// Depois
-`Página ${data.pageNumber} de ${pageCount} • v1.1.76`
-```
-
-**Interface VisitantePDF - adicionar observações:**
-```typescript
-interface VisitantePDF {
-  // ... campos existentes
-  observacoes: string | null; // NOVO
+// Exclusão por placa
+if (filtros.excluir_placas?.length) {
+  for (const placa of filtros.excluir_placas) {
+    query = query.not('placa_veiculo', 'eq', placa.toUpperCase());
+  }
 }
 ```
 
-**Tabela de visitantes - adicionar coluna:**
+### 3. Interface de Tags em `Relatorios.tsx`
+
+Componente de tags com input e remoção:
+
+```tsx
+// Estado para exclusões
+const [excluirObservacoes, setExcluirObservacoes] = useState<string[]>([]);
+const [excluirNomes, setExcluirNomes] = useState<string[]>([]);
+const [novaExclusaoObs, setNovaExclusaoObs] = useState('');
+const [novaExclusaoNome, setNovaExclusaoNome] = useState('');
+const [excluirFrequentes, setExcluirFrequentes] = useState(false);
+const [limiteFrequencia, setLimiteFrequencia] = useState(5);
+const [mostrarFiltrosExclusao, setMostrarFiltrosExclusao] = useState(false);
+
+// Componente de tag
+const Tag = ({ texto, onRemove }) => (
+  <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 
+                   text-red-800 text-xs rounded-full">
+    {texto}
+    <button onClick={onRemove} className="hover:text-red-600">
+      <X className="w-3 h-3" />
+    </button>
+  </span>
+);
+```
+
+### 4. Atualizar PDF para mostrar exclusões
+
 ```typescript
-// Colunas
-head: [['Nome', 'Casa', 'Placa', 'Prisma', 'Observações', 'Entrada', 'Saída', 'Permanência', 'Status']]
-
-// Dados
-const dadosTabela = visitantes.map(v => [
-  v.nome,
-  v.casa_visitada,
-  v.placa_veiculo,
-  v.numero_prisma?.toString() || '-',
-  v.observacoes || '-',  // NOVO
-  v.hora_entrada,
-  v.hora_saida || '-',
-  v.permanencia,
-  v.is_ativo ? 'Ativo' : 'Finalizado'
-]);
-
-// Ajustar índice do Status
-columnStyles: {
-  0: { cellWidth: 35 },
-  4: { cellWidth: 50 }, // Observações
-  8: { halign: 'center' } // Status (era 7, agora é 8)
+// Em pdfExport.ts - adicionar exclusões aos filtros mostrados
+if (filtros.excluir_observacoes?.length) {
+  filtrosAtivos.push(`Excluindo obs: ${filtros.excluir_observacoes.join(', ')}`);
 }
-```
-
-### 2. `Relatorios.tsx` - Passar observações
-
-```typescript
-const visitantesFormatados = resultado.visitantes.map(v => ({
-  // ... campos existentes
-  observacoes: v.observacoes || null  // NOVO
-}));
-```
-
-### 3. Atualizar versão
-
-```
-Versão 1.1.76 (PDF Paisagem + Observações)
+if (filtros.excluir_nomes?.length) {
+  filtrosAtivos.push(`Excluindo nomes: ${filtros.excluir_nomes.join(', ')}`);
+}
 ```
 
 ---
 
-## Resultado Esperado
+## Fluxo do Usuário
 
-```text
-┌────────────────────────────────────────────────────────────────────────────────────┐
-│                    Condomínio Aguas da Fonte                                        │
-│                     Relatório de Visitantes                                         │
-│                 Gerado em: 03/02/2026 às 19:10                                     │
-├────────────────────────────────────────────────────────────────────────────────────┤
-│ Nome    │Casa│ Placa   │Prisma│ Observações          │Entrada    │Saída     │Perm.│Status    │
-├─────────┼────┼─────────┼──────┼──────────────────────┼───────────┼──────────┼─────┼──────────┤
-│ RONALDO │ 17 │HEJ7D81  │  8   │ RG276717971 PORTO... │03/02 13:44│03/02 17:0│3h19m│Finalizado│
-│ TIAGO   │ 17 │XXE7J66  │  1   │ -                    │02/02 19:05│02/02 20:1│1h7m │Finalizado│
-└─────────┴────┴─────────┴──────┴──────────────────────┴───────────┴──────────┴─────┴──────────┘
-│                        Página 1 de 6 • v1.1.76                                      │
-└────────────────────────────────────────────────────────────────────────────────────┘
+1. Síndico acessa página de Busca
+2. Filtra por Casa = "17" e período desejado
+3. Expande "Filtros de Exclusão"
+4. Digita "PERSONAL" e clica "Adicionar" (ou Enter)
+5. Tag [PERSONAL ×] aparece
+6. Opcionalmente adiciona nomes específicos
+7. Clica "Buscar"
+8. Resultado mostra apenas visitas reais (sem personal trainers)
+9. PDF gerado inclui nota "Excluindo obs: PERSONAL"
+
+---
+
+## Benefícios
+
+| Benefício | Descrição |
+|-----------|-----------|
+| **Flexibilidade** | Síndico controla exatamente o que quer ver |
+| **Múltiplas exclusões** | Pode excluir várias categorias simultaneamente |
+| **Persistente no PDF** | Relatório documenta quais exclusões foram aplicadas |
+| **Não destrutivo** | Dados não são alterados, apenas filtrados da visualização |
+| **Reutilizável** | Tags ficam visíveis para referência |
+
+---
+
+## Versão
+
 ```
-
-## Benefícios da Orientação Paisagem
-
-- **+130mm de largura** (297mm vs 210mm)
-- Mais espaço para todas as 9 colunas
-- Observações cabem sem truncar
-
+Versão 1.1.77 (Filtros de Exclusão)
+```
