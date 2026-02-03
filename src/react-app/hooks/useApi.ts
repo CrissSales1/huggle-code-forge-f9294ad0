@@ -476,6 +476,81 @@ export function useVisitanteActions() {
   return { cadastrarVisitante, registrarSaida, editarVisitante, buscarVisitantes, buscarVisitantesSimilares, loading, error };
 }
 
+// Função para buscar TODOS os visitantes (sem paginação) para exportação
+export async function buscarTodosParaExportar(filtros: FiltroRelatorioType): Promise<VisitanteType[]> {
+  const BATCH_SIZE = 1000;
+  const allData: VisitanteType[] = [];
+  let offset = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    let query = supabase
+      .from('visitantes')
+      .select('*');
+
+    // Aplicar filtros
+    if (filtros.data_inicial) {
+      query = query.gte('hora_entrada', filtros.data_inicial);
+    }
+    if (filtros.data_final) {
+      query = query.lte('hora_entrada', filtros.data_final);
+    }
+    if (filtros.nome) {
+      query = query.ilike('nome', `%${filtros.nome}%`);
+    }
+    if (filtros.casa_visitada) {
+      const casaNormalizada = filtros.casa_visitada;
+      const casaSemZero = casaNormalizada.replace(/^0/, '');
+      if (casaNormalizada !== casaSemZero) {
+        query = query.or(`casa_visitada.ilike.%${casaNormalizada}%,casa_visitada.ilike.%${casaSemZero}%`);
+      } else {
+        query = query.ilike('casa_visitada', `%${casaNormalizada}%`);
+      }
+    }
+    if (filtros.placa_veiculo) {
+      query = query.ilike('placa_veiculo', `%${filtros.placa_veiculo}%`);
+    }
+    // Filtros de exclusão
+    if (filtros.excluir_observacoes?.length) {
+      for (const termo of filtros.excluir_observacoes) {
+        query = query.not('observacoes', 'ilike', `%${termo}%`);
+      }
+    }
+    if (filtros.excluir_nomes?.length) {
+      for (const nome of filtros.excluir_nomes) {
+        query = query.not('nome', 'ilike', `%${nome}%`);
+      }
+    }
+    if (filtros.excluir_placas?.length) {
+      for (const placa of filtros.excluir_placas) {
+        query = query.not('placa_veiculo', 'eq', placa.toUpperCase());
+      }
+    }
+
+    query = query
+      .order('hora_entrada', { ascending: false })
+      .range(offset, offset + BATCH_SIZE - 1);
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Erro ao buscar dados para exportar:', error);
+      break;
+    }
+
+    if (data && data.length > 0) {
+      allData.push(...(data as VisitanteType[]));
+      offset += BATCH_SIZE;
+      hasMore = data.length === BATCH_SIZE;
+    } else {
+      hasMore = false;
+    }
+  }
+
+  return allData;
+}
+
+
 // Hook para relatórios
 export function useRelatorios() {
   const [loading, setLoading] = useState(false);
@@ -486,6 +561,7 @@ export function useRelatorios() {
       setLoading(true);
       setError(null);
 
+      // Query principal com paginação
       let query = supabase
         .from('visitantes')
         .select('*', { count: 'exact' });
@@ -501,11 +577,9 @@ export function useRelatorios() {
         query = query.ilike('nome', `%${filtros.nome}%`);
       }
       if (filtros.casa_visitada) {
-        // Buscar tanto o valor original quanto a versão normalizada (ex: "1" busca "01" também)
         const casaNormalizada = filtros.casa_visitada;
         const casaSemZero = casaNormalizada.replace(/^0/, '');
         if (casaNormalizada !== casaSemZero) {
-          // Se foi normalizado, busca ambos
           query = query.or(`casa_visitada.ilike.%${casaNormalizada}%,casa_visitada.ilike.%${casaSemZero}%`);
         } else {
           query = query.ilike('casa_visitada', `%${casaNormalizada}%`);
@@ -514,7 +588,6 @@ export function useRelatorios() {
       if (filtros.placa_veiculo) {
         query = query.ilike('placa_veiculo', `%${filtros.placa_veiculo}%`);
       }
-
       // Filtros de exclusão
       if (filtros.excluir_observacoes?.length) {
         for (const termo of filtros.excluir_observacoes) {
@@ -541,7 +614,74 @@ export function useRelatorios() {
         .order('hora_entrada', { ascending: false })
         .range(offset, offset + limite - 1);
 
-      const { data, error: queryError, count } = await query;
+      // Queries para contagem correta de finalizadas e ativas (com mesmos filtros)
+      let queryFinalizadas = supabase
+        .from('visitantes')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_ativo', false);
+
+      let queryAtivas = supabase
+        .from('visitantes')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_ativo', true);
+
+      // Aplicar mesmos filtros às queries de contagem
+      if (filtros.data_inicial) {
+        queryFinalizadas = queryFinalizadas.gte('hora_entrada', filtros.data_inicial);
+        queryAtivas = queryAtivas.gte('hora_entrada', filtros.data_inicial);
+      }
+      if (filtros.data_final) {
+        queryFinalizadas = queryFinalizadas.lte('hora_entrada', filtros.data_final);
+        queryAtivas = queryAtivas.lte('hora_entrada', filtros.data_final);
+      }
+      if (filtros.nome) {
+        queryFinalizadas = queryFinalizadas.ilike('nome', `%${filtros.nome}%`);
+        queryAtivas = queryAtivas.ilike('nome', `%${filtros.nome}%`);
+      }
+      if (filtros.casa_visitada) {
+        const casaNormalizada = filtros.casa_visitada;
+        const casaSemZero = casaNormalizada.replace(/^0/, '');
+        if (casaNormalizada !== casaSemZero) {
+          queryFinalizadas = queryFinalizadas.or(`casa_visitada.ilike.%${casaNormalizada}%,casa_visitada.ilike.%${casaSemZero}%`);
+          queryAtivas = queryAtivas.or(`casa_visitada.ilike.%${casaNormalizada}%,casa_visitada.ilike.%${casaSemZero}%`);
+        } else {
+          queryFinalizadas = queryFinalizadas.ilike('casa_visitada', `%${casaNormalizada}%`);
+          queryAtivas = queryAtivas.ilike('casa_visitada', `%${casaNormalizada}%`);
+        }
+      }
+      if (filtros.placa_veiculo) {
+        queryFinalizadas = queryFinalizadas.ilike('placa_veiculo', `%${filtros.placa_veiculo}%`);
+        queryAtivas = queryAtivas.ilike('placa_veiculo', `%${filtros.placa_veiculo}%`);
+      }
+      if (filtros.excluir_observacoes?.length) {
+        for (const termo of filtros.excluir_observacoes) {
+          queryFinalizadas = queryFinalizadas.not('observacoes', 'ilike', `%${termo}%`);
+          queryAtivas = queryAtivas.not('observacoes', 'ilike', `%${termo}%`);
+        }
+      }
+      if (filtros.excluir_nomes?.length) {
+        for (const nome of filtros.excluir_nomes) {
+          queryFinalizadas = queryFinalizadas.not('nome', 'ilike', `%${nome}%`);
+          queryAtivas = queryAtivas.not('nome', 'ilike', `%${nome}%`);
+        }
+      }
+      if (filtros.excluir_placas?.length) {
+        for (const placa of filtros.excluir_placas) {
+          queryFinalizadas = queryFinalizadas.not('placa_veiculo', 'eq', placa.toUpperCase());
+          queryAtivas = queryAtivas.not('placa_veiculo', 'eq', placa.toUpperCase());
+        }
+      }
+
+      // Executar todas as queries em paralelo
+      const [
+        { data, error: queryError, count },
+        { count: countFinalizadas },
+        { count: countAtivas }
+      ] = await Promise.all([
+        query,
+        queryFinalizadas,
+        queryAtivas
+      ]);
 
       if (queryError) throw queryError;
 
@@ -551,6 +691,8 @@ export function useRelatorios() {
       return {
         visitantes: data as VisitanteType[] || [],
         total_registros: totalRegistros,
+        total_finalizadas: countFinalizadas || 0,
+        total_ativas: countAtivas || 0,
         pagina_atual: pagina,
         total_paginas: totalPaginas,
         limite_por_pagina: limite,
@@ -561,6 +703,8 @@ export function useRelatorios() {
       return {
         visitantes: [],
         total_registros: 0,
+        total_finalizadas: 0,
+        total_ativas: 0,
         pagina_atual: 1,
         total_paginas: 0,
         limite_por_pagina: 100,

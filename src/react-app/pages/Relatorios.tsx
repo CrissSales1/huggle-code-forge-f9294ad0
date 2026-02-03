@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Search, Download, FileText, Clock, TrendingUp, ChevronLeft, ChevronRight, FileDown, ChevronDown, ChevronUp, X, Plus, Filter } from 'lucide-react';
-import { useRelatorios } from '@/react-app/hooks/useApi';
+import { useRelatorios, buscarTodosParaExportar } from '@/react-app/hooks/useApi';
 import { normalizarNumeroCasa } from '@/react-app/utils/formatters';
 import PlacaVeiculo from '@/react-app/components/PlacaVeiculo';
 import { exportarRelatorioPDF } from '@/react-app/utils/pdfExport';
@@ -28,6 +28,8 @@ export default function Relatorios() {
   const [resultado, setResultado] = useState<RelatorioResultado>({
     visitantes: [],
     total_registros: 0,
+    total_finalizadas: 0,
+    total_ativas: 0,
     pagina_atual: 1,
     total_paginas: 0,
     limite_por_pagina: 100,
@@ -66,6 +68,8 @@ export default function Relatorios() {
     setResultado({
       visitantes: [],
       total_registros: 0,
+      total_finalizadas: 0,
+      total_ativas: 0,
       pagina_atual: 1,
       total_paginas: 0,
       limite_por_pagina: 100,
@@ -161,8 +165,9 @@ export default function Relatorios() {
   };
 
   const calcularEstatisticas = () => {
-    if (resultado.visitantes.length === 0) return null;
+    if (resultado.total_registros === 0) return null;
 
+    // Calcular tempo médio apenas com os dados da página atual (aproximação)
     const permanencias = resultado.visitantes
       .filter(v => v.hora_saida)
       .map(v => {
@@ -175,33 +180,52 @@ export default function Relatorios() {
       ? permanencias.reduce((acc, curr) => acc + curr, 0) / permanencias.length 
       : 0;
 
+    // Usar contagens corretas do banco de dados
     return {
       totalVisitas: resultado.total_registros,
-      visitasFinalizadas: resultado.visitantes.filter(v => v.hora_saida).length,
-      visitasAtivas: resultado.visitantes.filter(v => !v.hora_saida).length,
+      visitasFinalizadas: resultado.total_finalizadas,
+      visitasAtivas: resultado.total_ativas,
       tempoMedioPermanencia: tempoMedio,
     };
   };
 
-  const exportarPDF = () => {
-    if (resultado.visitantes.length === 0) {
+  const exportarPDF = async () => {
+    if (resultado.total_registros === 0) {
       alert('Não há dados para exportar. Faça uma busca primeiro.');
       return;
     }
 
-    const visitantesFormatados = resultado.visitantes.map(v => ({
-      nome: v.nome || '',
-      casa_visitada: v.casa_visitada || '',
-      placa_veiculo: v.placa_veiculo || '',
-      numero_prisma: v.numero_prisma || null,
-      observacoes: v.observacoes || null,
-      hora_entrada: formatarDataHora(v.hora_entrada!),
-      hora_saida: v.hora_saida ? formatarDataHora(v.hora_saida) : null,
-      is_ativo: !!v.is_ativo,
-      permanencia: calcularTempoPermanencia(v.hora_entrada!, v.hora_saida)
-    }));
+    try {
+      // Buscar TODOS os registros (não apenas os da página atual)
+      const filtrosBusca = { 
+        ...filtros, 
+        casa_visitada: filtros.casa_visitada ? normalizarNumeroCasa(filtros.casa_visitada) : ''
+      };
+      const todosVisitantes = await buscarTodosParaExportar(filtrosBusca);
 
-    exportarRelatorioPDF(visitantesFormatados, filtros, estatisticas);
+      const visitantesFormatados = todosVisitantes.map(v => ({
+        nome: v.nome || '',
+        casa_visitada: v.casa_visitada || '',
+        placa_veiculo: v.placa_veiculo || '',
+        numero_prisma: v.numero_prisma || null,
+        observacoes: v.observacoes || null,
+        hora_entrada: formatarDataHora(v.hora_entrada!),
+        hora_saida: v.hora_saida ? formatarDataHora(v.hora_saida) : null,
+        is_ativo: !!v.is_ativo,
+        permanencia: calcularTempoPermanencia(v.hora_entrada!, v.hora_saida)
+      }));
+
+      // Usar estatísticas corretas do banco
+      exportarRelatorioPDF(visitantesFormatados, filtros, {
+        totalVisitas: resultado.total_registros,
+        visitasFinalizadas: resultado.total_finalizadas,
+        visitasAtivas: resultado.total_ativas,
+        tempoMedioPermanencia: estatisticas?.tempoMedioPermanencia || 0
+      });
+    } catch (err) {
+      console.error('Erro ao exportar PDF:', err);
+      alert('Erro ao exportar PDF. Tente novamente.');
+    }
   };
 
   const exportarDados = () => {
