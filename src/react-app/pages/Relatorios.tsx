@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Search, Download, FileText, Clock, TrendingUp, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Download, FileText, Clock, TrendingUp, ChevronLeft, ChevronRight, FileDown } from 'lucide-react';
 import { useRelatorios } from '@/react-app/hooks/useApi';
 import { normalizarNumeroCasa } from '@/react-app/utils/formatters';
 import PlacaVeiculo from '@/react-app/components/PlacaVeiculo';
+import { exportarRelatorioPDF } from '@/react-app/utils/pdfExport';
 import type { FiltroRelatorioType, RelatorioResultado } from '@/shared/types';
 
 export default function Relatorios() {
@@ -105,6 +106,26 @@ export default function Relatorios() {
       visitasAtivas: resultado.visitantes.filter(v => !v.hora_saida).length,
       tempoMedioPermanencia: tempoMedio,
     };
+  };
+
+  const exportarPDF = () => {
+    if (resultado.visitantes.length === 0) {
+      alert('Não há dados para exportar. Faça uma busca primeiro.');
+      return;
+    }
+
+    const visitantesFormatados = resultado.visitantes.map(v => ({
+      nome: v.nome || '',
+      casa_visitada: v.casa_visitada || '',
+      placa_veiculo: v.placa_veiculo || '',
+      numero_prisma: v.numero_prisma || null,
+      hora_entrada: formatarDataHora(v.hora_entrada!),
+      hora_saida: v.hora_saida ? formatarDataHora(v.hora_saida) : null,
+      is_ativo: !!v.is_ativo,
+      permanencia: calcularTempoPermanencia(v.hora_entrada!, v.hora_saida)
+    }));
+
+    exportarRelatorioPDF(visitantesFormatados, filtros, estatisticas);
   };
 
   const exportarDados = () => {
@@ -375,13 +396,22 @@ export default function Relatorios() {
             </div>
             
             {resultado.visitantes.length > 0 && (
-              <button 
-                onClick={exportarDados}
-                className="flex items-center justify-center space-x-1.5 sm:space-x-2 px-3 sm:px-4 py-2 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors self-start sm:self-auto"
-              >
-                <Download className="w-4 h-4" />
-                <span className="hidden sm:inline">Exportar</span> <span>CSV</span>
-              </button>
+              <div className="flex gap-2 self-start sm:self-auto">
+                <button 
+                  onClick={exportarPDF}
+                  className="flex items-center justify-center space-x-1.5 sm:space-x-2 px-3 sm:px-4 py-2 text-sm text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+                >
+                  <FileDown className="w-4 h-4" />
+                  <span>PDF</span>
+                </button>
+                <button 
+                  onClick={exportarDados}
+                  className="flex items-center justify-center space-x-1.5 sm:space-x-2 px-3 sm:px-4 py-2 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  <span className="hidden sm:inline">Exportar</span> <span>CSV</span>
+                </button>
+              </div>
             )}
           </div>
         </div>
