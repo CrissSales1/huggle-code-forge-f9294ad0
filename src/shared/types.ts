@@ -158,6 +158,8 @@ export interface VisitanteAtivo {
 export interface RelatorioResultado {
   visitantes: VisitanteType[];
   total_registros: number;
+  total_finalizadas: number;
+  total_ativas: number;
   pagina_atual: number;
   total_paginas: number;
   limite_por_pagina: number;
