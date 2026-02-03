@@ -24,6 +24,10 @@ export default function Monitoramento() {
   const [veiculoSelecionado, setVeiculoSelecionado] = useState<VeiculoMorador | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [pipelineData, setPipelineData] = useState<PipelineData | null>(null);
+  
+  // v1.1.79: Estados para histórico clicável
+  const [selectedDetectionId, setSelectedDetectionId] = useState<number | null>(null);
+  const [pipelineHistory, setPipelineHistory] = useState<Map<number, PipelineData>>(new Map());
 
   // Filtragem e ordenação numérica dos veículos
   const veiculosFiltrados = useMemo(() => {
@@ -169,6 +173,64 @@ export default function Monitoramento() {
     }
   }, [latestDetection]);
 
+  // v1.1.79: Armazenar pipeline da última detecção
+  useEffect(() => {
+    if (latestDetection?.id && pipelineData) {
+      setPipelineHistory(prev => {
+        const updated = new Map(prev);
+        // Guardar pipeline para esta detecção
+        updated.set(latestDetection.id, { ...pipelineData });
+        
+        // Manter apenas os 10 mais recentes (baseado no histórico atual)
+        if (updated.size > 10) {
+          const idsNoHistorico = new Set(detectionHistory.map(d => d?.id).filter(Boolean));
+          idsNoHistorico.add(latestDetection.id); // Incluir o atual
+          for (const key of updated.keys()) {
+            if (!idsNoHistorico.has(key)) {
+              updated.delete(key);
+            }
+          }
+        }
+        
+        return updated;
+      });
+    }
+  }, [latestDetection?.id, pipelineData, detectionHistory]);
+
+  // v1.1.79: Limpar seleção se o item selecionado não está mais no histórico
+  useEffect(() => {
+    if (selectedDetectionId !== null) {
+      const aindaNoHistorico = detectionHistory.some(d => d.id === selectedDetectionId);
+      if (!aindaNoHistorico && latestDetection?.id !== selectedDetectionId) {
+        setSelectedDetectionId(null);
+      }
+    }
+  }, [detectionHistory, selectedDetectionId, latestDetection?.id]);
+
+  // v1.1.79: Handler de clique no histórico
+  const handleHistoryClick = useCallback((detectionId: number) => {
+    // Se clicou na mesma detecção, desselecionar (voltar para auto)
+    if (selectedDetectionId === detectionId) {
+      setSelectedDetectionId(null);
+    } else {
+      setSelectedDetectionId(detectionId);
+    }
+  }, [selectedDetectionId]);
+
+  // v1.1.79: Determinar qual detecção exibir
+  const displayedDetection = useMemo(() => {
+    if (selectedDetectionId === null) return latestDetection;
+    // Buscar no histórico
+    const fromHistory = detectionHistory.find(d => d.id === selectedDetectionId);
+    return fromHistory || latestDetection;
+  }, [selectedDetectionId, latestDetection, detectionHistory]);
+
+  // v1.1.79: Determinar qual pipeline exibir
+  const displayedPipeline = useMemo(() => {
+    if (selectedDetectionId === null) return pipelineData;
+    return pipelineHistory.get(selectedDetectionId) || null;
+  }, [selectedDetectionId, pipelineData, pipelineHistory]);
+
   return (
     <div className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 lg:py-4 max-w-7xl mx-auto">
       <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
@@ -222,16 +284,27 @@ export default function Monitoramento() {
               <h3 className="font-semibold text-gray-900 flex items-center gap-2 text-sm 2xl:text-base">
                 <Activity className="w-4 h-4 2xl:w-5 2xl:h-5 text-blue-600" />
                 <span>Resultado</span>
+                {/* v1.1.79: Badge de modo histórico */}
+                {selectedDetectionId !== null && (
+                  <button 
+                    onClick={() => setSelectedDetectionId(null)}
+                    className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full flex items-center gap-1 hover:bg-blue-200 transition-colors"
+                  >
+                    <Clock className="w-3 h-3" />
+                    Histórico
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
               </h3>
-              {latestDetection && (
+              {displayedDetection && (
                 <span className={`text-xs px-2 py-0.5 rounded-full ${
-                  latestDetection.morador 
+                  displayedDetection.morador 
                     ? 'bg-green-100 text-green-700' 
-                    : latestDetection.visitante
+                    : displayedDetection.visitante
                     ? 'bg-amber-100 text-amber-700'
                     : 'bg-red-100 text-red-700'
                 }`}>
-                  {latestDetection.morador ? 'Autorizado' : latestDetection.visitante ? 'Visitante' : 'Desconhecido'}
+                  {displayedDetection.morador ? 'Autorizado' : displayedDetection.visitante ? 'Visitante' : 'Desconhecido'}
                 </span>
               )}
             </div>
@@ -240,14 +313,14 @@ export default function Monitoramento() {
             <div className="p-3 2xl:p-4 flex flex-col">
               {/* Card de resultado principal */}
               <div className="flex flex-col justify-start">
-                {!latestDetection ? (
+                {!displayedDetection ? (
                   /* Aguardando detecção */
                   <div className="text-center py-8 2xl:py-6 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300">
                     <Camera className="w-12 h-12 2xl:w-10 2xl:h-10 text-gray-400 mx-auto mb-2" />
                     <p className="text-gray-600 text-base 2xl:text-sm font-medium">Aguardando detecção...</p>
                     <p className="text-gray-400 text-sm 2xl:text-xs mt-1">O sistema exibirá os veículos</p>
                   </div>
-                ) : latestDetection.morador ? (
+                ) : displayedDetection.morador ? (
                   <div className="bg-gradient-to-br from-green-100 via-green-50 to-emerald-100 border-4 border-green-500 rounded-2xl p-4 2xl:p-3 shadow-lg animate-fade-in">
                     {/* Badge de status */}
                     <div className="flex items-center justify-center mb-3 2xl:mb-2">
@@ -259,7 +332,7 @@ export default function Monitoramento() {
                     
                     {/* Placa centralizada */}
                     <div className="flex justify-center mb-3 2xl:mb-2">
-                      <PlacaVeiculo placa={latestDetection.placa} size="lg" />
+                      <PlacaVeiculo placa={displayedDetection.placa} size="lg" />
                     </div>
                     
                     {/* Casa do morador */}
@@ -267,7 +340,7 @@ export default function Monitoramento() {
                       <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border-2 border-green-300 shadow-sm">
                         <Home className="w-5 h-5 2xl:w-4 2xl:h-4 text-blue-600" />
                         <span className="text-2xl 2xl:text-xl font-bold text-green-700">
-                          Casa {latestDetection.morador.casa}
+                          Casa {displayedDetection.morador.casa}
                         </span>
                       </div>
                     </div>
@@ -275,15 +348,15 @@ export default function Monitoramento() {
                     {/* Horário e fonte */}
                     <div className="text-center text-sm 2xl:text-xs">
                       <span className="text-gray-600">
-                        {new Date(latestDetection.timestamp).toLocaleTimeString('pt-BR')}
+                        {new Date(displayedDetection.timestamp).toLocaleTimeString('pt-BR')}
                       </span>
                       <span className="text-gray-400 ml-1">
-                        • {latestDetection.fonteDeteccao === 'api' ? 'API' : 'OCR'}
-                        {latestDetection.confidence && ` (${Math.round(latestDetection.confidence * 100)}%)`}
+                        • {displayedDetection.fonteDeteccao === 'api' ? 'API' : 'OCR'}
+                        {displayedDetection.confidence && ` (${Math.round(displayedDetection.confidence * 100)}%)`}
                       </span>
                     </div>
                   </div>
-                ) : latestDetection.visitante ? (
+                ) : displayedDetection.visitante ? (
                   <div className="bg-gradient-to-br from-amber-100 via-yellow-50 to-orange-100 border-4 border-amber-500 rounded-2xl p-4 2xl:p-3 shadow-lg animate-fade-in">
                     {/* Badge de status */}
                     <div className="flex items-center justify-center mb-3 2xl:mb-2">
@@ -295,7 +368,7 @@ export default function Monitoramento() {
                     
                     {/* Placa centralizada */}
                     <div className="flex justify-center mb-3 2xl:mb-2">
-                      <PlacaVeiculo placa={latestDetection.placa} size="lg" />
+                      <PlacaVeiculo placa={displayedDetection.placa} size="lg" />
                     </div>
                     
                     {/* Casa do visitante e nome */}
@@ -303,22 +376,22 @@ export default function Monitoramento() {
                       <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border-2 border-amber-300 shadow-sm">
                         <Home className="w-4 h-4 text-blue-600" />
                         <span className="text-xl 2xl:text-lg font-bold text-amber-700">
-                          Casa {latestDetection.visitante.casa}
+                          Casa {displayedDetection.visitante.casa}
                         </span>
                       </div>
                       <div className="text-base 2xl:text-sm font-semibold text-amber-800">
-                        {latestDetection.visitante.nome}
+                        {displayedDetection.visitante.nome}
                       </div>
                     </div>
                     
                     {/* Horário e fonte */}
                     <div className="text-center text-sm 2xl:text-xs">
                       <span className="text-gray-600">
-                        {new Date(latestDetection.timestamp).toLocaleTimeString('pt-BR')}
+                        {new Date(displayedDetection.timestamp).toLocaleTimeString('pt-BR')}
                       </span>
                       <span className="text-gray-400 ml-1">
-                        • {latestDetection.fonteDeteccao === 'api' ? 'API' : 'OCR'}
-                        {latestDetection.confidence && ` (${Math.round(latestDetection.confidence * 100)}%)`}
+                        • {displayedDetection.fonteDeteccao === 'api' ? 'API' : 'OCR'}
+                        {displayedDetection.confidence && ` (${Math.round(displayedDetection.confidence * 100)}%)`}
                       </span>
                     </div>
                   </div>
@@ -334,7 +407,7 @@ export default function Monitoramento() {
                     
                     {/* Placa centralizada */}
                     <div className="flex justify-center mb-3 2xl:mb-2">
-                      <PlacaVeiculo placa={latestDetection.placa} size="lg" />
+                      <PlacaVeiculo placa={displayedDetection.placa} size="lg" />
                     </div>
                     
                     {/* Aviso */}
@@ -349,11 +422,11 @@ export default function Monitoramento() {
                     {/* Horário e fonte */}
                     <div className="text-center text-sm 2xl:text-xs">
                       <span className="text-gray-600">
-                        {new Date(latestDetection.timestamp).toLocaleTimeString('pt-BR')}
+                        {new Date(displayedDetection.timestamp).toLocaleTimeString('pt-BR')}
                       </span>
                       <span className="text-gray-400 ml-1">
-                        • {latestDetection.fonteDeteccao === 'api' ? 'API' : 'OCR'}
-                        {latestDetection.confidence && ` (${Math.round(latestDetection.confidence * 100)}%)`}
+                        • {displayedDetection.fonteDeteccao === 'api' ? 'API' : 'OCR'}
+                        {displayedDetection.confidence && ` (${Math.round(displayedDetection.confidence * 100)}%)`}
                       </span>
                     </div>
                   </div>
@@ -370,14 +443,19 @@ export default function Monitoramento() {
                   <div className="space-y-1.5 max-h-[150px] overflow-y-auto pr-1">
                     {detectionHistory.slice(0, 8).map((det, idx) => (
                       <div 
-                        key={idx} 
-                        className={`p-2 rounded-lg border text-xs ${
-                          det.morador 
-                            ? 'bg-green-50 border-green-200' 
+                        key={det.id || idx}
+                        onClick={() => handleHistoryClick(det.id)}
+                        className={`p-2 rounded-lg border text-xs cursor-pointer transition-all
+                          ${selectedDetectionId === det.id 
+                            ? 'ring-2 ring-blue-500 ring-offset-1 shadow-md' 
+                            : 'hover:shadow-md hover:scale-[1.01]'
+                          }
+                          ${det.morador 
+                            ? 'bg-green-50 border-green-200 hover:bg-green-100' 
                             : det.visitante
-                            ? 'bg-amber-50 border-amber-200'
-                            : 'bg-red-50 border-red-200'
-                        }`}
+                            ? 'bg-amber-50 border-amber-200 hover:bg-amber-100'
+                            : 'bg-red-50 border-red-200 hover:bg-red-100'
+                          }`}
                       >
                         <div className="flex items-center justify-between gap-1 mb-0.5">
                           <span className={`font-mono font-bold ${det.morador ? 'text-green-800' : det.visitante ? 'text-amber-800' : 'text-red-800'}`}>
@@ -411,13 +489,13 @@ export default function Monitoramento() {
           </div>
           
           {/* Pipeline de Processamento OCR - aparece quando monitoramento ativo + debug habilitado */}
-          {pipelineData && (
+          {displayedPipeline && (
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-xs font-medium text-purple-700">🔍 Pipeline de Processamento OCR</span>
-                {pipelineData.rawText && (
+                {displayedPipeline.rawText && (
                   <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">
-                    OCR: "{pipelineData.rawText}" ({Math.round(pipelineData.ocrConfidence * 100)}%)
+                    OCR: "{displayedPipeline.rawText}" ({Math.round(displayedPipeline.ocrConfidence * 100)}%)
                   </span>
                 )}
               </div>
@@ -428,9 +506,9 @@ export default function Monitoramento() {
                   <div className="text-xs text-center text-gray-300 py-1 bg-gray-900 font-medium">
                     Placa Processada
                   </div>
-                  {pipelineData.debugImages?.preprocessed ? (
+                  {displayedPipeline.debugImages?.preprocessed ? (
                     <img 
-                      src={pipelineData.debugImages.preprocessed} 
+                      src={displayedPipeline.debugImages.preprocessed} 
                       alt="Placa Processada" 
                       className="w-full h-20 object-contain bg-gray-900" 
                     />
@@ -446,9 +524,9 @@ export default function Monitoramento() {
                   <div className="text-xs text-center text-green-400 py-1 bg-gray-900 font-medium">
                     Resultado OCR
                   </div>
-                  {pipelineData.debugImages?.final ? (
+                  {displayedPipeline.debugImages?.final ? (
                     <img 
-                      src={pipelineData.debugImages.final} 
+                      src={displayedPipeline.debugImages.final} 
                       alt="Resultado OCR" 
                       className="w-full h-20 object-contain bg-gray-900" 
                     />
@@ -462,9 +540,9 @@ export default function Monitoramento() {
               
               {/* Info adicional */}
               <div className="flex items-center gap-4 mt-2 text-[10px] text-gray-500">
-                <span>Fonte: {pipelineData.usedYolo ? '🧠 YOLO' : '📐 Heurística'}</span>
-                {pipelineData.plateRegion && (
-                  <span>Região: {pipelineData.plateRegion.width}x{pipelineData.plateRegion.height}px</span>
+                <span>Fonte: {displayedPipeline.usedYolo ? '🧠 YOLO' : '📐 Heurística'}</span>
+                {displayedPipeline.plateRegion && (
+                  <span>Região: {displayedPipeline.plateRegion.width}x{displayedPipeline.plateRegion.height}px</span>
                 )}
               </div>
             </div>
@@ -492,14 +570,19 @@ export default function Monitoramento() {
                 <div className="space-y-1.5">
                   {detectionHistory.map((det, idx) => (
                     <div 
-                      key={idx} 
-                      className={`p-2 rounded-lg border text-xs ${
-                        det.morador 
-                          ? 'bg-green-50 border-green-200' 
+                      key={det.id || idx}
+                      onClick={() => handleHistoryClick(det.id)}
+                      className={`p-2 rounded-lg border text-xs cursor-pointer transition-all
+                        ${selectedDetectionId === det.id 
+                          ? 'ring-2 ring-blue-500 ring-offset-1 shadow-md' 
+                          : 'hover:shadow-md hover:scale-[1.01]'
+                        }
+                        ${det.morador 
+                          ? 'bg-green-50 border-green-200 hover:bg-green-100' 
                           : det.visitante
-                          ? 'bg-amber-50 border-amber-200'
-                          : 'bg-red-50 border-red-200'
-                      }`}
+                          ? 'bg-amber-50 border-amber-200 hover:bg-amber-100'
+                          : 'bg-red-50 border-red-200 hover:bg-red-100'
+                        }`}
                     >
                       <div className="flex items-center justify-between gap-1 mb-0.5">
                         <span className={`font-mono font-bold text-[11px] ${det.morador ? 'text-green-800' : det.visitante ? 'text-amber-800' : 'text-red-800'}`}>
