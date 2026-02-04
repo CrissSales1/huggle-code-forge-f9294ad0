@@ -368,6 +368,7 @@ export function compareFrames(
 // Thresholds para detecção por referência
 const DETECTION_THRESHOLD = 0.10; // 10% de diferença = veículo presente (v1.1.33)
 const CLEAN_THRESHOLD = 0.05;     // 5% de diferença = área considerada limpa
+const VEHICLE_EXIT_THRESHOLD = 0.08; // v1.1.81: 8% = veículo saiu após OCR bem-sucedido
 const AUTO_UPDATE_DELAY_MS = 10000; // 10 segundos limpa = atualiza referência
 const OCR_RETRY_DELAY_MS = 800;   // Fast-Track: 800ms entre tentativas para coleta de buffer
 
@@ -463,15 +464,15 @@ export class MotionDetector {
     video: HTMLVideoElement,
     canvas: HTMLCanvasElement,
     area: VirtualArea
-  ): { hasMotion: boolean; isStable: boolean; shouldAttemptOCR: boolean; motionPercent: number; shouldUpdateReference: boolean } {
+  ): { hasMotion: boolean; isStable: boolean; shouldAttemptOCR: boolean; motionPercent: number; shouldUpdateReference: boolean; vehicleExited: boolean } {
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx || video.videoWidth === 0 || video.videoHeight === 0) {
-      return { hasMotion: false, isStable: false, shouldAttemptOCR: false, motionPercent: 0, shouldUpdateReference: false };
+      return { hasMotion: false, isStable: false, shouldAttemptOCR: false, motionPercent: 0, shouldUpdateReference: false, vehicleExited: false };
     }
     
     // Se não tem referência, retornar sem detecção
     if (!this.referenceFrame) {
-      return { hasMotion: false, isStable: false, shouldAttemptOCR: false, motionPercent: 0, shouldUpdateReference: false };
+      return { hasMotion: false, isStable: false, shouldAttemptOCR: false, motionPercent: 0, shouldUpdateReference: false, vehicleExited: false };
     }
     
     // Ajustar canvas para o tamanho do vídeo
@@ -504,12 +505,32 @@ export class MotionDetector {
     // Área limpa se diferença < threshold limpo
     const areaClean = diffPercent < CLEAN_THRESHOLD;
     
+    // v1.1.81: Detectar quando veículo SAI da área após detecção bem-sucedida
+    let vehicleExited = false;
+    
+    // Se OCR foi bem-sucedido e a diferença caiu abaixo do threshold de saída,
+    // significa que o veículo saiu → capturar nova referência IMEDIATAMENTE
+    if (this.ocrSucceeded && diffPercent < VEHICLE_EXIT_THRESHOLD) {
+      console.log('🚗💨 Veículo saiu após detecção - capturando nova referência');
+      vehicleExited = true;
+      shouldUpdateReference = true;
+      
+      // Reset completo para próximo veículo
+      this.ocrSucceeded = false;
+      this.ocrAttempted = false;
+      this.lastOcrAttemptTime = 0;
+      this.consecutiveMotionFrames = 0;
+      this.lastCleanTime = now;
+    }
+    
     if (vehiclePresent) {
       // Veículo presente
       this.consecutiveMotionFrames++;
-      this.lastCleanTime = 0; // Resetar contador de área limpa
+      
+      // v1.1.81: BLOQUEAR atualização automática enquanto há veículo detectado
+      this.lastCleanTime = 0;
       this.referenceUpdatePending = false;
-    } else if (areaClean) {
+    } else if (areaClean && !vehicleExited) {
       // Área limpa - verificar se deve atualizar referência
       this.consecutiveMotionFrames = 0;
       
@@ -525,10 +546,16 @@ export class MotionDetector {
         shouldUpdateReference = true;
         this.referenceUpdatePending = true;
       }
-    } else {
+    } else if (!vehicleExited) {
       // Zona intermediária - pode ser ruído ou veículo saindo
       this.consecutiveMotionFrames = 0;
       this.lastCleanTime = 0;
+    }
+    
+    // v1.1.81: BLOQUEAR atualização enquanto OCR ativo (veículo ainda pode estar na área)
+    if (this.ocrSucceeded && !vehicleExited) {
+      this.lastCleanTime = 0;
+      this.referenceUpdatePending = false;
     }
     
     // Presença confirmada se detectada em frames consecutivos
@@ -576,7 +603,7 @@ export class MotionDetector {
       }
     }
     
-    return { hasMotion, isStable, shouldAttemptOCR, motionPercent: diffPercent, shouldUpdateReference };
+    return { hasMotion, isStable, shouldAttemptOCR, motionPercent: diffPercent, shouldUpdateReference, vehicleExited };
   }
   
   /**
