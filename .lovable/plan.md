@@ -1,107 +1,76 @@
 
 
-# Plano: Correções do Histórico Clicável - v1.1.80
+# Plano: Auto-Reset da Referência Quando Veículo Sai - v1.1.81
 
-## Problemas Identificados
+## Problema Identificado
 
-| Problema | Causa | Impacto |
-|----------|-------|---------|
-| Nova detecção não interrompe visualização do histórico | `selectedDetectionId` não é resetado quando `latestDetection` muda | Usuário pode perder veículos chegando |
-| Pipeline mostra dados incorretos ao selecionar histórico | Timing incorreto: `pipelineData` é associado ao ID errado porque o hook do banco é assíncrono | Pipeline exibe imagens da detecção atual, não da selecionada |
+Na imagem do usuário:
+- O carro já saiu da área virtual
+- O indicador ainda mostra "Veículo: 24%"
+- Quando o próximo carro chegar, a diferença será pequena (carro vs carro) e a detecção falhará
 
----
+### Causa Raiz
 
-## Análise Técnica
+A imagem de referência foi capturada/atualizada **com um veículo presente**. Isso acontece porque:
 
-### Fluxo Atual (Problemático)
+1. O sistema atualiza a referência após 10 segundos de "área limpa" (`AUTO_UPDATE_DELAY_MS`)
+2. Porém, o `CLEAN_THRESHOLD` (5%) é muito baixo - um carro parado pode ter variação < 5% entre frames
+3. Resultado: O sistema interpreta "carro parado" como "área limpa" e atualiza a referência **com o carro**
 
-```text
-1. OCR detecta placa → pipelineData atualizado (local)
-2. Detecção gravada no banco → realtime dispara
-3. latestDetection atualizado → useEffect associa pipelineData ao latestDetection.id
-                                      ↑
-                              PROBLEMA: pipelineData pode já ter mudado!
+### Fluxo Problemático
+
 ```
-
-### Fluxo da Imagem do Usuário
-
-```text
-20:48 - FPA5F43 detectado → pipelineData = imagens FPA5F43
-20:46 - FMX5807 selecionado pelo usuário
-        → displayedDetection = FMX5807 ✓
-        → displayedPipeline = pipelineHistory.get(FMX5807.id) 
-                            = NÃO ENCONTRADO (não foi salvo corretamente)
-                            → fallback para pipelineData atual = FPA5F43 ✗
+Carro entra → Diferença 24% → OCR executado → Sucesso
+Carro para → Diferença entre frames < 5% → Sistema pensa "área limpa"
+10 segundos depois → Referência atualizada COM O CARRO
+Carro sai → Diferença 24% (agora a referência tem carro, mas área está vazia)
+Próximo carro → Diferença carro vs carro = pequena → OCR não dispara
 ```
 
 ---
 
 ## Solução
 
-### 1. Resetar seleção quando nova detecção chegar
+### Estratégia: Reset Inteligente Baseado em Estado
 
-Adicionar lógica no `useEffect` para limpar `selectedDetectionId` quando houver nova detecção:
+1. **Nunca atualizar referência enquanto `hasMotion` ou `ocrSucceeded` for true**
+2. **Após OCR bem-sucedido, esperar veículo SAIR (diferença voltar a zero) antes de permitir atualização**
+3. **Quando diferença cair para < `CLEAN_THRESHOLD` E `ocrSucceeded` era true, significa que veículo saiu → capturar nova referência imediatamente**
+
+### Nova Lógica no `processFrame`:
 
 ```typescript
-// v1.1.80: Resetar seleção quando nova detecção chegar (prioridade é saber quem está chegando)
-const prevLatestIdRef = useRef<number | null>(null);
+// Thresholds
+const DETECTION_THRESHOLD = 0.10; // 10% = veículo presente
+const CLEAN_THRESHOLD = 0.05;     // 5% = área limpa
+const VEHICLE_EXITED_THRESHOLD = 0.08; // 8% = transição de saída
 
-useEffect(() => {
-  if (latestDetection?.id && latestDetection.id !== prevLatestIdRef.current) {
-    prevLatestIdRef.current = latestDetection.id;
+// Novo: Rastrear estado de OCR bem-sucedido para detectar saída
+private vehicleWasDetected: boolean = false;
+
+processFrame(...) {
+  // ...cálculo de diffPercent...
+  
+  // Detectar transição: veículo detectado → veículo saiu
+  if (this.ocrSucceeded && diffPercent < VEHICLE_EXITED_THRESHOLD) {
+    // Veículo saiu após detecção bem-sucedida!
+    console.log('🚗 Veículo saiu da área - resetando para próximo');
     
-    // Nova detecção chegou - voltar ao modo automático
-    if (selectedDetectionId !== null) {
-      setSelectedDetectionId(null);
-    }
+    // Capturar nova referência AGORA (área limpa)
+    shouldUpdateReference = true;
+    
+    // Resetar flags para próximo veículo
+    this.ocrSucceeded = false;
+    this.ocrAttempted = false;
+    this.vehicleWasDetected = false;
   }
-}, [latestDetection?.id, selectedDetectionId]);
-```
-
-### 2. Corrigir associação do pipeline
-
-O problema é que o `pipelineData` e o `latestDetection` são atualizados de forma assíncrona:
-- `pipelineData` vem do `CameraMonitor` (local, imediato)
-- `latestDetection` vem do banco via realtime (assíncrono, com delay)
-
-A solução é criar um **buffer de pipeline por placa** ao invés de por ID:
-
-```typescript
-// v1.1.80: Buffer de pipeline por placa (mais confiável que por ID)
-const [pipelineByPlate, setPipelineByPlate] = useState<Map<string, PipelineData>>(new Map());
-
-// Quando pipelineData muda, salvar por placa
-useEffect(() => {
-  if (pipelineData?.rawText) {
-    const placa = pipelineData.rawText.replace(/[^A-Z0-9]/g, '').toUpperCase();
-    if (placa.length >= 7) {
-      setPipelineByPlate(prev => {
-        const updated = new Map(prev);
-        updated.set(placa, { ...pipelineData });
-        
-        // Manter apenas as 15 mais recentes
-        if (updated.size > 15) {
-          const keys = Array.from(updated.keys());
-          updated.delete(keys[0]); // Remove a mais antiga
-        }
-        
-        return updated;
-      });
-    }
+  
+  // Nunca atualizar referência enquanto há veículo detectado
+  if (vehiclePresent || this.ocrSucceeded) {
+    this.lastCleanTime = 0; // Bloquear auto-update
+    this.referenceUpdatePending = false;
   }
-}, [pipelineData]);
-
-// Determinar pipeline a exibir - buscar por placa
-const displayedPipeline = useMemo(() => {
-  if (selectedDetectionId === null) return pipelineData;
-  
-  const detection = detectionHistory.find(d => d.id === selectedDetectionId);
-  if (!detection) return pipelineData;
-  
-  // Buscar pipeline pela placa
-  const placaLimpa = detection.placa.replace(/[^A-Z0-9]/g, '').toUpperCase();
-  return pipelineByPlate.get(placaLimpa) || null;
-}, [selectedDetectionId, pipelineData, detectionHistory, pipelineByPlate]);
+}
 ```
 
 ---
@@ -110,91 +79,131 @@ const displayedPipeline = useMemo(() => {
 
 | Arquivo | Mudanças |
 |---------|----------|
-| `src/react-app/pages/Monitoramento.tsx` | Resetar seleção em nova detecção + corrigir associação pipeline por placa |
-| `src/react-app/pages/Configuracoes.tsx` | Versão 1.1.80 |
+| `src/react-app/utils/motionDetection.ts` | Nova lógica de detecção de saída do veículo + bloqueio de atualização incorreta |
+| `src/react-app/hooks/useContinuousMonitoring.ts` | Passar callback para resetar buffer quando veículo sair |
+| `src/react-app/pages/Configuracoes.tsx` | Versão 1.1.81 |
 
 ---
 
-## Detalhes da Implementação
+## Detalhes Técnicos
 
-### Mudanças em `Monitoramento.tsx`
+### 1. Novo threshold para detectar saída (motionDetection.ts)
 
-1. **Adicionar ref para ID anterior**:
 ```typescript
-const prevLatestIdRef = useRef<number | null>(null);
+// Linha ~369
+const DETECTION_THRESHOLD = 0.10; // 10% de diferença = veículo presente
+const CLEAN_THRESHOLD = 0.05;     // 5% de diferença = área considerada limpa
+const VEHICLE_EXIT_THRESHOLD = 0.08; // 8% = veículo está saindo/saiu
+const AUTO_UPDATE_DELAY_MS = 10000; // 10 segundos limpa = atualiza referência
 ```
 
-2. **Substituir `pipelineHistory` por `pipelineByPlate`**:
-```typescript
-// Substituir:
-const [pipelineHistory, setPipelineHistory] = useState<Map<number, PipelineData>>(new Map());
+### 2. Nova lógica em `processFrame` (motionDetection.ts)
 
-// Por:
-const [pipelineByPlate, setPipelineByPlate] = useState<Map<string, PipelineData>>(new Map());
-```
+Modificar o método `processFrame` para:
 
-3. **Novo useEffect para salvar pipeline por placa**:
 ```typescript
-useEffect(() => {
-  if (pipelineData?.rawText) {
-    const placa = pipelineData.rawText.replace(/[^A-Z0-9]/g, '').toUpperCase();
-    if (placa.length >= 7) {
-      setPipelineByPlate(prev => {
-        const updated = new Map(prev);
-        updated.set(placa, { ...pipelineData });
-        if (updated.size > 15) {
-          const oldest = updated.keys().next().value;
-          updated.delete(oldest);
-        }
-        return updated;
-      });
-    }
-  }
-}, [pipelineData]);
-```
-
-4. **useEffect para resetar seleção em nova detecção**:
-```typescript
-useEffect(() => {
-  if (latestDetection?.id && latestDetection.id !== prevLatestIdRef.current) {
-    prevLatestIdRef.current = latestDetection.id;
-    if (selectedDetectionId !== null) {
-      setSelectedDetectionId(null);
-    }
-  }
-}, [latestDetection?.id]);
-```
-
-5. **Atualizar useMemo `displayedPipeline`**:
-```typescript
-const displayedPipeline = useMemo(() => {
-  if (selectedDetectionId === null) return pipelineData;
+processFrame(...): {..., vehicleExited: boolean } {
+  // ...código existente de comparação...
   
-  const detection = detectionHistory.find(d => d.id === selectedDetectionId);
-  if (!detection) return pipelineData;
+  const diffPercent = compareFrames(this.referenceFrame, currentFrame, this.config);
+  const vehiclePresent = diffPercent >= DETECTION_THRESHOLD;
+  const areaClean = diffPercent < CLEAN_THRESHOLD;
   
-  const placaLimpa = detection.placa.replace(/[^A-Z0-9]/g, '').toUpperCase();
-  return pipelineByPlate.get(placaLimpa) || null;
-}, [selectedDetectionId, pipelineData, detectionHistory, pipelineByPlate]);
+  // v1.1.81: Detectar quando veículo SAI da área após detecção bem-sucedida
+  let vehicleExited = false;
+  
+  if (this.ocrSucceeded && diffPercent < VEHICLE_EXIT_THRESHOLD) {
+    // Transição: tinha veículo (OCR sucesso) → área limpa agora
+    console.log('🚗💨 Veículo saiu após detecção - capturando nova referência');
+    vehicleExited = true;
+    shouldUpdateReference = true;
+    
+    // Reset completo para próximo veículo
+    this.ocrSucceeded = false;
+    this.ocrAttempted = false;
+    this.lastOcrAttemptTime = 0;
+    this.consecutiveMotionFrames = 0;
+    this.lastCleanTime = Date.now();
+  }
+  
+  // v1.1.81: BLOQUEAR atualização automática enquanto há veículo ou OCR ativo
+  if (vehiclePresent || (this.ocrSucceeded && !vehicleExited)) {
+    this.lastCleanTime = 0; // Impede auto-update
+    this.referenceUpdatePending = false;
+  }
+  
+  return { 
+    hasMotion, 
+    isStable, 
+    shouldAttemptOCR, 
+    motionPercent: diffPercent, 
+    shouldUpdateReference,
+    vehicleExited  // NOVO: sinaliza para limpar buffer OCR
+  };
+}
 ```
 
-6. **Remover useEffect de limpeza antigo** (linhas 200-208) que não é mais necessário.
+### 3. Hook useContinuousMonitoring.ts - Limpar buffer ao sair
+
+```typescript
+// Em processFrame callback (~linha 552)
+const result = motionDetectorRef.current.processFrame(...);
+
+// v1.1.81: Se veículo saiu, limpar buffer OCR
+if (result.vehicleExited) {
+  resetOcrBuffer();
+  console.log('🧹 Buffer OCR limpo - veículo saiu');
+}
+```
 
 ---
 
-## Comportamento Após Correção
+## Fluxo Corrigido
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ ESTADO INICIAL                                                          │
+│ Referência: área vazia | Diferença: 0% | Status: Monitorando           │
+└────────────────────────────────────┬────────────────────────────────────┘
+                                     ↓
+┌─────────────────────────────────────────────────────────────────────────┐
+│ CARRO ENTRA                                                             │
+│ Referência: área vazia | Diferença: 24% | Status: Veículo detectado!   │
+│ → OCR executado → Placa identificada → ocrSucceeded = true             │
+│ → Auto-update de referência BLOQUEADO (ocrSucceeded = true)            │
+└────────────────────────────────────┬────────────────────────────────────┘
+                                     ↓
+┌─────────────────────────────────────────────────────────────────────────┐
+│ CARRO SAI                                                               │
+│ Diferença cai para < 8% | ocrSucceeded era true                        │
+│ → DETECTADO: vehicleExited = true                                       │
+│ → Captura nova referência IMEDIATAMENTE (área limpa)                   │
+│ → Reset: ocrSucceeded = false, buffer OCR limpo                        │
+│ → Diferença: 0% | Status: Monitorando                                  │
+└────────────────────────────────────┬────────────────────────────────────┘
+                                     ↓
+┌─────────────────────────────────────────────────────────────────────────┐
+│ PRÓXIMO CARRO                                                           │
+│ Referência: área vazia (atualizada!) | Diferença: 22% | Detecta OK!    │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Resultado Esperado
 
 | Cenário | Antes | Depois |
 |---------|-------|--------|
-| Nova detecção com histórico selecionado | Permanece no histórico | **Volta ao modo ao vivo automaticamente** |
-| Selecionar item do histórico | Pipeline mostra imagem errada | **Pipeline mostra imagem correta (por placa)** |
-| Pipeline não encontrado para item antigo | Mostra pipeline atual | **Mostra vazio (null) com mensagem apropriada** |
+| Carro sai após OCR | Diferença fica 24% | **Diferença reseta para ~0%** |
+| Referência | Continha o carro | **Sempre limpa (sem veículo)** |
+| Próximo carro | Detecção fraca/falha | **Detecção normal (~20%+)** |
+| Atualização auto | Podia atualizar com carro | **Bloqueada enquanto há veículo** |
 
 ---
 
 ## Versão
 
 ```
-Versão 1.1.80 (Histórico Pipeline Fix)
+Versão 1.1.81 (Auto-Reset Referência)
 ```
 
