@@ -557,6 +557,12 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
     
     setMotionPercent(result.motionPercent);
     
+    // v1.1.81: Se veículo saiu após detecção, limpar buffer OCR
+    if (result.vehicleExited) {
+      resetOcrBuffer();
+      console.log('🧹 Buffer OCR limpo - veículo saiu da área');
+    }
+    
     // Auto-atualizar referência se necessário (silencioso)
     if (result.shouldUpdateReference) {
       captureReferenceFrame();
