@@ -22,7 +22,7 @@ const OCR_CORRECTIONS: Record<string, string[]> = {
   'A': ['4', 'H'],
   'B': ['8', '6', '3', 'D'],              // v1.1.70: adiciona D
   'C': ['0', 'G', '('],
-  'D': ['0', 'O', 'B'],                    // v1.1.70: adiciona B
+  'D': ['0', 'O', 'B', 'I'],                // v1.1.82: adiciona I
   'E': ['3', 'F', 'B'],                  // v1.1.38: adicionado 'B'
   'F': ['E', 'P', 'T'],
   'G': ['6', '9', 'C', '0'],
