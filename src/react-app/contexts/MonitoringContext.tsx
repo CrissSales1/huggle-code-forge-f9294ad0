@@ -871,14 +871,39 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
           return true;
         }
         
-        // v1.1.40: Capturar placaCadastrada do fuzzy match
-        // v1.1.50: Usa placaConfirmada para busca (melhor variante)
-        const { isMorador, casa, placaCadastrada } = await checkIfMorador(placaConfirmada);
-        
+        // v1.1.84: Beam Search - tentar buscar TODOS os candidatos no banco
+        // Se algum candidato bater direto, usar esse (evita fuzzy matching)
+        let isMorador = false;
+        let casa: string | undefined;
+        let placaCadastrada: string | undefined;
         let isVisitante = false;
         let nomeVisitante: string | undefined;
-        let casaFinal = casa;
-        let placaFinal = placaCadastrada || placaConfirmada; // Usar placa cadastrada se encontrada
+        let casaFinal: string | undefined;
+        
+        // Primeiro tentar o candidato principal
+        const mainResult = await checkIfMorador(placaConfirmada);
+        isMorador = mainResult.isMorador;
+        casa = mainResult.casa;
+        placaCadastrada = mainResult.placaCadastrada;
+        
+        // v1.1.84: Se não achou com candidato principal, tentar candidatos do beam search
+        if (!isMorador && result.candidates && result.candidates.length > 1) {
+          for (const candidate of result.candidates) {
+            if (candidate.text === placaConfirmada) continue; // Já tentou
+            
+            const candidateResult = await checkIfMorador(candidate.text);
+            if (candidateResult.isMorador) {
+              isMorador = true;
+              casa = candidateResult.casa;
+              placaCadastrada = candidateResult.placaCadastrada;
+              console.log(`🎯 Beam Search Match: Candidato "${candidate.text}" encontrou morador (Casa ${casa}) - Principal era "${placaConfirmada}"`);
+              break;
+            }
+          }
+        }
+        
+        casaFinal = casa;
+        let placaFinal = placaCadastrada || placaConfirmada;
         
         if (!isMorador) {
           const visitanteResult = await checkIfVisitanteAtivo(placaConfirmada);
@@ -887,6 +912,23 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
             nomeVisitante = visitanteResult.nome;
             casaFinal = visitanteResult.casa;
             placaFinal = visitanteResult.placaCadastrada || placaConfirmada;
+          }
+          
+          // v1.1.84: Tentar candidatos do beam search para visitantes também
+          if (!isVisitante && result.candidates && result.candidates.length > 1) {
+            for (const candidate of result.candidates) {
+              if (candidate.text === placaConfirmada) continue;
+              
+              const candidateResult = await checkIfVisitanteAtivo(candidate.text);
+              if (candidateResult.isVisitante) {
+                isVisitante = true;
+                nomeVisitante = candidateResult.nome;
+                casaFinal = candidateResult.casa;
+                placaFinal = candidateResult.placaCadastrada || candidate.text;
+                console.log(`🎯 Beam Search Match: Candidato "${candidate.text}" encontrou visitante "${nomeVisitante}"`);
+                break;
+              }
+            }
           }
         }
         

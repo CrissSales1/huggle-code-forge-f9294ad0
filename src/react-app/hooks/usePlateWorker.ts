@@ -36,6 +36,7 @@ export interface OCRResult {
     height: number;
     confidence: number;
   };
+  candidates?: Array<{ text: string; confidence: number; format: string }>; // v1.1.84: Beam Search top-3 candidatos
 }
 
 interface MotionDetectionConfig {
