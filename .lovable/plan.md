@@ -1,77 +1,21 @@
 
 
-# Plano: Auto-Reset da Referência Quando Veículo Sai - v1.1.81
+# Plano: Correção de Erros OCR com Substituição Dupla - v1.1.82
 
-## Problema Identificado
+## Problema
 
-Na imagem do usuário:
-- O carro já saiu da área virtual
-- O indicador ainda mostra "Veículo: 24%"
-- Quando o próximo carro chegar, a diferença será pequena (carro vs carro) e a detecção falhará
+Placas cadastradas com fotos nítidas não estão sendo reconhecidas:
+
+| Placa Real | OCR Leu | Erros | Posições |
+|-----------|---------|-------|----------|
+| TKG9D97 | TKG2I97 | 9->2, D->I | Pos 3 e 4 (duas mudanças) |
+| FUL3E36 | FU1E36 / FUL1E36 | L->1, 3->desaparece ou troca | Confusão L/1 |
 
 ### Causa Raiz
 
-A imagem de referência foi capturada/atualizada **com um veículo presente**. Isso acontece porque:
-
-1. O sistema atualiza a referência após 10 segundos de "área limpa" (`AUTO_UPDATE_DELAY_MS`)
-2. Porém, o `CLEAN_THRESHOLD` (5%) é muito baixo - um carro parado pode ter variação < 5% entre frames
-3. Resultado: O sistema interpreta "carro parado" como "área limpa" e atualiza a referência **com o carro**
-
-### Fluxo Problemático
-
-```
-Carro entra → Diferença 24% → OCR executado → Sucesso
-Carro para → Diferença entre frames < 5% → Sistema pensa "área limpa"
-10 segundos depois → Referência atualizada COM O CARRO
-Carro sai → Diferença 24% (agora a referência tem carro, mas área está vazia)
-Próximo carro → Diferença carro vs carro = pequena → OCR não dispara
-```
-
----
-
-## Solução
-
-### Estratégia: Reset Inteligente Baseado em Estado
-
-1. **Nunca atualizar referência enquanto `hasMotion` ou `ocrSucceeded` for true**
-2. **Após OCR bem-sucedido, esperar veículo SAIR (diferença voltar a zero) antes de permitir atualização**
-3. **Quando diferença cair para < `CLEAN_THRESHOLD` E `ocrSucceeded` era true, significa que veículo saiu → capturar nova referência imediatamente**
-
-### Nova Lógica no `processFrame`:
-
-```typescript
-// Thresholds
-const DETECTION_THRESHOLD = 0.10; // 10% = veículo presente
-const CLEAN_THRESHOLD = 0.05;     // 5% = área limpa
-const VEHICLE_EXITED_THRESHOLD = 0.08; // 8% = transição de saída
-
-// Novo: Rastrear estado de OCR bem-sucedido para detectar saída
-private vehicleWasDetected: boolean = false;
-
-processFrame(...) {
-  // ...cálculo de diffPercent...
-  
-  // Detectar transição: veículo detectado → veículo saiu
-  if (this.ocrSucceeded && diffPercent < VEHICLE_EXITED_THRESHOLD) {
-    // Veículo saiu após detecção bem-sucedida!
-    console.log('🚗 Veículo saiu da área - resetando para próximo');
-    
-    // Capturar nova referência AGORA (área limpa)
-    shouldUpdateReference = true;
-    
-    // Resetar flags para próximo veículo
-    this.ocrSucceeded = false;
-    this.ocrAttempted = false;
-    this.vehicleWasDetected = false;
-  }
-  
-  // Nunca atualizar referência enquanto há veículo detectado
-  if (vehiclePresent || this.ocrSucceeded) {
-    this.lastCleanTime = 0; // Bloquear auto-update
-    this.referenceUpdatePending = false;
-  }
-}
-```
+1. **Falta mapeamento I<->D** nas tabelas de confusão OCR
+2. **Sem substituição dupla**: o sistema só gera variações com 1 mudança por vez. Para TKG2I97 -> TKG9D97, são necessárias 2 mudanças simultâneas
+3. **Visitantes usam matching fraco**: `checkIfVisitanteAtivo` usa apenas `generateVariations` (simples), enquanto `checkIfMorador` já usa variações agressivas
 
 ---
 
@@ -79,114 +23,91 @@ processFrame(...) {
 
 | Arquivo | Mudanças |
 |---------|----------|
-| `src/react-app/utils/motionDetection.ts` | Nova lógica de detecção de saída do veículo + bloqueio de atualização incorreta |
-| `src/react-app/hooks/useContinuousMonitoring.ts` | Passar callback para resetar buffer quando veículo sair |
-| `src/react-app/pages/Configuracoes.tsx` | Versão 1.1.81 |
+| `src/react-app/utils/plateValidator.ts` | Adicionar I<->D nos mapeamentos + implementar substituição dupla |
+| `src/react-app/contexts/MonitoringContext.tsx` | Usar variações agressivas na busca de visitantes |
+| `src/react-app/pages/Configuracoes.tsx` | Versão 1.1.82 |
 
 ---
 
 ## Detalhes Técnicos
 
-### 1. Novo threshold para detectar saída (motionDetection.ts)
+### 1. Novos mapeamentos em `plateValidator.ts`
 
-```typescript
-// Linha ~369
-const DETECTION_THRESHOLD = 0.10; // 10% de diferença = veículo presente
-const CLEAN_THRESHOLD = 0.05;     // 5% de diferença = área considerada limpa
-const VEHICLE_EXIT_THRESHOLD = 0.08; // 8% = veículo está saindo/saiu
-const AUTO_UPDATE_DELAY_MS = 10000; // 10 segundos limpa = atualiza referência
+**OCR_CORRECTIONS:**
+```
+'I': adicionar 'D'    (linha 30)
+'D': adicionar 'I'    (linha 25)
 ```
 
-### 2. Nova lógica em `processFrame` (motionDetection.ts)
+**VISUAL_SIMILAR:**
+```
+'I': adicionar 'D'    (linha 56)
+'D': adicionar 'I'    (linha 52)
+```
 
-Modificar o método `processFrame` para:
+### 2. Nova função `generateDualVariations`
+
+Gera variações com duas substituições simultâneas em posições adjacentes (distância max 2), usando `VISUAL_SIMILAR`. Cada variação passa por `correctByPosition` e `isValidPlate` para garantir formato válido.
 
 ```typescript
-processFrame(...): {..., vehicleExited: boolean } {
-  // ...código existente de comparação...
+export function generateDualVariations(plate: string): string[] {
+  const variations = new Set<string>();
+  const chars = plate.split('');
   
-  const diffPercent = compareFrames(this.referenceFrame, currentFrame, this.config);
-  const vehiclePresent = diffPercent >= DETECTION_THRESHOLD;
-  const areaClean = diffPercent < CLEAN_THRESHOLD;
-  
-  // v1.1.81: Detectar quando veículo SAI da área após detecção bem-sucedida
-  let vehicleExited = false;
-  
-  if (this.ocrSucceeded && diffPercent < VEHICLE_EXIT_THRESHOLD) {
-    // Transição: tinha veículo (OCR sucesso) → área limpa agora
-    console.log('🚗💨 Veículo saiu após detecção - capturando nova referência');
-    vehicleExited = true;
-    shouldUpdateReference = true;
-    
-    // Reset completo para próximo veículo
-    this.ocrSucceeded = false;
-    this.ocrAttempted = false;
-    this.lastOcrAttemptTime = 0;
-    this.consecutiveMotionFrames = 0;
-    this.lastCleanTime = Date.now();
+  for (let i = 0; i < 7; i++) {
+    const altsI = VISUAL_SIMILAR[chars[i]] || [];
+    for (let j = i + 1; j < 7 && j <= i + 2; j++) {
+      const altsJ = VISUAL_SIMILAR[chars[j]] || [];
+      for (const ai of altsI) {
+        for (const aj of altsJ) {
+          const variant = [...chars];
+          variant[i] = ai;
+          variant[j] = aj;
+          const corrected = correctByPosition(variant.join(''));
+          if (isValidPlate(corrected)) {
+            variations.add(corrected);
+          }
+        }
+      }
+    }
   }
   
-  // v1.1.81: BLOQUEAR atualização automática enquanto há veículo ou OCR ativo
-  if (vehiclePresent || (this.ocrSucceeded && !vehicleExited)) {
-    this.lastCleanTime = 0; // Impede auto-update
-    this.referenceUpdatePending = false;
-  }
-  
-  return { 
-    hasMotion, 
-    isStable, 
-    shouldAttemptOCR, 
-    motionPercent: diffPercent, 
-    shouldUpdateReference,
-    vehicleExited  // NOVO: sinaliza para limpar buffer OCR
-  };
+  return Array.from(variations);
 }
 ```
 
-### 3. Hook useContinuousMonitoring.ts - Limpar buffer ao sair
+### 3. Integrar em `generateAggressiveVariations`
+
+Chamar `generateDualVariations` e adicionar os resultados ao set de variações existente.
+
+### 4. Visitantes com matching agressivo
+
+Em `checkIfVisitanteAtivo` (MonitoringContext.tsx, linha 690), substituir:
 
 ```typescript
-// Em processFrame callback (~linha 552)
-const result = motionDetectorRef.current.processFrame(...);
+// Antes:
+const { generateVariations } = await import(...)
+const variacoes = generateVariations(placaLimpa);
 
-// v1.1.81: Se veículo saiu, limpar buffer OCR
-if (result.vehicleExited) {
-  resetOcrBuffer();
-  console.log('🧹 Buffer OCR limpo - veículo saiu');
-}
+// Depois:
+const { generateVariations, generateAggressiveVariations } = await import(...)
+const variacoes = [...new Set([
+  ...generateVariations(placaLimpa),
+  ...generateAggressiveVariations(placaLimpa)
+])];
 ```
+
+Também mudar a lógica de matching para comparar cada placa de visitante contra as variações (mesmo padrão que `checkIfMorador`).
 
 ---
 
-## Fluxo Corrigido
+## Validação: TKG2I97 -> TKG9D97
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ ESTADO INICIAL                                                          │
-│ Referência: área vazia | Diferença: 0% | Status: Monitorando           │
-└────────────────────────────────────┬────────────────────────────────────┘
-                                     ↓
-┌─────────────────────────────────────────────────────────────────────────┐
-│ CARRO ENTRA                                                             │
-│ Referência: área vazia | Diferença: 24% | Status: Veículo detectado!   │
-│ → OCR executado → Placa identificada → ocrSucceeded = true             │
-│ → Auto-update de referência BLOQUEADO (ocrSucceeded = true)            │
-└────────────────────────────────────┬────────────────────────────────────┘
-                                     ↓
-┌─────────────────────────────────────────────────────────────────────────┐
-│ CARRO SAI                                                               │
-│ Diferença cai para < 8% | ocrSucceeded era true                        │
-│ → DETECTADO: vehicleExited = true                                       │
-│ → Captura nova referência IMEDIATAMENTE (área limpa)                   │
-│ → Reset: ocrSucceeded = false, buffer OCR limpo                        │
-│ → Diferença: 0% | Status: Monitorando                                  │
-└────────────────────────────────────┬────────────────────────────────────┘
-                                     ↓
-┌─────────────────────────────────────────────────────────────────────────┐
-│ PRÓXIMO CARRO                                                           │
-│ Referência: área vazia (atualizada!) | Diferença: 22% | Detecta OK!    │
-└─────────────────────────────────────────────────────────────────────────┘
-```
+1. `VISUAL_SIMILAR['2']` inclui '9' -- posição 3: TKG**9**I97
+2. `VISUAL_SIMILAR['I']` inclui 'D' (novo!) -- posição 4: TKG2**D**97
+3. Dual substitution posições 3+4: 2->9, I->D = TKG**9D**97
+4. `correctByPosition("TKG9D97")` -> formato antigo válido
+5. Busca no banco encontra o morador
 
 ---
 
@@ -194,16 +115,15 @@ if (result.vehicleExited) {
 
 | Cenário | Antes | Depois |
 |---------|-------|--------|
-| Carro sai após OCR | Diferença fica 24% | **Diferença reseta para ~0%** |
-| Referência | Continha o carro | **Sempre limpa (sem veículo)** |
-| Próximo carro | Detecção fraca/falha | **Detecção normal (~20%+)** |
-| Atualização auto | Podia atualizar com carro | **Bloqueada enquanto há veículo** |
+| TKG2I97 (real: TKG9D97) | Não encontra morador | Match via dual substitution |
+| Visitantes com erros OCR | Matching fraco (1 mudança) | Matching agressivo + dual |
+| Performance | ~50 variações | ~200 variações (ainda < 1ms) |
 
 ---
 
 ## Versão
 
 ```
-Versão 1.1.81 (Auto-Reset Referência)
+Versão 1.1.82 (Fuzzy Dual Match)
 ```
 
