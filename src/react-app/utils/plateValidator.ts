@@ -53,7 +53,7 @@ const VISUAL_SIMILAR: Record<string, string[]> = {
   'O': ['0', 'D', 'Q', '6', 'U'],        // v1.1.69: adiciona U
   '0': ['O', 'D', 'Q', '6', '8'],        // v1.1.38: adicionado '6' e '8'
   '1': ['I', 'L', '7', 'T', '|'],
-  'I': ['1', 'L', '|', 'J'],         // v1.1.68: adiciona J
+  'I': ['1', 'L', '|', 'J', 'D'],         // v1.1.82: adiciona D
   '4': ['A', 'H'],
   'A': ['4', 'H'],
   '8': ['B', '3', '0'],                   // v1.1.38: adicionado '0'
