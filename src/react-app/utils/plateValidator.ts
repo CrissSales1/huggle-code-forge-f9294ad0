@@ -49,7 +49,7 @@ const OCR_CORRECTIONS: Record<string, string[]> = {
 // Inclui confusões 0↔6↔9, E↔B, 2↔7, 9↔2 para melhor matching no banco
 const VISUAL_SIMILAR: Record<string, string[]> = {
   // Muito similares - altíssima confusão
-  'D': ['0', 'O', 'Q', 'B'],              // v1.1.70: adiciona B
+  'D': ['0', 'O', 'Q', 'B', 'I'],          // v1.1.82: adiciona I
   'O': ['0', 'D', 'Q', '6', 'U'],        // v1.1.69: adiciona U
   '0': ['O', 'D', 'Q', '6', '8'],        // v1.1.38: adicionado '6' e '8'
   '1': ['I', 'L', '7', 'T', '|'],
