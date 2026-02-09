@@ -409,6 +409,146 @@ function decodeCTC(output: Float32Array, outputShape: readonly number[]): {
 }
 
 /**
+ * v1.1.84: Beam Search CTC Decoder
+ * Em vez de pegar apenas o melhor caractere em cada posição (greedy),
+ * mantém os top-K candidatos e retorna até 3 placas alternativas.
+ * 
+ * Isso permite que erros de OCR como SSH→SSW sejam capturados como candidato #2,
+ * sem depender de fuzzy matching pós-erro.
+ */
+function decodeCTCBeam(output: Float32Array, outputShape: readonly number[], beamWidth: number = 3): 
+  Array<{ text: string; confidence: number; detectedFormat: 'antiga' | 'mercosul' | 'unknown' }> {
+  
+  let seqLen: number;
+  let numClasses: number;
+  
+  if (outputShape.length === 3) {
+    seqLen = outputShape[1];
+    numClasses = outputShape[2];
+  } else if (outputShape.length === 2) {
+    seqLen = outputShape[0];
+    numClasses = outputShape[1];
+  } else {
+    return [];
+  }
+  
+  const TEMPERATURE = 10;
+  
+  // Coletar top-K probabilidades por posição temporal
+  // Primeiro, decodificar greedy para saber quais posições temporais emitem caracteres
+  interface CharEmission {
+    timeStep: number;
+    topK: Array<{ idx: number; prob: number; char: string }>;
+  }
+  
+  const emissions: CharEmission[] = [];
+  let lastIdx = 0;
+  
+  for (let t = 0; t < seqLen; t++) {
+    const logits: number[] = [];
+    for (let c = 0; c < numClasses; c++) {
+      logits.push(output[t * numClasses + c]);
+    }
+    
+    // Encontrar melhor índice
+    let maxIdx = 0;
+    let maxVal = -Infinity;
+    for (let c = 0; c < numClasses; c++) {
+      if (logits[c] > maxVal) {
+        maxVal = logits[c];
+        maxIdx = c;
+      }
+    }
+    
+    // CTC: só emite em posições não-blank e não-repetição
+    if (maxIdx !== 0 && maxIdx !== lastIdx) {
+      const probs = softmaxWithTemperature(logits, TEMPERATURE);
+      
+      // Coletar top-K alternativas (excluindo blank idx=0)
+      const candidates: Array<{ idx: number; prob: number; char: string }> = [];
+      for (let c = 1; c < numClasses; c++) {
+        if (c < charset.length && charset[c] !== '') {
+          candidates.push({ idx: c, prob: probs[c], char: charset[c] });
+        }
+      }
+      
+      // Ordenar por probabilidade decrescente e pegar top-K
+      candidates.sort((a, b) => b.prob - a.prob);
+      emissions.push({
+        timeStep: t,
+        topK: candidates.slice(0, beamWidth),
+      });
+    }
+    lastIdx = maxIdx;
+  }
+  
+  if (emissions.length === 0) return [];
+  
+  // Gerar candidatos substituindo UMA posição por vez com alternativa #2 ou #3
+  // Candidato 0: greedy (top-1 em todas as posições)
+  const greedyChars = emissions.map(e => e.topK[0]);
+  const greedyText = greedyChars.map(c => c.char).join('').toUpperCase();
+  const greedyConf = greedyChars.reduce((sum, c) => sum + c.prob, 0) / greedyChars.length;
+  
+  const results: Array<{ text: string; confidence: number; detectedFormat: 'antiga' | 'mercosul' | 'unknown' }> = [];
+  
+  // Adicionar greedy como primeiro candidato
+  const greedyCorrected = heuristicCorrection(greedyText);
+  results.push({ 
+    text: greedyCorrected.text, 
+    confidence: greedyConf, 
+    detectedFormat: greedyCorrected.detectedFormat 
+  });
+  
+  // Gerar alternativas: para cada posição, substituir com 2ª melhor opção
+  const altCandidates: Array<{ text: string; confidence: number; changedPos: number }> = [];
+  
+  for (let pos = 0; pos < emissions.length; pos++) {
+    const emission = emissions[pos];
+    
+    // Tentar alternativas 2 e 3 para esta posição
+    for (let altIdx = 1; altIdx < Math.min(emission.topK.length, beamWidth); altIdx++) {
+      const alt = emission.topK[altIdx];
+      
+      // Só considerar se a alternativa tem probabilidade razoável (>5% da top)
+      if (alt.prob < emission.topK[0].prob * 0.05) continue;
+      
+      // Construir texto alternativo
+      const altChars = emissions.map((e, i) => i === pos ? alt : e.topK[0]);
+      const altText = altChars.map(c => c.char).join('').toUpperCase();
+      const altConf = altChars.reduce((sum, c) => sum + c.prob, 0) / altChars.length;
+      
+      altCandidates.push({ text: altText, confidence: altConf, changedPos: pos });
+    }
+  }
+  
+  // Ordenar alternativas por confiança e adicionar as melhores
+  altCandidates.sort((a, b) => b.confidence - a.confidence);
+  
+  const seenTexts = new Set<string>([greedyCorrected.text]);
+  
+  for (const alt of altCandidates) {
+    if (results.length >= beamWidth) break;
+    
+    const corrected = heuristicCorrection(alt.text);
+    if (seenTexts.has(corrected.text)) continue;
+    seenTexts.add(corrected.text);
+    
+    results.push({
+      text: corrected.text,
+      confidence: alt.confidence,
+      detectedFormat: corrected.detectedFormat,
+    });
+  }
+  
+  if (results.length > 1) {
+    console.log(`🔍 Beam Search: ${results.map(r => `"${r.text}"(${(r.confidence * 100).toFixed(0)}%)`).join(' | ')}`);
+  }
+  
+  return results;
+}
+
+/**
  * Correção Heurística de Homoglifos para placas brasileiras v1.1.52
  * Corrige confusões de caracteres baseado na posição (formato BR)
  * Limpa ruído e garante máximo 7 caracteres
