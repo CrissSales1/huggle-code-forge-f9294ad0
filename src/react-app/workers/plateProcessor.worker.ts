@@ -2120,7 +2120,7 @@ async function processPlate(
     
     // 3. Executar OCR com ONNX usando imagem otimizada
     // v1.1.52: Agora retorna também o formato detectado pelo hífen
-    const { text: rawText, confidence: ocrConfidence, detectedFormat } = await runONNXOCR(
+    const { text: rawText, confidence: ocrConfidence, detectedFormat, candidates: beamCandidates } = await runONNXOCR(
       optimized.data,
       optimized.width,
       optimized.height
@@ -2152,6 +2152,21 @@ async function processPlate(
     // 4. Validar e corrigir placa
     // v1.1.52: Passa o formato detectado pelo hífen para evitar conversão errada
     const validation = validateAndCorrectPlate(rawText, detectedFormat);
+    
+    // v1.1.84: Validar candidatos do beam search e incluir no resultado
+    const validatedCandidates: Array<{ text: string; confidence: number; format: string }> = [];
+    if (beamCandidates && beamCandidates.length > 0) {
+      for (const candidate of beamCandidates) {
+        const candidateValidation = validateAndCorrectPlate(candidate.text, candidate.detectedFormat);
+        if (candidateValidation.isValid) {
+          validatedCandidates.push({
+            text: candidateValidation.corrected,
+            confidence: candidate.confidence,
+            format: candidateValidation.format,
+          });
+        }
+      }
+    }
     
     const processingTimeMs = performance.now() - startTime;
     
