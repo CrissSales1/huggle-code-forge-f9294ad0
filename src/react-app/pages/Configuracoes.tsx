@@ -1311,7 +1311,7 @@ export default function Configuracoes() {
       {/* Rodapé com versão */}
       <div className="mt-8 pt-4 border-t border-gray-200 text-center">
         <p className="text-xs text-gray-400">
-          Versão do Sistema: <span className="font-mono font-medium text-gray-500">1.1.84</span> <span className="text-emerald-500">(Beam Search OCR)</span>
+          Versão do Sistema: <span className="font-mono font-medium text-gray-500">1.1.85</span> <span className="text-emerald-500">(V-Y Visual Similar Fix)</span>
         </p>
       </div>
     </div>
