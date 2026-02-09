@@ -2187,6 +2187,32 @@ async function processPlate(
       }
     }
     
+    self.postMessage({ type: 'PROGRESS', payload: { stage: 'Validando...', progress: 0.8 } });
+    
+    // 3.5. Filtrar falsos positivos (texto de câmera/ambiente)
+    if (isForbiddenText(rawText)) {
+      const processingTimeMs = performance.now() - startTime;
+      return {
+        success: false,
+        rawText,
+        validation: {
+          isValid: false,
+          original: rawText,
+          corrected: '',
+          formatted: '',
+          format: 'unknown',
+          confidence: 0,
+        },
+        ocrConfidence: 0,
+        processingTimeMs,
+        usedFallback: false,
+        usedYolo,
+      };
+    }
+    
+    // 4. Validar e corrigir placa
+    const validation = validateAndCorrectPlate(rawText, detectedFormat);
+    
     const processingTimeMs = performance.now() - startTime;
     
     // 5. Verificar se precisa de fallback
