@@ -1,135 +1,70 @@
 
 
-# Melhorias Significativas para Leitura de Placas - Analise e Opcoes
+# Plano: Adicionar confusoes V-Y e Q-O no VISUAL_SIMILAR - v1.1.85
 
-## Situacao Atual
+## Problema
 
-O sistema usa um pipeline local com:
-1. **YOLO** (TensorFlow.js) para detectar a regiao da placa no frame
-2. **PaddleOCR** (ONNX Runtime) para ler os caracteres
-3. **Heuristica posicional** para corrigir confusoes comuns (0/O, 1/I, etc.)
-4. **Fuzzy matching** com variações simples e duplas para encontrar no banco
-5. **Consistencia temporal** (3 leituras iguais antes de confirmar)
-6. **Fallback opcional** para API externa (Plate Recognizer)
+A placa da casa 84 e **QYR8E54** mas o OCR leu **OVR8E54** (95% confianca). Sao 2 erros simultaneos:
+- Posicao 0: **Q lido como O**
+- Posicao 1: **Y lido como V**
 
-Os erros recentes (SSH->SSW, TKG2I97->TKG9D97) foram resolvidos adicionando mapeamentos no fuzzy matching. Mas isso trata o **sintoma** (matching pos-erro), nao a **causa** (OCR lendo errado).
+O `generateDualVariations` deveria resolver isso (2 substituicoes simultaneas), mas falha porque **V e Y nao existem no mapeamento `VISUAL_SIMILAR`**. Eles existem em `OCR_CORRECTIONS` mas o fuzzy matching usa `VISUAL_SIMILAR`.
 
----
+## Causa Raiz
 
-## 3 Estrategias de Melhoria (da mais simples a mais impactante)
+No `plateValidator.ts`, o dicionario `VISUAL_SIMILAR` tem entradas para O (inclui Q) e Q (inclui O), mas **nao tem entradas para V nem Y**. Como `generateAggressiveVariations` e `generateDualVariations` usam exclusivamente `VISUAL_SIMILAR`, a variacao V->Y nunca e gerada.
 
-### Opcao A: Multi-Crop OCR (Impacto Medio, Esforco Baixo)
+## Trace do erro
 
-Rodar o OCR **3 vezes** na mesma placa com crops levemente diferentes e usar votacao majoritaria.
+1. OCR le "OVR8E54"
+2. `generateAggressiveVariations("OVR8E54")` roda
+3. Posicao 0: `VISUAL_SIMILAR['O']` = `['0','D','Q','6','U']` -- gera QVR8E54 (1 mudanca)
+4. Posicao 1: `VISUAL_SIMILAR['V']` = **undefined** -- NENHUMA variacao gerada
+5. `generateDualVariations` tenta pos 0+1: precisa de alternativas para AMBAS posicoes, mas V nao tem -- falha
+6. Resultado: QYR8E54 nunca e gerado
 
-**Como funciona:**
-- Crop 1: Padrao atual (15% topo, 5% base)
-- Crop 2: Mais apertado (20% topo, 10% base)
-- Crop 3: Mais largo (10% topo, 0% base)
-- Comparar as 3 leituras caractere a caractere e escolher o mais frequente
+## Solucao
 
-**Vantagem:** Resolve confusoes causadas por alinhamento do crop (W/H, D/I)
-**Desvantagem:** 3x mais lento por frame (~300ms vs ~100ms)
+Adicionar V e Y ao `VISUAL_SIMILAR`:
 
-**Arquivos:** `plateProcessor.worker.ts` (funcao processPlate)
+```
+'V': ['U', 'W', 'Y'],
+'Y': ['V', '7', 'T'],
+```
 
----
+Com isso:
+1. Posicao 0: `VISUAL_SIMILAR['O']` inclui Q
+2. Posicao 1: `VISUAL_SIMILAR['V']` inclui Y (novo)
+3. `generateDualVariations` pos 0+1: O->Q + V->Y = **QYR8E54** -- match!
 
-### Opcao B: Modelo OCR Maior/Melhor (Impacto Alto, Esforco Alto)
-
-Substituir o modelo PaddleOCR atual (PP-OCRv3 generico) por um modelo treinado/fine-tuned especificamente para placas brasileiras.
-
-**Opcoes de modelo:**
-- PaddleOCR PP-OCRv4 (mais recente, melhor accuracy)
-- Modelo treinado com dataset de placas BR (fontes Mercosul e antiga)
-- Modelo CRNN customizado exportado para ONNX
-
-**Vantagem:** Resolve a causa raiz -- o modelo atual nao conhece bem a fonte de placas BR
-**Desvantagem:** Requer treinar/encontrar modelo, converter para ONNX, testar extensivamente
-
-**Arquivos:** Modelo em `public/models/plate-ocr/`, worker para adapter
-
----
-
-### Opcao C: Multi-Crop + Consenso Inteligente (Impacto Alto, Esforco Medio) -- RECOMENDADO
-
-Combina Multi-Crop com o sistema de consenso ja existente de forma inteligente:
-
-1. **Multi-Crop com 2 variantes** (nao 3, para manter performance):
-   - Crop padrao + Crop com margem extra lateral
-   - Se ambos concordam: confianca alta, aceitar direto (bypass consistencia temporal)
-   - Se discordam: usar fuzzy matching para encontrar a variante que bate no banco
-
-2. **Pre-processamento adaptativo**:
-   - Detectar se a placa tem fundo claro ou escuro
-   - Aplicar contraste invertido para placas Mercosul (fundo branco) vs antigas (fundo cinza)
-
-3. **OCR com beam search** ao inves de greedy:
-   - Em vez de pegar apenas o caractere mais provavel em cada posicao, manter top-3
-   - Gerar ate 3 candidatos de placa e validar todos contra o banco
-
-**Arquivos a modificar:**
+## Arquivos a Modificar
 
 | Arquivo | Mudanca |
 |---------|---------|
-| `plateProcessor.worker.ts` | Multi-crop, beam search no decodeCTC, pre-processamento adaptativo |
-| `plateValidator.ts` | Nova funcao `rankCandidates` que ordena multiplos candidatos por probabilidade |
-| `MonitoringContext.tsx` | Aceitar lista de candidatos do worker e buscar todos no banco |
+| `src/react-app/utils/plateValidator.ts` | Adicionar V e Y ao VISUAL_SIMILAR |
+| `src/react-app/pages/Configuracoes.tsx` | Versao 1.1.85 |
 
-**Estimativa de performance:** ~200ms por frame (vs ~100ms atual) -- ainda rapido o suficiente para tempo real
+## Detalhes Tecnicos
 
----
+### plateValidator.ts - VISUAL_SIMILAR
 
-## Recomendacao
-
-A **Opcao C** oferece o melhor custo-beneficio. Atacar em 2 fases:
-
-**Fase 1** (rapida): Beam search no decodeCTC -- gerar top-3 candidatos em vez de 1
-**Fase 2**: Multi-crop com 2 variantes + consenso cruzado
-
-Isso reduz erros de OCR na origem sem precisar treinar modelos novos.
-
----
-
-## Detalhes Tecnicos da Fase 1: Beam Search
-
-### Mudanca no `decodeCTC` (worker)
-
-Atualmente o decodeCTC usa decodificacao greedy (pega o caractere com maior probabilidade em cada posicao). Com beam search, mantemos os top-K candidatos:
+Adicionar apos a entrada de 'U':
 
 ```typescript
-// Beam search simplificado para placas (7 posicoes fixas)
-// Em vez de 1 resultado, retorna ate 3 candidatos ordenados por score
-function decodeCTCBeam(output: Float32Array, outputShape: number[], beamWidth: number = 3): 
-  Array<{ text: string; confidence: number; detectedFormat: string }>
+'V': ['U', 'W', 'Y'],
+'Y': ['V', '7', 'T'],
 ```
 
-### Mudanca no `processPlate` (worker)
+### Configuracoes.tsx
 
-```typescript
-// Retornar multiplos candidatos no resultado
-interface OCRResult {
-  // ... campos existentes ...
-  candidates?: Array<{ text: string; confidence: number }>;  // Top-3 candidatos
-}
-```
+Atualizar versao para `1.1.85 (V-Y Visual Similar Fix)`.
 
-### Mudanca no `MonitoringContext.tsx`
+## Validacao: OVR8E54 -> QYR8E54
 
-```typescript
-// Ao receber resultado com multiplos candidatos:
-// 1. Buscar TODOS no banco (moradores + visitantes)
-// 2. Se algum bate: usar esse
-// 3. Se nenhum bate: usar o de maior confianca
-```
-
----
-
-## Resultado Esperado
-
-| Cenario | Antes | Depois |
-|---------|-------|--------|
-| SSH3A38 (real: SSW3A38) | Depende de fuzzy matching | Beam search gera SSW3A38 como candidato #2, match direto |
-| TKG2I97 (real: TKG9D97) | Depende de dual substitution | Beam search pode gerar TKG9D97 como candidato, ou Multi-crop resolve |
-| Placas noturnas | Alta taxa de erro | Pre-processamento adaptativo melhora |
+1. `generateDualVariations("OVR8E54")` com posicoes i=0, j=1 (adjacentes, distancia 1)
+2. `VISUAL_SIMILAR['O']` inclui 'Q', `VISUAL_SIMILAR['V']` inclui 'Y'
+3. Variante gerada: QYR8E54
+4. `correctByPosition("QYR8E54")` = QYR8E54 (ja valido, formato antigo)
+5. `isValidPlate("QYR8E54")` = true
+6. Busca no banco encontra casa 84
 
