@@ -1,70 +1,102 @@
 
 
-# Plano: Adicionar confusoes V-Y e Q-O no VISUAL_SIMILAR - v1.1.85
+# Plano: Fase 2 - Multi-Crop com 2 Variantes e Consenso Cruzado - v1.1.86
 
-## Problema
+## Objetivo
 
-A placa da casa 84 e **QYR8E54** mas o OCR leu **OVR8E54** (95% confianca). Sao 2 erros simultaneos:
-- Posicao 0: **Q lido como O**
-- Posicao 1: **Y lido como V**
+Rodar o OCR **2 vezes** no mesmo frame da placa com crops levemente diferentes, e usar consenso cruzado para melhorar a precisao. Quando os dois crops concordam, a confianca e maxima. Quando discordam, ambos os resultados (incluindo beam search de cada) sao enviados como candidatos para matching no banco.
 
-O `generateDualVariations` deveria resolver isso (2 substituicoes simultaneas), mas falha porque **V e Y nao existem no mapeamento `VISUAL_SIMILAR`**. Eles existem em `OCR_CORRECTIONS` mas o fuzzy matching usa `VISUAL_SIMILAR`.
+## Como Funciona
 
-## Causa Raiz
-
-No `plateValidator.ts`, o dicionario `VISUAL_SIMILAR` tem entradas para O (inclui Q) e Q (inclui O), mas **nao tem entradas para V nem Y**. Como `generateAggressiveVariations` e `generateDualVariations` usam exclusivamente `VISUAL_SIMILAR`, a variacao V->Y nunca e gerada.
-
-## Trace do erro
-
-1. OCR le "OVR8E54"
-2. `generateAggressiveVariations("OVR8E54")` roda
-3. Posicao 0: `VISUAL_SIMILAR['O']` = `['0','D','Q','6','U']` -- gera QVR8E54 (1 mudanca)
-4. Posicao 1: `VISUAL_SIMILAR['V']` = **undefined** -- NENHUMA variacao gerada
-5. `generateDualVariations` tenta pos 0+1: precisa de alternativas para AMBAS posicoes, mas V nao tem -- falha
-6. Resultado: QYR8E54 nunca e gerado
-
-## Solucao
-
-Adicionar V e Y ao `VISUAL_SIMILAR`:
-
-```
-'V': ['U', 'W', 'Y'],
-'Y': ['V', '7', 'T'],
+```text
+Frame da placa (YOLO crop + padding 15px)
+    |
+    +---> Crop A (padrao): 15% topo, 5% base, 260px em 320px
+    |         |
+    |         +---> OCR -> "OVR8E54" (95%) + beam candidates
+    |
+    +---> Crop B (margem extra): 10% topo, 2% base, 280px em 320px
+              |
+              +---> OCR -> "QYR8E54" (88%) + beam candidates
+    |
+    Consenso cruzado:
+      - Se A == B: confianca alta, resultado unico
+      - Se A != B: merge dos candidatos de ambos, ordenar por confianca
 ```
 
-Com isso:
-1. Posicao 0: `VISUAL_SIMILAR['O']` inclui Q
-2. Posicao 1: `VISUAL_SIMILAR['V']` inclui Y (novo)
-3. `generateDualVariations` pos 0+1: O->Q + V->Y = **QYR8E54** -- match!
+## Impacto no Performance
+
+- Cada OCR roda em ~50-100ms
+- Com 2 crops: ~100-200ms por frame (aceitavel para tempo real)
+- O YOLO e otimizacao de imagem rodam apenas 1 vez (nao duplicados)
 
 ## Arquivos a Modificar
 
 | Arquivo | Mudanca |
 |---------|---------|
-| `src/react-app/utils/plateValidator.ts` | Adicionar V e Y ao VISUAL_SIMILAR |
-| `src/react-app/pages/Configuracoes.tsx` | Versao 1.1.85 |
+| `src/react-app/workers/plateProcessor.worker.ts` | Nova funcao `preprocessForONNXVariant`, modificar `runONNXOCR` para aceitar parametros de crop, modificar `processPlate` para rodar 2 OCRs e fazer consenso |
+| `src/react-app/pages/Configuracoes.tsx` | Versao 1.1.86 |
 
 ## Detalhes Tecnicos
 
-### plateValidator.ts - VISUAL_SIMILAR
+### 1. Nova funcao `preprocessForONNXVariant`
 
-Adicionar apos a entrada de 'U':
+Refatorar `preprocessForONNX` para aceitar parametros de crop configuraveis:
 
 ```typescript
-'V': ['U', 'W', 'Y'],
-'Y': ['V', '7', 'T'],
+interface CropParams {
+  cropTopRatio: number;    // % do topo a remover
+  cropBottomRatio: number; // % da base a remover
+  drawWidth: number;       // largura util no tensor
+}
+
+const CROP_STANDARD: CropParams = { cropTopRatio: 0.15, cropBottomRatio: 0.05, drawWidth: 260 };
+const CROP_WIDE: CropParams     = { cropTopRatio: 0.10, cropBottomRatio: 0.02, drawWidth: 280 };
 ```
 
-### Configuracoes.tsx
+A funcao `preprocessForONNX` passa a aceitar um `CropParams` opcional, usando `CROP_STANDARD` como default.
 
-Atualizar versao para `1.1.85 (V-Y Visual Similar Fix)`.
+### 2. Nova funcao `runONNXOCRWithCrop`
 
-## Validacao: OVR8E54 -> QYR8E54
+Wrapper que chama `preprocessForONNX` com parametros de crop especificos e depois roda a inferencia ONNX + beam search. Evita duplicar codigo.
 
-1. `generateDualVariations("OVR8E54")` com posicoes i=0, j=1 (adjacentes, distancia 1)
-2. `VISUAL_SIMILAR['O']` inclui 'Q', `VISUAL_SIMILAR['V']` inclui 'Y'
-3. Variante gerada: QYR8E54
-4. `correctByPosition("QYR8E54")` = QYR8E54 (ja valido, formato antigo)
-5. `isValidPlate("QYR8E54")` = true
-6. Busca no banco encontra casa 84
+### 3. Modificar `processPlate` - Consenso Cruzado
+
+Apos a etapa de otimizacao de imagem (linha ~2105), ao inves de chamar `runONNXOCR` uma vez:
+
+1. Chamar `runONNXOCRWithCrop(data, w, h, CROP_STANDARD)` -> resultado A
+2. Chamar `runONNXOCRWithCrop(data, w, h, CROP_WIDE)` -> resultado B
+3. Consenso:
+   - Se `A.text === B.text`: usar esse texto com confianca = max(A.conf, B.conf)
+   - Se diferem: merge de todos os candidatos (A greedy, A beam, B greedy, B beam), deduplicar, ordenar por confianca
+4. O resultado principal (rawText, ocrConfidence) vem do candidato mais confiante
+5. O array `candidates` contem todos os candidatos unicos de ambos os crops
+
+### 4. Log de consenso
+
+Adicionar log conciso quando os dois crops discordam:
+
+```typescript
+console.log(`🔀 Multi-Crop: A="${textA}" B="${textB}" → merged ${totalCandidates} candidatos`);
+```
+
+Quando concordam:
+
+```typescript
+console.log(`✅ Multi-Crop: consenso "${textA}" (${confA}%/${confB}%)`);
+```
+
+### 5. Versao
+
+```
+1.1.86 (Multi-Crop OCR)
+```
+
+## Validacao Esperada
+
+| Cenario | Crop A | Crop B | Resultado |
+|---------|--------|--------|-----------|
+| Placa alinhada | ENE7A63 | ENE7A63 | Consenso direto |
+| Placa com margem critica | OVR8E54 | QVR8E54 | Merge candidatos, fuzzy resolve |
+| Placa parcialmente cortada | SSH3A38 | SSW3A38 | Crop B acerta, merge com A |
 
