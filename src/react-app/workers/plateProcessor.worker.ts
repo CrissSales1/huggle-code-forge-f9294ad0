@@ -228,41 +228,42 @@ async function initONNX(): Promise<void> {
   }
 }
 
+// v1.1.86: CropParams para Multi-Crop OCR
+interface CropParams {
+  cropTopRatio: number;    // % do topo a remover
+  cropBottomRatio: number; // % da base a remover
+  drawWidth: number;       // largura útil no tensor
+}
+
+const CROP_STANDARD: CropParams = { cropTopRatio: 0.15, cropBottomRatio: 0.05, drawWidth: 260 };
+const CROP_WIDE: CropParams     = { cropTopRatio: 0.10, cropBottomRatio: 0.02, drawWidth: 280 };
+
 // v1.1.24: Center Crop + Padding "Emagrecido" + Heurística + Remoção Ruído de Borda
-// - Center Crop vertical: 15% topo, 5% base (preserva base dos caracteres)
-// - Padding horizontal: 260px útil centralizado em 320px (30px margem cada lado)
-// - SEM contraste artificial (evita saturação e engrossamento)
-// - Temperature Scaling: x10 no softmax para confiança calibrada
-// - Heurística pós-OCR para corrigir confusões de caracteres (0↔O, 3↔J, etc.)
-// - Remoção de ruído de borda: remove caractere fantasma no início (ex: "BFC..." → "FC...")
+// v1.1.86: Aceita CropParams para Multi-Crop
 
 /**
- * Pré-processa imagem para PaddleOCR v1.1.24
- * - Tight Crop: Remove margem vertical (15% topo, 5% base)
- * - Padding Horizontal: 260px útil centralizado (30px margem cada lado)
+ * Pré-processa imagem para PaddleOCR
+ * - Tight Crop: Remove margem vertical (configurável via CropParams)
+ * - Padding Horizontal: drawWidth útil centralizado
  * - Ordem BGR (padrão OpenCV/PaddleOCR)
  * - Normalização [-1, 1]: (pixel/255 - 0.5) / 0.5
- * - Caracteres mais "altos e magros" para diferenciar 0/6, B/8
  */
 function preprocessForONNX(
   data: Uint8ClampedArray,
   srcWidth: number,
-  srcHeight: number
+  srcHeight: number,
+  cropParams?: CropParams
 ): { tensor: Float32Array; width: number; height: number } {
+  const params = cropParams || CROP_STANDARD;
   const targetWidth = 320;
   const targetHeight = OCR_INPUT_HEIGHT; // 48
-  const drawWidth = 260;  // Largura útil "emagrecida" (deixa 30px margem cada lado)
-  const drawX = (targetWidth - drawWidth) / 2; // Centraliza (x=30)
+  const drawWidth = params.drawWidth;
+  const drawX = (targetWidth - drawWidth) / 2;
   
-  // 1. TIGHT CROP VERTICAL (Preserva base dos caracteres)
-  const cropTopRatio = 0.15;  // Remove 15% do topo
-  const cropBottomRatio = 0.05; // APENAS 5% da base (preserva '2', 'J', etc.)
-  
-  const cropTop = Math.round(srcHeight * cropTopRatio);
-  const cropBottom = Math.round(srcHeight * cropBottomRatio);
+  // 1. TIGHT CROP VERTICAL
+  const cropTop = Math.round(srcHeight * params.cropTopRatio);
+  const cropBottom = Math.round(srcHeight * params.cropBottomRatio);
   const usefulHeight = srcHeight - cropTop - cropBottom;
-  
-  // v1.1.62: Logs de crop/stretch removidos - muito verbosos
   
   // 2. CRIAR CANVAS TEMPORÁRIO COM IMAGEM ORIGINAL
   const srcCanvas = new OffscreenCanvas(srcWidth, srcHeight);
@@ -271,22 +272,21 @@ function preprocessForONNX(
   srcImageData.data.set(data);
   srcCtx.putImageData(srcImageData, 0, 0);
   
-  // 3. CRIAR CANVAS DE DESTINO COM FUNDO NEUTRO (Mais Padding = Menos Ruído de Borda)
+  // 3. CRIAR CANVAS DE DESTINO COM FUNDO NEUTRO
   const processCanvas = new OffscreenCanvas(targetWidth, targetHeight);
   const ctx = processCanvas.getContext('2d', { alpha: false })!;
   
-  // Preencher com cinza neutro (#7f7f7f) para padding
   ctx.fillStyle = "#7f7f7f";
   ctx.fillRect(0, 0, targetWidth, targetHeight);
   
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   
-  // 4. DESENHAR IMAGEM CENTRALIZADA COM PADDING "EMAGRECIDO"
+  // 4. DESENHAR IMAGEM CENTRALIZADA COM PADDING
   ctx.drawImage(
     srcCanvas, 
-    0, cropTop, srcWidth, usefulHeight,  // Source: área útil (miolo vertical)
-    drawX, 0, drawWidth, targetHeight     // Destino: 260x48 em x=30
+    0, cropTop, srcWidth, usefulHeight,
+    drawX, 0, drawWidth, targetHeight
   );
   
   // 5. EXTRAIR DADOS E CRIAR TENSOR
@@ -294,22 +294,16 @@ function preprocessForONNX(
   const pixels = targetWidth * targetHeight;
   const tensor = new Float32Array(3 * pixels);
   
-  // 6. NORMALIZAÇÃO [-1, 1] COM ORDEM BGR (SEM contraste artificial)
+  // 6. NORMALIZAÇÃO [-1, 1] COM ORDEM BGR
   for (let i = 0; i < pixels; i++) {
     const r = imageData.data[i * 4];
     const g = imageData.data[i * 4 + 1];
     const b = imageData.data[i * 4 + 2];
     
-    // Normalização Paddle BGR [-1, 1]
-    // Canal 0: Blue
     tensor[0 * pixels + i] = ((b / 255.0) - 0.5) / 0.5;
-    // Canal 1: Green
     tensor[1 * pixels + i] = ((g / 255.0) - 0.5) / 0.5;
-    // Canal 2: Red
     tensor[2 * pixels + i] = ((r / 255.0) - 0.5) / 0.5;
   }
-  
-  // v1.1.62: Logs de tensor range removidos - muito verbosos
   
   return { tensor, width: targetWidth, height: targetHeight };
 }
@@ -716,11 +710,13 @@ function heuristicCorrection(text: string): { text: string; detectedFormat: 'ant
 /**
  * Executa OCR com ONNX
  * v1.1.84: Retorna também candidatos do beam search
+ * v1.1.86: Aceita CropParams para Multi-Crop
  */
 async function runONNXOCR(
   data: Uint8ClampedArray,
   width: number,
-  height: number
+  height: number,
+  cropParams?: CropParams
 ): Promise<{ 
   text: string; 
   confidence: number; 
@@ -736,8 +732,8 @@ async function runONNXOCR(
   }
   
   try {
-    // Pré-processar imagem
-    const { tensor, width: processedWidth, height: processedHeight } = preprocessForONNX(data, width, height);
+    // Pré-processar imagem com CropParams
+    const { tensor, width: processedWidth, height: processedHeight } = preprocessForONNX(data, width, height, cropParams);
     
     // Criar tensor de entrada
     const inputTensor = new ort.Tensor('float32', tensor, [1, 3, processedHeight, processedWidth]);
@@ -2121,13 +2117,75 @@ async function processPlate(
       debugImages.preprocessed = await generateImageFromData(optimized.data, optimized.width, optimized.height);
     }
     
-    // 3. Executar OCR com ONNX usando imagem otimizada
-    // v1.1.52: Agora retorna também o formato detectado pelo hífen
-    const { text: rawText, confidence: ocrConfidence, detectedFormat, candidates: beamCandidates } = await runONNXOCR(
-      optimized.data,
-      optimized.width,
-      optimized.height
-    );
+    // 3. v1.1.86: Multi-Crop OCR com Consenso Cruzado
+    // Roda OCR 2 vezes com crops diferentes para melhorar precisão
+    const resultA = await runONNXOCR(optimized.data, optimized.width, optimized.height, CROP_STANDARD);
+    const resultB = await runONNXOCR(optimized.data, optimized.width, optimized.height, CROP_WIDE);
+    
+    let rawText: string;
+    let ocrConfidence: number;
+    let detectedFormat: 'antiga' | 'mercosul' | 'unknown';
+    let allCandidates: Array<{ text: string; confidence: number; detectedFormat: 'antiga' | 'mercosul' | 'unknown' }> = [];
+    
+    // Merge candidatos de ambos os crops
+    const addCandidates = (candidates?: Array<{ text: string; confidence: number; detectedFormat: 'antiga' | 'mercosul' | 'unknown' }>) => {
+      if (candidates) allCandidates.push(...candidates);
+    };
+    
+    // Adicionar greedy de ambos + beam candidates de ambos
+    if (resultA.text) allCandidates.push({ text: resultA.text, confidence: resultA.confidence, detectedFormat: resultA.detectedFormat });
+    if (resultB.text && resultB.text !== resultA.text) allCandidates.push({ text: resultB.text, confidence: resultB.confidence, detectedFormat: resultB.detectedFormat });
+    addCandidates(resultA.candidates);
+    addCandidates(resultB.candidates);
+    
+    if (resultA.text === resultB.text) {
+      // Consenso: ambos concordam
+      rawText = resultA.text;
+      ocrConfidence = Math.max(resultA.confidence, resultB.confidence);
+      detectedFormat = resultA.detectedFormat;
+      if (rawText.length >= 7) {
+        console.log(`✅ Multi-Crop: consenso "${rawText}" (${(resultA.confidence * 100).toFixed(0)}%/${(resultB.confidence * 100).toFixed(0)}%)`);
+      }
+    } else {
+      // Discordância: usar o mais confiante como principal, merge todos candidatos
+      if (resultA.confidence >= resultB.confidence) {
+        rawText = resultA.text;
+        ocrConfidence = resultA.confidence;
+        detectedFormat = resultA.detectedFormat;
+      } else {
+        rawText = resultB.text;
+        ocrConfidence = resultB.confidence;
+        detectedFormat = resultB.detectedFormat;
+      }
+      if (rawText.length >= 5) {
+        console.log(`🔀 Multi-Crop: A="${resultA.text}" B="${resultB.text}" → merged ${allCandidates.length} candidatos`);
+      }
+    }
+    
+    // Deduplicar e ordenar candidatos por confiança
+    const seenTexts = new Set<string>();
+    const beamCandidates = allCandidates
+      .filter(c => {
+        if (!c.text || seenTexts.has(c.text)) return false;
+        seenTexts.add(c.text);
+        return true;
+      })
+      .sort((a, b) => b.confidence - a.confidence);
+    
+    // v1.1.84: Validar candidatos do beam search e incluir no resultado
+    const validatedCandidates: Array<{ text: string; confidence: number; format: string }> = [];
+    if (beamCandidates.length > 0) {
+      for (const candidate of beamCandidates) {
+        const candidateValidation = validateAndCorrectPlate(candidate.text, candidate.detectedFormat);
+        if (candidateValidation.isValid) {
+          validatedCandidates.push({
+            text: candidateValidation.corrected,
+            confidence: candidate.confidence,
+            format: candidateValidation.format,
+          });
+        }
+      }
+    }
     
     self.postMessage({ type: 'PROGRESS', payload: { stage: 'Validando...', progress: 0.8 } });
     
@@ -2153,23 +2211,7 @@ async function processPlate(
     }
     
     // 4. Validar e corrigir placa
-    // v1.1.52: Passa o formato detectado pelo hífen para evitar conversão errada
     const validation = validateAndCorrectPlate(rawText, detectedFormat);
-    
-    // v1.1.84: Validar candidatos do beam search e incluir no resultado
-    const validatedCandidates: Array<{ text: string; confidence: number; format: string }> = [];
-    if (beamCandidates && beamCandidates.length > 0) {
-      for (const candidate of beamCandidates) {
-        const candidateValidation = validateAndCorrectPlate(candidate.text, candidate.detectedFormat);
-        if (candidateValidation.isValid) {
-          validatedCandidates.push({
-            text: candidateValidation.corrected,
-            confidence: candidate.confidence,
-            format: candidateValidation.format,
-          });
-        }
-      }
-    }
     
     const processingTimeMs = performance.now() - startTime;
     
@@ -2288,4 +2330,4 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 };
 
 // Notificar que o worker está carregado
-console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.62 - YOLO Only)');
+console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.86 - Multi-Crop)');
