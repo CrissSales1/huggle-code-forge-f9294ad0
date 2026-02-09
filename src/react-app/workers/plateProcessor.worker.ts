@@ -715,13 +715,18 @@ function heuristicCorrection(text: string): { text: string; detectedFormat: 'ant
 
 /**
  * Executa OCR com ONNX
- * v1.1.52: Retorna também o formato detectado pelo hífen
+ * v1.1.84: Retorna também candidatos do beam search
  */
 async function runONNXOCR(
   data: Uint8ClampedArray,
   width: number,
   height: number
-): Promise<{ text: string; confidence: number; detectedFormat: 'antiga' | 'mercosul' | 'unknown' }> {
+): Promise<{ 
+  text: string; 
+  confidence: number; 
+  detectedFormat: 'antiga' | 'mercosul' | 'unknown';
+  candidates?: Array<{ text: string; confidence: number; detectedFormat: 'antiga' | 'mercosul' | 'unknown' }>;
+}> {
   if (!onnxSession || !onnxReady) {
     await initONNX();
   }
@@ -733,8 +738,6 @@ async function runONNXOCR(
   try {
     // Pré-processar imagem
     const { tensor, width: processedWidth, height: processedHeight } = preprocessForONNX(data, width, height);
-    
-    // v1.1.62: Logs de dimensões removidos - muito verbosos
     
     // Criar tensor de entrada
     const inputTensor = new ort.Tensor('float32', tensor, [1, 3, processedHeight, processedWidth]);
@@ -749,13 +752,13 @@ async function runONNXOCR(
     const outputData = outputTensor.data as Float32Array;
     const outputShape = outputTensor.dims;
     
-    // v1.1.62: Logs de output shape removidos - muito verbosos
+    // v1.1.84: Decodificar com Beam Search para múltiplos candidatos
+    const beamResults = decodeCTCBeam(outputData, outputShape, 3);
     
-    // Decodificar CTC - agora retorna formato detectado
+    // Também decodificar greedy (resultado principal)
     const { text, confidence, detectedFormat } = decodeCTC(outputData, outputShape);
     
-    // v1.1.62: Log único do OCR (substituído por log consolidado no final)
-    return { text, confidence, detectedFormat };
+    return { text, confidence, detectedFormat, candidates: beamResults.length > 0 ? beamResults : undefined };
   } catch (error) {
     console.error('❌ Erro no OCR ONNX:', error);
     return { text: '', confidence: 0, detectedFormat: 'unknown' };
