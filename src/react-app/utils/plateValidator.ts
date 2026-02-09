@@ -69,6 +69,8 @@ const VISUAL_SIMILAR: Record<string, string[]> = {
   'E': ['3', 'B', 'F'],                   // v1.1.38: adicionado 'B' e 'F'
   // Confusões específicas do caso UFHJ -> DFJ
   'U': ['0', 'O', 'D', 'V'],
+  'V': ['U', 'W', 'Y'],                              // v1.1.85: adiciona V (confusão V↔Y)
+  'Y': ['V', '7', 'T'],                              // v1.1.85: adiciona Y (confusão Y↔V)
   'F': ['E', 'P', 'T'],
   'H': ['4', 'N', 'M', 'W'],              // v1.1.83: adiciona W
   'W': ['V', 'M', 'N', 'H'],              // v1.1.83: adiciona H
