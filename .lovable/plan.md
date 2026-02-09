@@ -1,129 +1,49 @@
 
 
-# Plano: Correção de Erros OCR com Substituição Dupla - v1.1.82
+# Plano: Adicionar confusão W-H no OCR - v1.1.83
 
 ## Problema
 
-Placas cadastradas com fotos nítidas não estão sendo reconhecidas:
+A placa da casa 14 é **SSW3A38** mas o OCR leu **SSH3A38** (95% confiança). O erro é simples: **W foi lido como H** na posição 2. Essa confusão não está mapeada no sistema.
 
-| Placa Real | OCR Leu | Erros | Posições |
-|-----------|---------|-------|----------|
-| TKG9D97 | TKG2I97 | 9->2, D->I | Pos 3 e 4 (duas mudanças) |
-| FUL3E36 | FU1E36 / FUL1E36 | L->1, 3->desaparece ou troca | Confusão L/1 |
+## Causa Raiz
 
-### Causa Raiz
+Nos mapeamentos `OCR_CORRECTIONS` e `VISUAL_SIMILAR` de `plateValidator.ts`, W e H não se referenciam mutuamente. Visualmente, W e H podem ser confundidos em fontes de placa (ambos têm traços verticais com conexão central).
 
-1. **Falta mapeamento I<->D** nas tabelas de confusão OCR
-2. **Sem substituição dupla**: o sistema só gera variações com 1 mudança por vez. Para TKG2I97 -> TKG9D97, são necessárias 2 mudanças simultâneas
-3. **Visitantes usam matching fraco**: `checkIfVisitanteAtivo` usa apenas `generateVariations` (simples), enquanto `checkIfMorador` já usa variações agressivas
+## Arquivo a Modificar
 
----
-
-## Arquivos a Modificar
-
-| Arquivo | Mudanças |
-|---------|----------|
-| `src/react-app/utils/plateValidator.ts` | Adicionar I<->D nos mapeamentos + implementar substituição dupla |
-| `src/react-app/contexts/MonitoringContext.tsx` | Usar variações agressivas na busca de visitantes |
-| `src/react-app/pages/Configuracoes.tsx` | Versão 1.1.82 |
-
----
+| Arquivo | Mudança |
+|---------|---------|
+| `src/react-app/utils/plateValidator.ts` | Adicionar W em H e H em W nos dois mapeamentos |
+| `src/react-app/pages/Configuracoes.tsx` | Versão 1.1.83 |
 
 ## Detalhes Técnicos
 
-### 1. Novos mapeamentos em `plateValidator.ts`
+### `plateValidator.ts`
 
 **OCR_CORRECTIONS:**
 ```
-'I': adicionar 'D'    (linha 30)
-'D': adicionar 'I'    (linha 25)
+'H': ['4', 'N', 'M', 'W'],    // adicionar W
+'W': ['V', 'M', 'N', 'H'],    // adicionar H
 ```
 
 **VISUAL_SIMILAR:**
 ```
-'I': adicionar 'D'    (linha 56)
-'D': adicionar 'I'    (linha 52)
+'H': ['4', 'N', 'M', 'W'],    // adicionar W
+'W': ['V', 'M', 'N', 'H'],    // adicionar H
 ```
 
-### 2. Nova função `generateDualVariations`
+### Validação: SSH3A38 -> SSW3A38
 
-Gera variações com duas substituições simultâneas em posições adjacentes (distância max 2), usando `VISUAL_SIMILAR`. Cada variação passa por `correctByPosition` e `isValidPlate` para garantir formato válido.
+1. `VISUAL_SIMILAR['H']` inclui 'W' (novo)
+2. Variação posição 2: SS**W**3A38
+3. `isValidPlate("SSW3A38")` = true (formato antigo)
+4. Busca no banco encontra casa 14
 
-```typescript
-export function generateDualVariations(plate: string): string[] {
-  const variations = new Set<string>();
-  const chars = plate.split('');
-  
-  for (let i = 0; i < 7; i++) {
-    const altsI = VISUAL_SIMILAR[chars[i]] || [];
-    for (let j = i + 1; j < 7 && j <= i + 2; j++) {
-      const altsJ = VISUAL_SIMILAR[chars[j]] || [];
-      for (const ai of altsI) {
-        for (const aj of altsJ) {
-          const variant = [...chars];
-          variant[i] = ai;
-          variant[j] = aj;
-          const corrected = correctByPosition(variant.join(''));
-          if (isValidPlate(corrected)) {
-            variations.add(corrected);
-          }
-        }
-      }
-    }
-  }
-  
-  return Array.from(variations);
-}
-```
-
-### 3. Integrar em `generateAggressiveVariations`
-
-Chamar `generateDualVariations` e adicionar os resultados ao set de variações existente.
-
-### 4. Visitantes com matching agressivo
-
-Em `checkIfVisitanteAtivo` (MonitoringContext.tsx, linha 690), substituir:
-
-```typescript
-// Antes:
-const { generateVariations } = await import(...)
-const variacoes = generateVariations(placaLimpa);
-
-// Depois:
-const { generateVariations, generateAggressiveVariations } = await import(...)
-const variacoes = [...new Set([
-  ...generateVariations(placaLimpa),
-  ...generateAggressiveVariations(placaLimpa)
-])];
-```
-
-Também mudar a lógica de matching para comparar cada placa de visitante contra as variações (mesmo padrão que `checkIfMorador`).
-
----
-
-## Validação: TKG2I97 -> TKG9D97
-
-1. `VISUAL_SIMILAR['2']` inclui '9' -- posição 3: TKG**9**I97
-2. `VISUAL_SIMILAR['I']` inclui 'D' (novo!) -- posição 4: TKG2**D**97
-3. Dual substitution posições 3+4: 2->9, I->D = TKG**9D**97
-4. `correctByPosition("TKG9D97")` -> formato antigo válido
-5. Busca no banco encontra o morador
-
----
-
-## Resultado Esperado
-
-| Cenário | Antes | Depois |
-|---------|-------|--------|
-| TKG2I97 (real: TKG9D97) | Não encontra morador | Match via dual substitution |
-| Visitantes com erros OCR | Matching fraco (1 mudança) | Matching agressivo + dual |
-| Performance | ~50 variações | ~200 variações (ainda < 1ms) |
-
----
+Este é um erro de 1 caractere, então nem precisa de dual substitution -- o `generateAggressiveVariations` simples já resolve.
 
 ## Versão
 
 ```
-Versão 1.1.82 (Fuzzy Dual Match)
+Versão 1.1.83 (W-H OCR Fix)
 ```
-
