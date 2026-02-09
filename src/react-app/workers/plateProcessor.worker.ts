@@ -46,6 +46,7 @@ interface OCRResult {
   debugImage?: string;
   debugImages?: DebugImages; // Múltiplas imagens de debug do pipeline
   plateRegion?: BoundingBox; // Região da placa detectada pelo YOLO/heurística
+  candidates?: Array<{ text: string; confidence: number; format: string }>; // v1.1.84: Beam Search top-3 candidatos
 }
 
 interface MotionDetectionConfig {
