@@ -362,6 +362,41 @@ export function generateDualVariations(plate: string): string[] {
 }
 
 /**
+ * v1.1.84: Ordena e valida múltiplos candidatos OCR (beam search)
+ * Retorna candidatos válidos ordenados por confiança
+ */
+export function rankCandidates(
+  candidates: Array<{ text: string; confidence: number; format: string }>
+): Array<{ text: string; confidence: number; format: string; corrected: string }> {
+  const ranked: Array<{ text: string; confidence: number; format: string; corrected: string }> = [];
+  const seen = new Set<string>();
+  
+  for (const candidate of candidates) {
+    const cleaned = cleanPlateString(candidate.text);
+    if (cleaned.length !== 7) continue;
+    if (seen.has(cleaned)) continue;
+    
+    // Verificar se já é válido
+    if (isValidPlate(cleaned)) {
+      seen.add(cleaned);
+      ranked.push({ ...candidate, corrected: cleaned });
+      continue;
+    }
+    
+    // Tentar correção posicional
+    const corrected = correctByPosition(cleaned);
+    if (isValidPlate(corrected) && !seen.has(corrected)) {
+      seen.add(corrected);
+      ranked.push({ ...candidate, corrected, confidence: candidate.confidence * 0.9 });
+    }
+  }
+  
+  // Ordenar por confiança decrescente
+  ranked.sort((a, b) => b.confidence - a.confidence);
+  return ranked;
+}
+
+/**
  * Conta quantos caracteres foram alterados entre duas strings
  */
 function countChanges(original: string, corrected: string): number {
