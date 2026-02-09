@@ -26,7 +26,7 @@ const OCR_CORRECTIONS: Record<string, string[]> = {
   'E': ['3', 'F', 'B'],                  // v1.1.38: adicionado 'B'
   'F': ['E', 'P', 'T'],
   'G': ['6', '9', 'C', '0'],
-  'H': ['4', 'N', 'M'],
+  'H': ['4', 'N', 'M', 'W'],              // v1.1.83: adiciona W
   'I': ['1', 'L', 'T', '|', 'J', 'D'],   // v1.1.82: adiciona D
   'J': ['1', ']', 'I'],              // v1.1.68: adiciona I
   'L': ['1', 'I', '7'],
@@ -40,7 +40,7 @@ const OCR_CORRECTIONS: Record<string, string[]> = {
   'T': ['7', '1', 'I', 'Y'],
   'U': ['V', 'W', '0'],
   'V': ['U', 'W', 'Y'],
-  'W': ['V', 'M', 'N'],
+  'W': ['V', 'M', 'N', 'H'],              // v1.1.83: adiciona H
   'Y': ['V', '7', 'T'],
   'Z': ['2', '7'],
 };
@@ -70,7 +70,8 @@ const VISUAL_SIMILAR: Record<string, string[]> = {
   // Confusões específicas do caso UFHJ -> DFJ
   'U': ['0', 'O', 'D', 'V'],
   'F': ['E', 'P', 'T'],
-  'H': ['4', 'N', 'M'],
+  'H': ['4', 'N', 'M', 'W'],              // v1.1.83: adiciona W
+  'W': ['V', 'M', 'N', 'H'],              // v1.1.83: adiciona H
   'J': ['1', '2', '3', ']', 'I'],         // v1.1.68: adiciona I (confusão J↔I)
 };
 
