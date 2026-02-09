@@ -2117,44 +2117,64 @@ async function processPlate(
       debugImages.preprocessed = await generateImageFromData(optimized.data, optimized.width, optimized.height);
     }
     
-    // 3. Executar OCR com ONNX usando imagem otimizada
-    // v1.1.52: Agora retorna também o formato detectado pelo hífen
-    const { text: rawText, confidence: ocrConfidence, detectedFormat, candidates: beamCandidates } = await runONNXOCR(
-      optimized.data,
-      optimized.width,
-      optimized.height
-    );
+    // 3. v1.1.86: Multi-Crop OCR com Consenso Cruzado
+    // Roda OCR 2 vezes com crops diferentes para melhorar precisão
+    const resultA = await runONNXOCR(optimized.data, optimized.width, optimized.height, CROP_STANDARD);
+    const resultB = await runONNXOCR(optimized.data, optimized.width, optimized.height, CROP_WIDE);
     
-    self.postMessage({ type: 'PROGRESS', payload: { stage: 'Validando...', progress: 0.8 } });
+    let rawText: string;
+    let ocrConfidence: number;
+    let detectedFormat: 'antiga' | 'mercosul' | 'unknown';
+    let allCandidates: Array<{ text: string; confidence: number; detectedFormat: 'antiga' | 'mercosul' | 'unknown' }> = [];
     
-    // 3.5. Filtrar falsos positivos (texto de câmera/ambiente)
-    if (isForbiddenText(rawText)) {
-      const processingTimeMs = performance.now() - startTime;
-      return {
-        success: false,
-        rawText,
-        validation: {
-          isValid: false,
-          original: rawText,
-          corrected: '',
-          formatted: '',
-          format: 'unknown',
-          confidence: 0,
-        },
-        ocrConfidence: 0,
-        processingTimeMs,
-        usedFallback: false,
-        usedYolo,
-      };
+    // Merge candidatos de ambos os crops
+    const addCandidates = (candidates?: Array<{ text: string; confidence: number; detectedFormat: 'antiga' | 'mercosul' | 'unknown' }>) => {
+      if (candidates) allCandidates.push(...candidates);
+    };
+    
+    // Adicionar greedy de ambos + beam candidates de ambos
+    if (resultA.text) allCandidates.push({ text: resultA.text, confidence: resultA.confidence, detectedFormat: resultA.detectedFormat });
+    if (resultB.text && resultB.text !== resultA.text) allCandidates.push({ text: resultB.text, confidence: resultB.confidence, detectedFormat: resultB.detectedFormat });
+    addCandidates(resultA.candidates);
+    addCandidates(resultB.candidates);
+    
+    if (resultA.text === resultB.text) {
+      // Consenso: ambos concordam
+      rawText = resultA.text;
+      ocrConfidence = Math.max(resultA.confidence, resultB.confidence);
+      detectedFormat = resultA.detectedFormat;
+      if (rawText.length >= 7) {
+        console.log(`✅ Multi-Crop: consenso "${rawText}" (${(resultA.confidence * 100).toFixed(0)}%/${(resultB.confidence * 100).toFixed(0)}%)`);
+      }
+    } else {
+      // Discordância: usar o mais confiante como principal, merge todos candidatos
+      if (resultA.confidence >= resultB.confidence) {
+        rawText = resultA.text;
+        ocrConfidence = resultA.confidence;
+        detectedFormat = resultA.detectedFormat;
+      } else {
+        rawText = resultB.text;
+        ocrConfidence = resultB.confidence;
+        detectedFormat = resultB.detectedFormat;
+      }
+      if (rawText.length >= 5) {
+        console.log(`🔀 Multi-Crop: A="${resultA.text}" B="${resultB.text}" → merged ${allCandidates.length} candidatos`);
+      }
     }
     
-    // 4. Validar e corrigir placa
-    // v1.1.52: Passa o formato detectado pelo hífen para evitar conversão errada
-    const validation = validateAndCorrectPlate(rawText, detectedFormat);
+    // Deduplicar e ordenar candidatos por confiança
+    const seenTexts = new Set<string>();
+    const beamCandidates = allCandidates
+      .filter(c => {
+        if (!c.text || seenTexts.has(c.text)) return false;
+        seenTexts.add(c.text);
+        return true;
+      })
+      .sort((a, b) => b.confidence - a.confidence);
     
     // v1.1.84: Validar candidatos do beam search e incluir no resultado
     const validatedCandidates: Array<{ text: string; confidence: number; format: string }> = [];
-    if (beamCandidates && beamCandidates.length > 0) {
+    if (beamCandidates.length > 0) {
       for (const candidate of beamCandidates) {
         const candidateValidation = validateAndCorrectPlate(candidate.text, candidate.detectedFormat);
         if (candidateValidation.isValid) {
