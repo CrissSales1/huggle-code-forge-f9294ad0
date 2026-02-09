@@ -322,6 +322,41 @@ export function generateAggressiveVariations(plate: string): string[] {
     }
   }
   
+  // v1.1.82: Adicionar variações com substituição dupla
+  const dualVariations = generateDualVariations(plate);
+  for (const v of dualVariations) {
+    variations.add(v);
+  }
+  
+  return Array.from(variations);
+}
+
+/**
+ * v1.1.82: Gera variações com duas substituições simultâneas
+ * Posições adjacentes (distância max 2) para evitar explosão combinatória
+ */
+export function generateDualVariations(plate: string): string[] {
+  const variations = new Set<string>();
+  const chars = plate.split('');
+  
+  for (let i = 0; i < 7; i++) {
+    const altsI = VISUAL_SIMILAR[chars[i]] || [];
+    for (let j = i + 1; j < 7 && j <= i + 2; j++) {
+      const altsJ = VISUAL_SIMILAR[chars[j]] || [];
+      for (const ai of altsI) {
+        for (const aj of altsJ) {
+          const variant = [...chars];
+          variant[i] = ai;
+          variant[j] = aj;
+          const corrected = correctByPosition(variant.join(''));
+          if (isValidPlate(corrected)) {
+            variations.add(corrected);
+          }
+        }
+      }
+    }
+  }
+  
   return Array.from(variations);
 }
 

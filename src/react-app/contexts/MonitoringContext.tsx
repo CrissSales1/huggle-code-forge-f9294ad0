@@ -686,9 +686,12 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         };
       }
       
-      // Fuzzy matching para erros de OCR
-      const { generateVariations } = await import('@/react-app/utils/plateValidator');
-      const variacoes = generateVariations(placaLimpa);
+      // v1.1.82: Fuzzy matching agressivo (mesmo padrão que checkIfMorador)
+      const { generateVariations, generateAggressiveVariations } = await import('@/react-app/utils/plateValidator');
+      const variacoes = [...new Set([
+        ...generateVariations(placaLimpa),
+        ...generateAggressiveVariations(placaLimpa)
+      ])];
       
       for (const visitante of visitantes || []) {
         const placaVisitante = visitante.placa_veiculo?.toUpperCase().replace(/[^A-Z0-9]/g, '') || '';
