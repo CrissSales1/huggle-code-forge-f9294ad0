@@ -22,12 +22,12 @@ const OCR_CORRECTIONS: Record<string, string[]> = {
   'A': ['4', 'H'],
   'B': ['8', '6', '3', 'D'],              // v1.1.70: adiciona D
   'C': ['0', 'G', '('],
-  'D': ['0', 'O', 'B'],                    // v1.1.70: adiciona B
+  'D': ['0', 'O', 'B', 'I'],                // v1.1.82: adiciona I
   'E': ['3', 'F', 'B'],                  // v1.1.38: adicionado 'B'
   'F': ['E', 'P', 'T'],
   'G': ['6', '9', 'C', '0'],
   'H': ['4', 'N', 'M'],
-  'I': ['1', 'L', 'T', '|', 'J'],   // v1.1.68: adiciona J
+  'I': ['1', 'L', 'T', '|', 'J', 'D'],   // v1.1.82: adiciona D
   'J': ['1', ']', 'I'],              // v1.1.68: adiciona I
   'L': ['1', 'I', '7'],
   'M': ['N', 'H', 'W'],
@@ -49,11 +49,11 @@ const OCR_CORRECTIONS: Record<string, string[]> = {
 // Inclui confusões 0↔6↔9, E↔B, 2↔7, 9↔2 para melhor matching no banco
 const VISUAL_SIMILAR: Record<string, string[]> = {
   // Muito similares - altíssima confusão
-  'D': ['0', 'O', 'Q', 'B'],              // v1.1.70: adiciona B
+  'D': ['0', 'O', 'Q', 'B', 'I'],          // v1.1.82: adiciona I
   'O': ['0', 'D', 'Q', '6', 'U'],        // v1.1.69: adiciona U
   '0': ['O', 'D', 'Q', '6', '8'],        // v1.1.38: adicionado '6' e '8'
   '1': ['I', 'L', '7', 'T', '|'],
-  'I': ['1', 'L', '|', 'J'],         // v1.1.68: adiciona J
+  'I': ['1', 'L', '|', 'J', 'D'],         // v1.1.82: adiciona D
   '4': ['A', 'H'],
   'A': ['4', 'H'],
   '8': ['B', '3', '0'],                   // v1.1.38: adicionado '0'
@@ -318,6 +318,41 @@ export function generateAggressiveVariations(plate: string): string[] {
         const variant = [...chars];
         variant[i] = a;
         variations.add(correctByPosition(variant.join('')));
+      }
+    }
+  }
+  
+  // v1.1.82: Adicionar variações com substituição dupla
+  const dualVariations = generateDualVariations(plate);
+  for (const v of dualVariations) {
+    variations.add(v);
+  }
+  
+  return Array.from(variations);
+}
+
+/**
+ * v1.1.82: Gera variações com duas substituições simultâneas
+ * Posições adjacentes (distância max 2) para evitar explosão combinatória
+ */
+export function generateDualVariations(plate: string): string[] {
+  const variations = new Set<string>();
+  const chars = plate.split('');
+  
+  for (let i = 0; i < 7; i++) {
+    const altsI = VISUAL_SIMILAR[chars[i]] || [];
+    for (let j = i + 1; j < 7 && j <= i + 2; j++) {
+      const altsJ = VISUAL_SIMILAR[chars[j]] || [];
+      for (const ai of altsI) {
+        for (const aj of altsJ) {
+          const variant = [...chars];
+          variant[i] = ai;
+          variant[j] = aj;
+          const corrected = correctByPosition(variant.join(''));
+          if (isValidPlate(corrected)) {
+            variations.add(corrected);
+          }
+        }
       }
     }
   }
