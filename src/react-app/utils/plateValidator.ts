@@ -70,7 +70,7 @@ const VISUAL_SIMILAR: Record<string, string[]> = {
   // Confusões específicas do caso UFHJ -> DFJ
   'U': ['0', 'O', 'D', 'V'],
   'F': ['E', 'P', 'T'],
-  'H': ['4', 'N', 'M'],
+  'H': ['4', 'N', 'M', 'W'],              // v1.1.83: adiciona W
   'J': ['1', '2', '3', ']', 'I'],         // v1.1.68: adiciona I (confusão J↔I)
 };
 
