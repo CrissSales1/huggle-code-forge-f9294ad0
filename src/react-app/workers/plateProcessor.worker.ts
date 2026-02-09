@@ -710,11 +710,13 @@ function heuristicCorrection(text: string): { text: string; detectedFormat: 'ant
 /**
  * Executa OCR com ONNX
  * v1.1.84: Retorna também candidatos do beam search
+ * v1.1.86: Aceita CropParams para Multi-Crop
  */
 async function runONNXOCR(
   data: Uint8ClampedArray,
   width: number,
-  height: number
+  height: number,
+  cropParams?: CropParams
 ): Promise<{ 
   text: string; 
   confidence: number; 
@@ -730,8 +732,8 @@ async function runONNXOCR(
   }
   
   try {
-    // Pré-processar imagem
-    const { tensor, width: processedWidth, height: processedHeight } = preprocessForONNX(data, width, height);
+    // Pré-processar imagem com CropParams
+    const { tensor, width: processedWidth, height: processedHeight } = preprocessForONNX(data, width, height, cropParams);
     
     // Criar tensor de entrada
     const inputTensor = new ort.Tensor('float32', tensor, [1, 3, processedHeight, processedWidth]);
