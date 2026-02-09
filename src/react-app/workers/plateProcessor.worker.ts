@@ -2207,6 +2207,7 @@ async function processPlate(
       debugImage,
       debugImages: options?.enableDebug ? debugImages : undefined,
       plateRegion: plateRegion || undefined,
+      candidates: validatedCandidates.length > 0 ? validatedCandidates : undefined, // v1.1.84
     };
   } catch (error) {
     console.error('Erro no processamento:', error);
