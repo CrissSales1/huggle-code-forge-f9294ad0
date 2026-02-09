@@ -40,7 +40,7 @@ const OCR_CORRECTIONS: Record<string, string[]> = {
   'T': ['7', '1', 'I', 'Y'],
   'U': ['V', 'W', '0'],
   'V': ['U', 'W', 'Y'],
-  'W': ['V', 'M', 'N'],
+  'W': ['V', 'M', 'N', 'H'],              // v1.1.83: adiciona H
   'Y': ['V', '7', 'T'],
   'Z': ['2', '7'],
 };
