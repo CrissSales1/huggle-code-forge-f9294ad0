@@ -371,6 +371,7 @@ const CLEAN_THRESHOLD = 0.05;     // 5% de diferença = área considerada limpa
 const VEHICLE_EXIT_THRESHOLD = 0.08; // v1.1.81: 8% = veículo saiu após OCR bem-sucedido
 const AUTO_UPDATE_DELAY_MS = 10000; // 10 segundos limpa = atualiza referência
 const OCR_RETRY_DELAY_MS = 800;   // Fast-Track: 800ms entre tentativas para coleta de buffer
+const INTERMEDIATE_UPDATE_DELAY_MS = 15000; // v1.1.87: 15s na zona morta sem OCR → atualiza ref
 
 /**
  * Classe para gerenciar detecção de movimento contínua
@@ -396,6 +397,9 @@ export class MotionDetector {
   // Controle para evitar log excessivo de referência
   private lastReferenceCaptureTime: number = 0;
   private static readonly MIN_REFERENCE_LOG_INTERVAL = 60000; // 60 segundos entre logs (produção)
+  
+  // v1.1.87: Controle de zona intermediária (ghost motion)
+  private intermediateZoneStart: number = 0;
   
   constructor(config: Partial<MotionDetectionConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -530,9 +534,11 @@ export class MotionDetector {
       // v1.1.81: BLOQUEAR atualização automática enquanto há veículo detectado
       this.lastCleanTime = 0;
       this.referenceUpdatePending = false;
+      this.intermediateZoneStart = 0; // v1.1.87: Reset zona intermediária
     } else if (areaClean && !vehicleExited) {
       // Área limpa - verificar se deve atualizar referência
       this.consecutiveMotionFrames = 0;
+      this.intermediateZoneStart = 0; // v1.1.87: Reset zona intermediária
       
       // Veículo saiu - resetar flags de OCR para próximo veículo
       this.ocrAttempted = false;
@@ -547,9 +553,18 @@ export class MotionDetector {
         this.referenceUpdatePending = true;
       }
     } else if (!vehicleExited) {
-      // Zona intermediária - pode ser ruído ou veículo saindo
+      // v1.1.87: Zona intermediária (5-10%) - pode ser iluminação mudando
       this.consecutiveMotionFrames = 0;
       this.lastCleanTime = 0;
+      
+      if (this.intermediateZoneStart === 0) {
+        this.intermediateZoneStart = now;
+      } else if (now - this.intermediateZoneStart >= INTERMEDIATE_UPDATE_DELAY_MS && !this.ocrSucceeded) {
+        // 15s na zona morta sem OCR ativo → atualizar referência
+        shouldUpdateReference = true;
+        this.intermediateZoneStart = 0;
+        console.log('🔄 Referência atualizada (zona intermediária por 15s)');
+      }
     }
     
     // v1.1.81: BLOQUEAR atualização enquanto OCR ativo (veículo ainda pode estar na área)
@@ -674,6 +689,7 @@ export class MotionDetector {
     this.ocrAttempted = false;
     this.ocrSucceeded = false;
     this.lastOcrAttemptTime = 0;
+    this.intermediateZoneStart = 0;
   }
   
   /**
