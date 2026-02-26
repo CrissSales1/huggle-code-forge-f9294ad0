@@ -107,6 +107,11 @@ const CONSISTENCY_THRESHOLD = 3; // Precisa de 3 leituras iguais
 const OCR_BUFFER_SIZE = 5; // Janela deslizante de últimas 5 leituras
 const MIN_CONFIDENCE_FOR_BUFFER = 80; // Confiança mínima para entrar no buffer
 
+// v1.1.87: Timeout de validação e detecção de troca YOLO
+const VALIDATION_TIMEOUT_MS = 15000; // 15s → forçar reset do fastTrackValidated
+const YOLO_POSITION_THRESHOLD = 0.4; // 40% de deslocamento = veículo diferente
+const YOLO_SIZE_THRESHOLD = 0.5; // 50% de mudança de tamanho = veículo diferente
+
 export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
   const [status, setStatus] = useState<MonitoringStatus>('idle');
   const [statusMessage, setStatusMessage] = useState('Parado');
@@ -151,6 +156,10 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
   // Fast-Track: Buffer de consistência temporal para leituras OCR
   const ocrBufferRef = useRef<Array<{ placa: string; confidence: number; timestamp: number }>>([]);
   const fastTrackValidatedRef = useRef<boolean>(false);
+  
+  // v1.1.87: Timeout de validação e detecção de troca YOLO
+  const lastValidationTimeRef = useRef<number>(0);
+  const lastPlateRegionRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
   
   const { recognizeFromCanvas, reset: resetOCR, usedFallback } = usePlateRecognition();
   
@@ -371,7 +380,6 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
     
     // Fast-Track: Se já validou este veículo, ignora
     if (fastTrackValidatedRef.current) {
-      console.log('🚀 Fast-Track: Veículo já validado, ignorando...');
       return true;
     }
     
@@ -399,6 +407,27 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
       updateProcessingStage('ocr', 'Executando OCR...');
       const result = await recognizeFromCanvas(capturedCanvas);
       
+      // v1.1.87: Detecção de troca de veículo via YOLO
+      if (result.plateRegion && lastPlateRegionRef.current) {
+        const prev = lastPlateRegionRef.current;
+        const curr = result.plateRegion;
+        const canvasW = capturedCanvas.width || 1;
+        const canvasH = capturedCanvas.height || 1;
+        const dx = Math.abs(curr.x - prev.x) / canvasW;
+        const dy = Math.abs(curr.y - prev.y) / canvasH;
+        const dw = prev.w > 0 ? Math.abs(curr.width - prev.w) / prev.w : 0;
+        if (dx > YOLO_POSITION_THRESHOLD || dy > YOLO_POSITION_THRESHOLD || dw > YOLO_SIZE_THRESHOLD) {
+          console.log('🔄 Troca de veículo detectada via YOLO (posição mudou)');
+          ocrBufferRef.current = [];
+        }
+      }
+      if (result.plateRegion) {
+        lastPlateRegionRef.current = {
+          x: result.plateRegion.x, y: result.plateRegion.y,
+          w: result.plateRegion.width, h: result.plateRegion.height,
+        };
+      }
+      
       // Etapa 4: Validação
       updateProcessingStage('validating', 'Validando placa...');
       
@@ -413,10 +442,11 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
           // === SUCESSO VIA FAST-TRACK ===
           console.log(`🚀 Fast-Track: Placa ${placa} validada por consistência (${matchCount}/${OCR_BUFFER_SIZE})`);
           
-          // Marcar como validado para não processar novamente
+          // v1.1.87: Marcar validação com timestamp para timeout
           fastTrackValidatedRef.current = true;
+          lastValidationTimeRef.current = Date.now();
           
-          // Verificar deduplicação
+          // v1.1.87: Cooldown por placa - verificar deduplicação
           if (isPlateRecent(placa)) {
             console.log(`⏳ Placa ${placa} detectada recentemente, ignorando...`);
             finishProcessingTimer();
@@ -557,9 +587,23 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
     
     setMotionPercent(result.motionPercent);
     
+    // v1.1.87: Timeout de validação - forçar reset após 15s
+    if (fastTrackValidatedRef.current && lastValidationTimeRef.current > 0) {
+      const elapsed = Date.now() - lastValidationTimeRef.current;
+      if (elapsed > VALIDATION_TIMEOUT_MS) {
+        console.log('⏰ Timeout de validação - permitindo nova detecção');
+        fastTrackValidatedRef.current = false;
+        ocrBufferRef.current = [];
+        lastPlateRegionRef.current = null;
+        captureReferenceFrame();
+        motionDetectorRef.current.resetOcrAttempt();
+      }
+    }
+    
     // v1.1.81: Se veículo saiu após detecção, limpar buffer OCR
     if (result.vehicleExited) {
       resetOcrBuffer();
+      lastPlateRegionRef.current = null;
       console.log('🧹 Buffer OCR limpo - veículo saiu da área');
     }
     
