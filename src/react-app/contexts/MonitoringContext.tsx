@@ -360,6 +360,10 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       const sensitivity = loadMotionSensitivity();
       const config = getSensitivityConfig(sensitivity);
       motionDetectorRef.current.updateConfig(config);
+      // Atualizar motion worker com nova sensibilidade
+      if (config.minPixelDifference !== undefined) {
+        motionWorkerUpdateConfig(config.minPixelDifference);
+      }
     };
     
     window.addEventListener('storage', handleSensitivityChange);
