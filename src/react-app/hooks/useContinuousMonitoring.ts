@@ -6,6 +6,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import Hls from 'hls.js';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlateRecognition } from './usePlateRecognition';
+import { useMotionWorker } from './useMotionWorker';
 import { 
   MotionDetector, 
   VirtualArea, 
@@ -20,6 +21,7 @@ import {
   saveCameraResolution,
   loadMotionSensitivity,
   getSensitivityConfig,
+  extractAreaPixels,
 } from '../utils/motionDetection';
 
 export type SourceMode = 'webcam' | 'hls';
@@ -526,42 +528,51 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
     checkOcrConsistency,
   ]);
   
-  // Função para capturar/recapturar referência
-  const captureReferenceFrame = useCallback(() => {
+  // Inicializar background no motion worker a partir do frame atual
+  const initBackgroundFromVideo = useCallback(() => {
     if (!videoRef.current || !canvasRef.current) return false;
     
-    const success = motionDetectorRef.current.captureReference(
-      videoRef.current,
-      canvasRef.current,
-      virtualArea
-    );
+    const video = videoRef.current;
+    if (video.videoWidth === 0 || video.videoHeight === 0) return false;
     
-    setHasReference(success);
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return false;
     
-    if (success) {
-      setProcessingInfo(prev => ({
-        ...prev,
-        stageLabel: 'Referência capturada!',
-      }));
-      
-      // Mostrar mensagem por 2 segundos e depois voltar ao normal
-      setTimeout(() => {
-        setProcessingInfo(prev => ({
-          ...prev,
-          stageLabel: 'Monitorando área...',
-        }));
-      }, 2000);
+    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
     }
     
-    return success;
-  }, [virtualArea]);
+    ctx.drawImage(video, 0, 0);
+    
+    const area = loadVirtualArea() || getDefaultVirtualArea();
+    const imageData = extractAreaPixels(ctx, video.videoWidth, video.videoHeight, area);
+    
+    motionWorkerInitBackground(imageData);
+    setHasReference(true);
+    
+    setProcessingInfo(prev => ({
+      ...prev,
+      stageLabel: 'Referência capturada!',
+    }));
+    
+    setTimeout(() => {
+      setProcessingInfo(prev => ({
+        ...prev,
+        stageLabel: 'Monitorando área...',
+      }));
+    }, 2000);
+    
+    return true;
+  }, [motionWorkerInitBackground]);
   
   // Recapturar referência manualmente
   const recaptureReference = useCallback(() => {
     if (isActive && videoRef.current && canvasRef.current) {
-      captureReferenceFrame();
+      initBackgroundFromVideo();
     }
-  }, [isActive, captureReferenceFrame]);
+  }, [isActive, initBackgroundFromVideo]);
   
   // Loop de processamento de frames
   const processFrame = useCallback(async () => {
