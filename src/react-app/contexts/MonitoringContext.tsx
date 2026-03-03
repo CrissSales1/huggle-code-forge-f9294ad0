@@ -8,7 +8,7 @@ import Hls from 'hls.js';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlateWorker } from '@/react-app/hooks/usePlateWorker';
 import { useMotionWorker } from '@/react-app/hooks/useMotionWorker';
-import { usePerformanceMetrics } from '@/react-app/hooks/usePerformanceMetrics';
+import { usePerformanceMetrics, type PerformanceMetrics } from '@/react-app/hooks/usePerformanceMetrics';
 import logger from '@/react-app/utils/logger';
 import { 
   MotionDetector, 
@@ -1020,7 +1020,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     const area = loadVirtualArea() || getDefaultVirtualArea();
     const imageData = extractAreaPixels(ctx, video.videoWidth, video.videoHeight, area);
     
-    motionWorkerInitBackground(imageData);
+    motionWorkerRef.current?.initBackground(imageData);
     setHasReference(true);
     
     setProcessingInfo(prev => ({
@@ -1040,7 +1040,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   
   const recaptureReference = useCallback(() => {
     if (isActive && videoRef.current && canvasRef.current) {
-      captureReferenceFrame();
+      initBackgroundFromVideo();
     }
   }, [isActive, captureReferenceFrame]);
   
