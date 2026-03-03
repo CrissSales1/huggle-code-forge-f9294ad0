@@ -7,8 +7,8 @@ import React, { createContext, useContext, useState, useCallback, useRef, useEff
 import Hls from 'hls.js';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlateWorker } from '@/react-app/hooks/usePlateWorker';
-import { useMotionWorker } from '@/react-app/hooks/useMotionWorker';  // eslint-disable-line @typescript-eslint/no-unused-vars
-import { usePerformanceMetrics, PerformanceMetrics } from '@/react-app/hooks/usePerformanceMetrics';
+import { useMotionWorker } from '@/react-app/hooks/useMotionWorker';
+import { usePerformanceMetrics } from '@/react-app/hooks/usePerformanceMetrics';
 import logger from '@/react-app/utils/logger';
 import { 
   MotionDetector, 
@@ -25,8 +25,6 @@ import {
   loadMotionSensitivity,
   getSensitivityConfig,
   extractAreaPixels,
-  getPolygonPoints,
-  getPolygonBoundingBox,
 } from '@/react-app/utils/motionDetection';
 
 export type SourceMode = 'webcam' | 'hls';
@@ -197,6 +195,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   const frameIntervalRef = useRef<number | null>(null);
   const recentPlatesRef = useRef<Map<string, number>>(new Map());
   const isActiveRef = useRef(false);
+  const isProcessingMotionRef = useRef(false); // Execution Lock para motion worker
   
   // Fast-Track v1.1.29: Buffer de consistência temporal para OCR + Auto-Reset
   const ocrBufferRef = useRef<Array<{ placa: string; confidence: number; timestamp: number }>>([]);
