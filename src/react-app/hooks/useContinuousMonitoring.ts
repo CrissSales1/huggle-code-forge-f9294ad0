@@ -154,6 +154,7 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
   const motionDetectorRef = useRef<MotionDetector>(new MotionDetector(getSensitivityConfig(loadMotionSensitivity())));
   const frameIntervalRef = useRef<number | null>(null);
   const recentPlatesRef = useRef<Map<string, number>>(new Map());
+  const isProcessingMotionRef = useRef(false); // Execution Lock
   
   // Fast-Track: Buffer de consistência temporal para leituras OCR
   const ocrBufferRef = useRef<Array<{ placa: string; confidence: number; timestamp: number }>>([]);
@@ -164,6 +165,37 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
   const lastPlateRegionRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
   
   const { recognizeFromCanvas, reset: resetOCR, usedFallback } = usePlateRecognition();
+  
+  // Motion Worker para Masked EMA
+  const handleMotionResult = useCallback((mp: number) => {
+    isProcessingMotionRef.current = false; // Unlock
+    setMotionPercent(mp);
+    
+    const result = motionDetectorRef.current.processMotionResult(mp);
+    
+    if (result.hasMotion) {
+      setStatus(prev => (prev === 'monitoring' || prev === 'motion_detected') ? 'motion_detected' : prev);
+      setStatusMessage('🟡 Veículo detectado...');
+      setProcessingInfo(prev => ({ ...prev, stage: 'idle', stageLabel: 'Veículo detectado!' }));
+    } else {
+      setStatus(prev => prev === 'motion_detected' ? 'monitoring' : prev);
+      setStatusMessage('🟢 Monitorando...');
+      setProcessingInfo(prev => ({ ...prev, stage: 'idle', stageLabel: 'Monitorando área...' }));
+    }
+    
+    if (result.shouldAttemptOCR) {
+      processFrameForOCRRef.current?.();
+    }
+  }, []);
+  
+  // Ref para processFrameForOCR (resolve circular dependency)
+  const processFrameForOCRRef = useRef<(() => Promise<boolean>) | null>(null);
+  
+  const {
+    initBackground: motionWorkerInitBackground,
+    processFrame: motionWorkerProcessFrame,
+    updateConfig: motionWorkerUpdateConfig,
+  } = useMotionWorker(handleMotionResult);
   
   // Carregar lista de câmeras e câmera salva
   useEffect(() => {
@@ -574,31 +606,41 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
     }
   }, [isActive, initBackgroundFromVideo]);
   
-  // Loop de processamento de frames
+  // Guardar ref do processFrameForOCR
+  useEffect(() => {
+    processFrameForOCRRef.current = processFrameForOCR;
+  }, [processFrameForOCR]);
+  
+  // Loop de processamento de frames (motion worker + Execution Lock)
   const processFrame = useCallback(async () => {
-    if (!videoRef.current || !canvasRef.current) {
+    if (!videoRef.current || !canvasRef.current) return;
+    if (status !== 'monitoring' && status !== 'motion_detected') return;
+    if (!hasReference) return;
+    
+    // Execution Lock
+    if (isProcessingMotionRef.current) return;
+    isProcessingMotionRef.current = true;
+    
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx || video.videoWidth === 0) {
+      isProcessingMotionRef.current = false;
       return;
     }
     
-    // Só processar se está monitorando ou com movimento detectado
-    if (status !== 'monitoring' && status !== 'motion_detected') {
-      return;
+    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
     }
     
-    // Verificar se tem referência
-    if (!motionDetectorRef.current.hasReference()) {
-      return;
-    }
+    ctx.drawImage(video, 0, 0);
     
-    const result = motionDetectorRef.current.processFrame(
-      videoRef.current,
-      canvasRef.current,
-      virtualArea
-    );
+    // Extrair ImageData e enviar ao motion worker (Transferable)
+    const imageData = extractAreaPixels(ctx, video.videoWidth, video.videoHeight, virtualArea);
+    motionWorkerProcessFrame(imageData); // Result via handleMotionResult callback
     
-    setMotionPercent(result.motionPercent);
-    
-    // v1.1.87: Timeout de validação - forçar reset após 15s
+    // v1.1.87: Timeout de validação
     if (fastTrackValidatedRef.current && lastValidationTimeRef.current > 0) {
       const elapsed = Date.now() - lastValidationTimeRef.current;
       if (elapsed > VALIDATION_TIMEOUT_MS) {
@@ -606,65 +648,11 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
         fastTrackValidatedRef.current = false;
         ocrBufferRef.current = [];
         lastPlateRegionRef.current = null;
-        captureReferenceFrame();
+        initBackgroundFromVideo();
         motionDetectorRef.current.resetOcrAttempt();
       }
     }
-    
-    // v1.1.81: Se veículo saiu após detecção, limpar buffer OCR
-    if (result.vehicleExited) {
-      resetOcrBuffer();
-      lastPlateRegionRef.current = null;
-      console.log('🧹 Buffer OCR limpo - veículo saiu da área');
-    }
-    
-    // Auto-atualizar referência se necessário (silencioso)
-    if (result.shouldUpdateReference) {
-      captureReferenceFrame();
-    }
-    
-    // Atualizar stageLabel baseado no estado atual
-    if (result.hasMotion) {
-      setStatus('motion_detected');
-      setStatusMessage('🟡 Veículo detectado...');
-      setProcessingInfo(prev => ({
-        ...prev,
-        stage: 'idle',
-        stageLabel: 'Veículo detectado!',
-      }));
-    } else if (!result.hasMotion && status === 'motion_detected') {
-      // Resetar para monitoramento quando não há mais veículo
-      // Fast-Track: Limpar buffer quando veículo sai da área
-      resetOcrBuffer();
-      
-      setStatus('monitoring');
-      setStatusMessage('🟢 Monitorando...');
-      setProcessingInfo(prev => ({
-        ...prev,
-        stage: 'idle',
-        stageLabel: 'Monitorando área...',
-      }));
-    } else if (status === 'monitoring' && processingInfo.stage === 'idle' && processingInfo.stageLabel === 'Aguardando') {
-      // Atualizar label inicial quando começar a monitorar
-      setProcessingInfo(prev => ({
-        ...prev,
-        stageLabel: 'Monitorando área...',
-      }));
-    }
-    
-    // Se deve tentar OCR (primeira vez ou re-tentativa)
-    if (result.shouldAttemptOCR) {
-      const success = await processFrameForOCR();
-      
-      // Voltar ao monitoramento após 2 segundos
-      setTimeout(() => {
-        if (isActive) {
-          setStatus('monitoring');
-          setStatusMessage(success ? '🟢 Monitorando...' : '🟡 Aguardando re-tentativa...');
-        }
-      }, 2000);
-    }
-  }, [status, virtualArea, processFrameForOCR, captureReferenceFrame, processingInfo.stage, processingInfo.stageLabel, isActive, resetOcrBuffer]);
+  }, [status, virtualArea, hasReference, motionWorkerProcessFrame, initBackgroundFromVideo]);
   
   // Iniciar loop de frames
   useEffect(() => {
@@ -869,25 +857,7 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
           
           // Aguardar vídeo estabilizar e capturar referência
           setTimeout(() => {
-            if (videoRef.current && canvasRef.current) {
-              const success = motionDetectorRef.current.captureReference(
-                videoRef.current,
-                canvasRef.current,
-                loadVirtualArea() || getDefaultVirtualArea()
-              );
-              
-              setHasReference(success);
-              
-              if (success) {
-                setStatusMessage('🟢 Monitorando stream...');
-                setProcessingInfo(prev => ({
-                  ...prev,
-                  stageLabel: 'Monitorando área...',
-                }));
-              } else {
-                setStatusMessage('⚠️ Erro ao capturar referência');
-              }
-            }
+            initBackgroundFromVideo();
           }, 1500);
         };
         
