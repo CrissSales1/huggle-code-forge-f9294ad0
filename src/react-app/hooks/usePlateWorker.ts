@@ -45,9 +45,6 @@ interface MotionDetectionConfig {
   stabilizationMs: number;
 }
 
-// Keep for backward compatibility but no longer used in main loop
-type _MotionDetectionConfig = MotionDetectionConfig;
-
 interface ProcessingProgress {
   stage: string;
   progress: number;
