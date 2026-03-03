@@ -69,14 +69,12 @@ type WorkerMessage =
   | { type: 'INIT' }
   | { type: 'LOAD_YOLO_MODEL' }
   | { type: 'PROCESS_PLATE'; payload: { imageData: ImageData; width: number; height: number; options?: ProcessPlateOptions } }
-  | { type: 'DETECT_MOTION'; payload: { currentData: Uint8ClampedArray; referenceData: Uint8ClampedArray; config: MotionDetectionConfig } }
   | { type: 'TERMINATE' };
 
 type WorkerResponse = 
   | { type: 'READY' }
   | { type: 'MODEL_LOADED'; payload: { success: boolean; permanentFailure?: boolean; error?: string } }
   | { type: 'PLATE_RESULT'; payload: OCRResult }
-  | { type: 'MOTION_RESULT'; payload: { motionPercent: number } }
   | { type: 'ERROR'; payload: { message: string } }
   | { type: 'PROGRESS'; payload: { stage: string; progress: number } };
 
@@ -2300,13 +2298,7 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
         break;
       }
         
-      case 'DETECT_MOTION': {
-        const { currentData, referenceData, config } = event.data.payload;
-        const motionPercent = compareFrames(referenceData, currentData, config);
-        self.postMessage({ type: 'MOTION_RESULT', payload: { motionPercent } } as WorkerResponse);
-        break;
-      }
-        
+      
       case 'TERMINATE':
         // Limpar ONNX
         if (onnxSession) {
