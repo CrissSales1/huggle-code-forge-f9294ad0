@@ -85,20 +85,7 @@ export function useMotionWorker(
     };
   }, []);
   
-  // Inicializar com configuração
-  const init = useCallback((minPixelDifference: number) => {
-    if (!workerRef.current) return;
-    workerRef.current.postMessage({ 
-      type: 'INIT', 
-      payload: { minPixelDifference } 
-    });
-  }, []);
-  
-  // Chamado uma vez ao disponibilizar o init
-  useEffect(() => {
-    if (isReady) return;
-    // Será chamado via INIT pelo componente pai
-  }, [isReady]);
+  // Nenhuma lógica adicional necessária - INIT é chamado via updateConfig
   
   // Inicializar background com primeiro frame
   const initBackground = useCallback((imageData: ImageData) => {
