@@ -256,7 +256,6 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   }, []);
   
   const {
-    isReady: motionWorkerReady,
     initBackground: motionWorkerInitBackground,
     processFrame: motionWorkerProcessFrame,
     updateConfig: motionWorkerUpdateConfig,
@@ -266,7 +265,6 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     metrics: performanceMetrics,
     recordFrameStart,
     recordFrameEnd,
-    recordOcrTime,
     setWorkerStatus,
   } = usePerformanceMetrics();
   
