@@ -49,12 +49,6 @@ interface OCRResult {
   candidates?: Array<{ text: string; confidence: number; format: string }>; // v1.1.84: Beam Search top-3 candidatos
 }
 
-interface MotionDetectionConfig {
-  threshold: number;
-  minPixelDifference: number;
-  stabilizationMs: number;
-}
-
 interface ProcessPlateOptions {
   enableDebug?: boolean;
   enableFallback?: boolean;
@@ -69,14 +63,12 @@ type WorkerMessage =
   | { type: 'INIT' }
   | { type: 'LOAD_YOLO_MODEL' }
   | { type: 'PROCESS_PLATE'; payload: { imageData: ImageData; width: number; height: number; options?: ProcessPlateOptions } }
-  | { type: 'DETECT_MOTION'; payload: { currentData: Uint8ClampedArray; referenceData: Uint8ClampedArray; config: MotionDetectionConfig } }
   | { type: 'TERMINATE' };
 
 type WorkerResponse = 
   | { type: 'READY' }
   | { type: 'MODEL_LOADED'; payload: { success: boolean; permanentFailure?: boolean; error?: string } }
   | { type: 'PLATE_RESULT'; payload: OCRResult }
-  | { type: 'MOTION_RESULT'; payload: { motionPercent: number } }
   | { type: 'ERROR'; payload: { message: string } }
   | { type: 'PROGRESS'; payload: { stage: string; progress: number } };
 
@@ -1968,34 +1960,7 @@ async function callFallbackAPI(
   }
 }
 
-// ============ DETECÇÃO DE MOVIMENTO ============
-
-function compareFrames(
-  previousData: Uint8ClampedArray,
-  currentData: Uint8ClampedArray,
-  config: MotionDetectionConfig
-): number {
-  if (previousData.length !== currentData.length) {
-    return 0;
-  }
-  
-  let changedPixels = 0;
-  const totalPixels = previousData.length / 4;
-  
-  for (let i = 0; i < previousData.length; i += 4) {
-    const rDiff = Math.abs(previousData[i] - currentData[i]);
-    const gDiff = Math.abs(previousData[i + 1] - currentData[i + 1]);
-    const bDiff = Math.abs(previousData[i + 2] - currentData[i + 2]);
-    
-    const avgDiff = (rDiff + gDiff + bDiff) / 3;
-    
-    if (avgDiff > config.minPixelDifference) {
-      changedPixels++;
-    }
-  }
-  
-  return changedPixels / totalPixels;
-}
+// ============ DETECÇÃO DE MOVIMENTO (removido - delegado ao motion.worker.ts) ============
 
 // ============ PROCESSAMENTO DE PLACA ============
 
@@ -2300,13 +2265,7 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
         break;
       }
         
-      case 'DETECT_MOTION': {
-        const { currentData, referenceData, config } = event.data.payload;
-        const motionPercent = compareFrames(referenceData, currentData, config);
-        self.postMessage({ type: 'MOTION_RESULT', payload: { motionPercent } } as WorkerResponse);
-        break;
-      }
-        
+      
       case 'TERMINATE':
         // Limpar ONNX
         if (onnxSession) {

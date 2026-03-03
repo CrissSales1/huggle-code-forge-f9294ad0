@@ -1,7 +1,7 @@
 /**
  * Utilitário para detecção de movimento em área virtual do vídeo
  * Suporta área poligonal definida por pontos
- * v1.1.28 - Fast-Track OCR Imediato (OCR inicia assim que movimento é detectado)
+ * v1.1.89 - Masked EMA: Máquina de estado pura (cálculo delegado ao motion.worker.ts)
  */
 
 // Ponto relativo (0-1) no vídeo
@@ -48,20 +48,20 @@ export const SENSITIVITY_PRESETS: Record<Exclude<MotionSensitivity, 'custom'>, S
   alta: {
     label: 'Alta',
     description: 'Detecta veículos mais facilmente',
-    threshold: 0.08,        // 8% de mudança
-    minPixelDifference: 25, // Muito sensível
+    threshold: 0.08,
+    minPixelDifference: 25,
   },
   media: {
     label: 'Média',
     description: 'Equilíbrio entre sensibilidade e precisão',
-    threshold: 0.15,        // 15% de mudança
-    minPixelDifference: 35, // Moderado
+    threshold: 0.15,
+    minPixelDifference: 35,
   },
   baixa: {
     label: 'Baixa',
     description: 'Só detecta veículos bem visíveis',
-    threshold: 0.25,        // 25% de mudança
-    minPixelDifference: 50, // Menos sensível
+    threshold: 0.25,
+    minPixelDifference: 50,
   },
 };
 
@@ -80,11 +80,14 @@ const RESOLUTION_STORAGE_KEY = 'portacerta_camera_resolution';
 const SENSITIVITY_STORAGE_KEY = 'portacerta_motion_sensitivity';
 const CUSTOM_SENSITIVITY_KEY = 'portacerta_custom_sensitivity';
 
+// Fast-Track: Delay entre tentativas de OCR
+const OCR_RETRY_DELAY_MS = 800;
+
 // === Funções de persistência de sensibilidade ===
 
 export interface CustomSensitivity {
-  threshold: number; // 0.05 a 0.40 (5% a 40%)
-  minPixelDifference: number; // 15 a 60
+  threshold: number;
+  minPixelDifference: number;
 }
 
 export function loadMotionSensitivity(): MotionSensitivity {
@@ -96,7 +99,7 @@ export function loadMotionSensitivity(): MotionSensitivity {
   } catch (e) {
     console.warn('Erro ao carregar sensibilidade:', e);
   }
-  return 'media'; // Padrão
+  return 'media';
 }
 
 export function saveMotionSensitivity(sensitivity: MotionSensitivity): void {
@@ -116,7 +119,7 @@ export function loadCustomSensitivity(): CustomSensitivity {
   } catch (e) {
     console.warn('Erro ao carregar sensibilidade customizada:', e);
   }
-  return { threshold: 0.15, minPixelDifference: 35 }; // Padrão = média
+  return { threshold: 0.15, minPixelDifference: 35 };
 }
 
 export function saveCustomSensitivity(config: CustomSensitivity): void {
@@ -182,7 +185,7 @@ export function loadCameraResolution(): CameraResolution {
   } catch (e) {
     console.warn('Erro ao carregar resolução:', e);
   }
-  return 'medium'; // Padrão
+  return 'medium';
 }
 
 export function saveCameraResolution(resolution: CameraResolution): void {
@@ -200,7 +203,6 @@ export function loadVirtualArea(): VirtualArea | null {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      // Migrar área retangular legada para o novo formato
       if (!parsed.type && parsed.x !== undefined) {
         return { ...parsed, type: 'rect' } as VirtualAreaRect;
       }
@@ -238,7 +240,6 @@ export function saveSelectedCamera(deviceId: string): void {
 }
 
 export function getDefaultVirtualArea(): VirtualAreaPolygon {
-  // Polígono padrão retangular no centro
   return {
     type: 'polygon',
     points: [
@@ -252,9 +253,6 @@ export function getDefaultVirtualArea(): VirtualAreaPolygon {
 
 // === Funções de geometria ===
 
-/**
- * Verifica se um ponto está dentro de um polígono (Ray Casting Algorithm)
- */
 export function isPointInPolygon(px: number, py: number, polygon: Point[]): boolean {
   let inside = false;
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
@@ -269,9 +267,6 @@ export function isPointInPolygon(px: number, py: number, polygon: Point[]): bool
   return inside;
 }
 
-/**
- * Calcula o bounding box de um polígono
- */
 export function getPolygonBoundingBox(points: Point[]): { minX: number; minY: number; maxX: number; maxY: number } {
   const xs = points.map(p => p.x);
   const ys = points.map(p => p.y);
@@ -283,16 +278,10 @@ export function getPolygonBoundingBox(points: Point[]): { minX: number; minY: nu
   };
 }
 
-/**
- * Verifica se a área é um polígono
- */
 export function isPolygonArea(area: VirtualArea): area is VirtualAreaPolygon {
   return (area as VirtualAreaPolygon).type === 'polygon';
 }
 
-/**
- * Converte área retangular para polígono
- */
 export function rectToPolygon(rect: VirtualAreaRect): VirtualAreaPolygon {
   return {
     type: 'polygon',
@@ -305,9 +294,6 @@ export function rectToPolygon(rect: VirtualAreaRect): VirtualAreaPolygon {
   };
 }
 
-/**
- * Obtém os pontos do polígono (converte retângulo se necessário)
- */
 export function getPolygonPoints(area: VirtualArea): Point[] {
   if (isPolygonArea(area)) {
     return area.points;
@@ -317,8 +303,9 @@ export function getPolygonPoints(area: VirtualArea): Point[] {
 
 /**
  * Extrai pixels da área virtual de um canvas (suporta polígono)
+ * PÚBLICO: usado pela Main Thread para capturar ImageData para o motion worker
  */
-function extractAreaPixels(
+export function extractAreaPixels(
   ctx: CanvasRenderingContext2D,
   videoWidth: number,
   videoHeight: number,
@@ -337,6 +324,7 @@ function extractAreaPixels(
 
 /**
  * Compara dois frames e retorna percentual de diferença
+ * Mantido para compatibilidade — NÃO usado no loop principal (delegado ao motion worker)
  */
 export function compareFrames(
   previousData: ImageData,
@@ -365,247 +353,54 @@ export function compareFrames(
   return changedPixels / totalPixels;
 }
 
-// Thresholds para detecção por referência
-const DETECTION_THRESHOLD = 0.10; // 10% de diferença = veículo presente (v1.1.33)
-const CLEAN_THRESHOLD = 0.05;     // 5% de diferença = área considerada limpa
-const VEHICLE_EXIT_THRESHOLD = 0.08; // v1.1.81: 8% = veículo saiu após OCR bem-sucedido
-const AUTO_UPDATE_DELAY_MS = 10000; // 10 segundos limpa = atualiza referência
-const OCR_RETRY_DELAY_MS = 800;   // Fast-Track: 800ms entre tentativas para coleta de buffer
-const INTERMEDIATE_UPDATE_DELAY_MS = 15000; // v1.1.87: 15s na zona morta sem OCR → atualiza ref
-
 /**
- * Classe para gerenciar detecção de movimento contínua
- * Usa imagem de referência para detectar veículos (mais robusto)
+ * Máquina de estado para detecção de movimento
+ * v1.1.89: Não acessa vídeo/canvas diretamente — recebe motionPercent do worker
  */
 export class MotionDetector {
-  private referenceFrame: ImageData | null = null;
-  private previousFrame: ImageData | null = null;
   private config: MotionDetectionConfig;
-  private lastMotionTime: number = 0;
-  private isStabilizing: boolean = false;
   private consecutiveMotionFrames: number = 0;
-  
-  // Controle de referência
-  private lastCleanTime: number = 0;
-  private referenceUpdatePending: boolean = false;
   
   // Controle de re-tentativa de OCR
   private ocrAttempted: boolean = false;
   private lastOcrAttemptTime: number = 0;
   private ocrSucceeded: boolean = false;
   
-  // Controle para evitar log excessivo de referência
-  private lastReferenceCaptureTime: number = 0;
-  private static readonly MIN_REFERENCE_LOG_INTERVAL = 60000; // 60 segundos entre logs (produção)
-  
-  // v1.1.87: Controle de zona intermediária (ghost motion)
-  private intermediateZoneStart: number = 0;
-  
   constructor(config: Partial<MotionDetectionConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
   }
   
   /**
-   * Verifica se há uma imagem de referência capturada
+   * Processa o resultado de motionPercent vindo do motion worker.
+   * Aplica lógica de estado: frames consecutivos, cooldown OCR.
+   * Retorna se deve disparar OCR.
    */
-  hasReference(): boolean {
-    return this.referenceFrame !== null;
-  }
-  
-  /**
-   * Captura a imagem de referência da área virtual
-   */
-  captureReference(
-    video: HTMLVideoElement,
-    canvas: HTMLCanvasElement,
-    area: VirtualArea
-  ): boolean {
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx || video.videoWidth === 0 || video.videoHeight === 0) {
-      return false;
-    }
-    
+  processMotionResult(motionPercent: number): { 
+    hasMotion: boolean; 
+    shouldAttemptOCR: boolean;
+  } {
     const now = Date.now();
     
-    // Evitar recaptura muito frequente (apenas atualiza silenciosamente)
-    const shouldLog = now - this.lastReferenceCaptureTime >= MotionDetector.MIN_REFERENCE_LOG_INTERVAL;
-    
-    // Ajustar canvas para o tamanho do vídeo
-    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-    }
-    
-    // Desenhar frame atual no canvas
-    ctx.drawImage(video, 0, 0);
-    
-    // Extrair pixels da área virtual como referência
-    const points = getPolygonPoints(area);
-    const bbox = getPolygonBoundingBox(points);
-    
-    const x = Math.floor(bbox.minX * video.videoWidth);
-    const y = Math.floor(bbox.minY * video.videoHeight);
-    const width = Math.floor((bbox.maxX - bbox.minX) * video.videoWidth);
-    const height = Math.floor((bbox.maxY - bbox.minY) * video.videoHeight);
-    
-    this.referenceFrame = ctx.getImageData(x, y, Math.max(1, width), Math.max(1, height));
-    this.lastCleanTime = now;
-    this.referenceUpdatePending = false;
-    
-    // Só loga se passou tempo suficiente desde o último log
-    if (shouldLog) {
-      this.lastReferenceCaptureTime = now;
-      console.log('📸 Referência capturada:', { width, height });
-    }
-    
-    return true;
-  }
-  
-  /**
-   * Processa um frame e detecta presença de veículo comparando com referência
-   */
-  processFrame(
-    video: HTMLVideoElement,
-    canvas: HTMLCanvasElement,
-    area: VirtualArea
-  ): { hasMotion: boolean; isStable: boolean; shouldAttemptOCR: boolean; motionPercent: number; shouldUpdateReference: boolean; vehicleExited: boolean } {
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx || video.videoWidth === 0 || video.videoHeight === 0) {
-      return { hasMotion: false, isStable: false, shouldAttemptOCR: false, motionPercent: 0, shouldUpdateReference: false, vehicleExited: false };
-    }
-    
-    // Se não tem referência, retornar sem detecção
-    if (!this.referenceFrame) {
-      return { hasMotion: false, isStable: false, shouldAttemptOCR: false, motionPercent: 0, shouldUpdateReference: false, vehicleExited: false };
-    }
-    
-    // Ajustar canvas para o tamanho do vídeo
-    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-    }
-    
-    // Desenhar frame atual no canvas
-    ctx.drawImage(video, 0, 0);
-    
-    // Extrair pixels da área virtual
-    const currentFrame = extractAreaPixels(ctx, video.videoWidth, video.videoHeight, area);
-    
-    // Comparar com REFERÊNCIA (não com frame anterior)
-    const diffPercent = compareFrames(this.referenceFrame, currentFrame, this.config);
-    
-    // Guardar frame anterior para detecção de estabilização
-    const previousFrameDiff = this.previousFrame 
-      ? compareFrames(this.previousFrame, currentFrame, this.config)
-      : 0;
-    this.previousFrame = currentFrame;
-    
-    const now = Date.now();
-    let shouldUpdateReference = false;
-    
-    // Veículo detectado se diferença > threshold de detecção
-    const vehiclePresent = diffPercent >= DETECTION_THRESHOLD;
-    
-    // Área limpa se diferença < threshold limpo
-    const areaClean = diffPercent < CLEAN_THRESHOLD;
-    
-    // v1.1.81: Detectar quando veículo SAI da área após detecção bem-sucedida
-    let vehicleExited = false;
-    
-    // Se OCR foi bem-sucedido e a diferença caiu abaixo do threshold de saída,
-    // significa que o veículo saiu → capturar nova referência IMEDIATAMENTE
-    if (this.ocrSucceeded && diffPercent < VEHICLE_EXIT_THRESHOLD) {
-      console.log('🚗💨 Veículo saiu após detecção - capturando nova referência');
-      vehicleExited = true;
-      shouldUpdateReference = true;
-      
-      // Reset completo para próximo veículo
-      this.ocrSucceeded = false;
-      this.ocrAttempted = false;
-      this.lastOcrAttemptTime = 0;
-      this.consecutiveMotionFrames = 0;
-      this.lastCleanTime = now;
-    }
+    const vehiclePresent = motionPercent >= this.config.threshold;
     
     if (vehiclePresent) {
-      // Veículo presente
       this.consecutiveMotionFrames++;
-      
-      // v1.1.81: BLOQUEAR atualização automática enquanto há veículo detectado
-      this.lastCleanTime = 0;
-      this.referenceUpdatePending = false;
-      this.intermediateZoneStart = 0; // v1.1.87: Reset zona intermediária
-    } else if (areaClean && !vehicleExited) {
-      // Área limpa - verificar se deve atualizar referência
-      this.consecutiveMotionFrames = 0;
-      this.intermediateZoneStart = 0; // v1.1.87: Reset zona intermediária
-      
-      // Veículo saiu - resetar flags de OCR para próximo veículo
-      this.ocrAttempted = false;
-      this.ocrSucceeded = false;
-      this.lastOcrAttemptTime = 0;
-      
-      if (this.lastCleanTime === 0) {
-        this.lastCleanTime = now;
-      } else if (now - this.lastCleanTime >= AUTO_UPDATE_DELAY_MS && !this.referenceUpdatePending) {
-        // Área limpa por tempo suficiente - sinalizar atualização de referência
-        shouldUpdateReference = true;
-        this.referenceUpdatePending = true;
-      }
-    } else if (!vehicleExited) {
-      // v1.1.87: Zona intermediária (5-10%) - pode ser iluminação mudando
-      this.consecutiveMotionFrames = 0;
-      this.lastCleanTime = 0;
-      
-      if (this.intermediateZoneStart === 0) {
-        this.intermediateZoneStart = now;
-      } else if (now - this.intermediateZoneStart >= INTERMEDIATE_UPDATE_DELAY_MS && !this.ocrSucceeded) {
-        // 15s na zona morta sem OCR ativo → atualizar referência
-        shouldUpdateReference = true;
-        this.intermediateZoneStart = 0;
-        console.log('🔄 Referência atualizada (zona intermediária por 15s)');
-      }
-    }
-    
-    // v1.1.81: BLOQUEAR atualização enquanto OCR ativo (veículo ainda pode estar na área)
-    if (this.ocrSucceeded && !vehicleExited) {
-      this.lastCleanTime = 0;
-      this.referenceUpdatePending = false;
-    }
-    
-    // Presença confirmada se detectada em frames consecutivos
-    const hasMotion = this.consecutiveMotionFrames >= MIN_CONSECUTIVE_MOTION_FRAMES;
-    
-    // Detecção de estabilização: veículo presente MAS não está se movendo
-    if (hasMotion) {
-      // Verificar se o veículo está parado (pouca diferença entre frames consecutivos)
-      const isVehicleStatic = previousFrameDiff < 0.05; // Menos de 5% de mudança entre frames
-      
-      if (isVehicleStatic) {
-        if (this.lastMotionTime === 0) {
-          this.lastMotionTime = now;
-        }
-        this.isStabilizing = true;
-      } else {
-        this.lastMotionTime = now;
-      }
     } else {
-      this.lastMotionTime = 0;
-      this.isStabilizing = false;
+      // Área limpa — resetar OCR flags para próximo veículo
+      if (this.consecutiveMotionFrames > 0) {
+        this.ocrAttempted = false;
+        this.ocrSucceeded = false;
+        this.lastOcrAttemptTime = 0;
+      }
+      this.consecutiveMotionFrames = 0;
     }
     
-    // Verificar se está estável (veículo parado por tempo suficiente)
-    const isStable = this.isStabilizing && 
-                     this.lastMotionTime > 0 &&
-                     (now - this.lastMotionTime >= this.config.stabilizationMs);
+    const hasMotion = this.consecutiveMotionFrames >= MIN_CONSECUTIVE_MOTION_FRAMES;
     
     // Determinar se deve tentar OCR
     let shouldAttemptOCR = false;
     
-    // Fast-Track v1.1.28: Começar OCR assim que movimento detectado (não esperar estabilizar)
-    // Isso permite coletar leituras para consistência temporal enquanto veículo se aproxima
     if (hasMotion && !this.ocrSucceeded) {
-      // Permitir tentativa a cada OCR_RETRY_DELAY_MS para Fast-Track
       const timeSinceLastAttempt = this.lastOcrAttemptTime > 0 
         ? now - this.lastOcrAttemptTime 
         : OCR_RETRY_DELAY_MS; // Primeira tentativa imediata
@@ -618,7 +413,7 @@ export class MotionDetector {
       }
     }
     
-    return { hasMotion, isStable, shouldAttemptOCR, motionPercent: diffPercent, shouldUpdateReference, vehicleExited };
+    return { hasMotion, shouldAttemptOCR };
   }
   
   /**
@@ -646,7 +441,7 @@ export class MotionDetector {
   }
   
   /**
-   * Captura a área virtual como canvas separado (suporta polígono)
+   * Captura a área virtual como canvas separado (para frame fresco ao OCR)
    */
   captureArea(
     video: HTMLVideoElement,
@@ -677,27 +472,20 @@ export class MotionDetector {
   }
   
   /**
-   * Reseta o estado do detector (mantém referência se existir)
+   * Reseta o estado do detector
    */
   reset(): void {
-    this.previousFrame = null;
-    this.lastMotionTime = 0;
-    this.isStabilizing = false;
     this.consecutiveMotionFrames = 0;
-    this.lastCleanTime = 0;
-    this.referenceUpdatePending = false;
     this.ocrAttempted = false;
     this.ocrSucceeded = false;
     this.lastOcrAttemptTime = 0;
-    this.intermediateZoneStart = 0;
   }
   
   /**
-   * Reseta completamente incluindo a referência
+   * Reseta completamente (alias para reset, sem referenceFrame)
    */
   fullReset(): void {
     this.reset();
-    this.referenceFrame = null;
   }
   
   /**
@@ -705,5 +493,12 @@ export class MotionDetector {
    */
   updateConfig(config: Partial<MotionDetectionConfig>): void {
     this.config = { ...this.config, ...config };
+  }
+  
+  /**
+   * Retorna o config atual (para enviar ao motion worker)
+   */
+  getConfig(): MotionDetectionConfig {
+    return { ...this.config };
   }
 }
