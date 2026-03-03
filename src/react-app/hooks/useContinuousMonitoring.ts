@@ -194,7 +194,6 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
   const {
     initBackground: motionWorkerInitBackground,
     processFrame: motionWorkerProcessFrame,
-    updateConfig: motionWorkerUpdateConfig,
   } = useMotionWorker(handleMotionResult);
   
   // Carregar lista de câmeras e câmera salva
