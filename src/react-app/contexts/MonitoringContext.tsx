@@ -7,7 +7,7 @@ import React, { createContext, useContext, useState, useCallback, useRef, useEff
 import Hls from 'hls.js';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlateWorker } from '@/react-app/hooks/usePlateWorker';
-import { useMotionWorker } from '@/react-app/hooks/useMotionWorker';
+import { useMotionWorker } from '@/react-app/hooks/useMotionWorker';  // eslint-disable-line @typescript-eslint/no-unused-vars
 import { usePerformanceMetrics, PerformanceMetrics } from '@/react-app/hooks/usePerformanceMetrics';
 import logger from '@/react-app/utils/logger';
 import { 
