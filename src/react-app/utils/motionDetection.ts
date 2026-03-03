@@ -393,8 +393,6 @@ export class MotionDetector {
         this.lastOcrAttemptTime = 0;
       }
       this.consecutiveMotionFrames = 0;
-      this.lastMotionTime = 0;
-      this.isStabilizing = false;
     }
     
     const hasMotion = this.consecutiveMotionFrames >= MIN_CONSECUTIVE_MOTION_FRAMES;
@@ -477,8 +475,6 @@ export class MotionDetector {
    * Reseta o estado do detector
    */
   reset(): void {
-    this.lastMotionTime = 0;
-    this.isStabilizing = false;
     this.consecutiveMotionFrames = 0;
     this.ocrAttempted = false;
     this.ocrSucceeded = false;
