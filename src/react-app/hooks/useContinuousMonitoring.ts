@@ -712,28 +712,9 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
       setStatus('monitoring');
       setStatusMessage('📸 Capturando referência...');
       
-      // Aguardar vídeo estabilizar e capturar referência
       setTimeout(() => {
-        if (videoRef.current && canvasRef.current) {
-          const success = motionDetectorRef.current.captureReference(
-            videoRef.current,
-            canvasRef.current,
-            loadVirtualArea() || getDefaultVirtualArea()
-          );
-          
-          setHasReference(success);
-          
-          if (success) {
-            setStatusMessage('🟢 Monitorando...');
-            setProcessingInfo(prev => ({
-              ...prev,
-              stageLabel: 'Monitorando área...',
-            }));
-          } else {
-            setStatusMessage('⚠️ Erro ao capturar referência');
-          }
-        }
-      }, 1000); // Aguardar 1 segundo para estabilizar
+        initBackgroundFromVideo();
+      }, 1000);
       
     } catch (e) {
       console.error('Erro ao iniciar câmera:', e);
