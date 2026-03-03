@@ -359,8 +359,6 @@ export function compareFrames(
  */
 export class MotionDetector {
   private config: MotionDetectionConfig;
-  private lastMotionTime: number = 0;
-  private isStabilizing: boolean = false;
   private consecutiveMotionFrames: number = 0;
   
   // Controle de re-tentativa de OCR
