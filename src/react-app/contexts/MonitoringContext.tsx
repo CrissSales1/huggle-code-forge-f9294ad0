@@ -217,6 +217,51 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     loadYoloModel,
   } = usePlateWorker();
   
+  // Motion Worker para Masked EMA
+  const handleMotionResult = useCallback((motionPercent: number) => {
+    // Unlock execution
+    isProcessingMotionRef.current = false;
+    
+    setMotionPercent(motionPercent);
+    
+    const result = motionDetectorRef.current.processMotionResult(motionPercent);
+    
+    if (result.hasMotion) {
+      noMotionCounterRef.current = 0;
+      setStatus(prev => {
+        if (prev === 'monitoring' || prev === 'motion_detected') return 'motion_detected';
+        return prev;
+      });
+      setStatusMessage('🟡 Veículo detectado...');
+      setProcessingInfo(prev => ({ ...prev, stage: 'idle', stageLabel: 'Veículo detectado!' }));
+    } else {
+      noMotionCounterRef.current++;
+      if (noMotionCounterRef.current >= 3) {
+        resetOcrBuffer();
+      }
+      setStatus(prev => {
+        if (prev === 'motion_detected') return 'monitoring';
+        return prev;
+      });
+      if (noMotionCounterRef.current >= 2) {
+        setStatusMessage('🟢 Monitorando...');
+        setProcessingInfo(prev => ({ ...prev, stage: 'idle', stageLabel: 'Monitorando área...' }));
+      }
+    }
+    
+    if (result.shouldAttemptOCR) {
+      // Capturar frame fresco para OCR
+      processFrameForOCRRef.current?.();
+    }
+  }, []);
+  
+  const {
+    isReady: motionWorkerReady,
+    initBackground: motionWorkerInitBackground,
+    processFrame: motionWorkerProcessFrame,
+    updateConfig: motionWorkerUpdateConfig,
+  } = useMotionWorker(handleMotionResult);
+  
   const {
     metrics: performanceMetrics,
     recordFrameStart,
@@ -1020,7 +1065,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     const area = loadVirtualArea() || getDefaultVirtualArea();
     const imageData = extractAreaPixels(ctx, video.videoWidth, video.videoHeight, area);
     
-    motionWorkerRef.current?.initBackground(imageData);
+    motionWorkerInitBackground(imageData);
     setHasReference(true);
     
     setProcessingInfo(prev => ({
@@ -1042,7 +1087,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     if (isActive && videoRef.current && canvasRef.current) {
       initBackgroundFromVideo();
     }
-  }, [isActive, captureReferenceFrame]);
+  }, [isActive, initBackgroundFromVideo]);
   
   // Leitura manual instantânea - não depende do status atual
   const manualCapture = useCallback(async (): Promise<boolean> => {
