@@ -1966,34 +1966,7 @@ async function callFallbackAPI(
   }
 }
 
-// ============ DETECÇÃO DE MOVIMENTO ============
-
-function compareFrames(
-  previousData: Uint8ClampedArray,
-  currentData: Uint8ClampedArray,
-  config: MotionDetectionConfig
-): number {
-  if (previousData.length !== currentData.length) {
-    return 0;
-  }
-  
-  let changedPixels = 0;
-  const totalPixels = previousData.length / 4;
-  
-  for (let i = 0; i < previousData.length; i += 4) {
-    const rDiff = Math.abs(previousData[i] - currentData[i]);
-    const gDiff = Math.abs(previousData[i + 1] - currentData[i + 1]);
-    const bDiff = Math.abs(previousData[i + 2] - currentData[i + 2]);
-    
-    const avgDiff = (rDiff + gDiff + bDiff) / 3;
-    
-    if (avgDiff > config.minPixelDifference) {
-      changedPixels++;
-    }
-  }
-  
-  return changedPixels / totalPixels;
-}
+// ============ DETECÇÃO DE MOVIMENTO (removido - delegado ao motion.worker.ts) ============
 
 // ============ PROCESSAMENTO DE PLACA ============
 
