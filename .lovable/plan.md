@@ -1,5 +1,5 @@
 
-# Plano Implementado: Masked EMA com Dual-Worker v1.1.89
+# Plano Implementado: Pipeline Unificado v1.1.90
 
 ## Status: ✅ IMPLEMENTADO
 
@@ -7,11 +7,20 @@
 
 | Arquivo | Ação | Status |
 |---------|------|--------|
-| `src/react-app/workers/motion.worker.ts` | CRIADO — Worker dedicado Masked EMA (α_bg=0.05, α_fg=0.0005) com Buffer Ping-Pong | ✅ |
-| `src/react-app/hooks/useMotionWorker.ts` | CRIADO — Hook para gerenciar motion worker | ✅ |
-| `src/react-app/utils/motionDetection.ts` | SIMPLIFICADO — Máquina de estado pura, extractAreaPixels público | ✅ |
-| `src/react-app/contexts/MonitoringContext.tsx` | ADAPTADO — Dual-worker + Execution Lock | ✅ |
-| `src/react-app/hooks/useContinuousMonitoring.ts` | ADAPTADO — Dual-worker + Execution Lock | ✅ |
-| `src/react-app/hooks/usePlateWorker.ts` | LIMPO — detectMotion removido do handler | ✅ |
-| `src/react-app/workers/plateProcessor.worker.ts` | LIMPO — DETECT_MOTION e compareFrames removidos | ✅ |
-| `src/react-app/pages/Configuracoes.tsx` | Versão 1.1.89 (Masked EMA) | ✅ |
+| `src/shared/plateValidation.ts` | CRIADO — Módulo canônico de validação (zero deps browser) | ✅ |
+| `src/react-app/utils/plateValidator.ts` | SIMPLIFICADO — Re-export do shared module | ✅ |
+| `src/react-app/workers/plateProcessor.worker.ts` | LIMPO — ~550 linhas removidas, homografia adicionada, single-pass OCR | ✅ |
+| `src/react-app/utils/plateDetector.ts` | REMOVIDO — 494 linhas de código morto (Sobel + Sliding Window) | ✅ |
+| `src/react-app/hooks/usePlateRecognition.ts` | LIMPO — Removido import e bloco debug do plateDetector | ✅ |
+| `src/react-app/hooks/usePlateWorker.ts` | LIMPO — Removido detectMotion, MotionDetectionConfig | ✅ |
+| `src/react-app/pages/Configuracoes.tsx` | Versão 1.1.90 (Pipeline Unificado) | ✅ |
+
+## Impacto
+
+| Métrica | Antes | Depois |
+|---------|-------|--------|
+| Tempo OCR/frame | ~300ms (2× ONNX) | ~150ms (1× ONNX) |
+| Linhas validação duplicadas | ~600 | 0 |
+| Código morto removido | 0 | ~700 linhas |
+| Tabelas de substituição divergentes | 2 | 1 (canônica) |
+| Homografia projetiva | Nenhuma | Função pronta para OBB |
