@@ -5,7 +5,6 @@
  */
 import { useState, useCallback, useRef } from 'react';
 import { validateAndCorrectPlate } from '../utils/plateValidator';
-import { getPlateDetector } from '../utils/plateDetector';
 import { usePlateWorker, type OCRResult } from './usePlateWorker';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -168,23 +167,7 @@ export function usePlateRecognition(): UsePlateRecognitionReturn {
     setError(null);
     setUsedFallback(false);
     setDebugImage(null);
-    setStatusMessage('Processando imagem...');
-    
-    // Gerar imagem de debug se solicitado
-    if (enableDebug) {
-      try {
-        const detector = getPlateDetector();
-        detector.setDebugMode(true);
-        const detectionResult = detector.detect(canvas);
-        detector.setDebugMode(false);
-        
-        if (detectionResult.debugCanvas) {
-          setDebugImage(detectionResult.debugCanvas.toDataURL('image/jpeg', 0.8));
-        }
-      } catch (e) {
-        console.warn('Erro ao gerar imagem de debug:', e);
-      }
-    }
+    // Debug images vêm do worker (workerResult.debugImage / workerResult.debugImages)
     
     try {
       // OCR via worker ONNX - passa o canvas diretamente

@@ -39,11 +39,6 @@ export interface OCRResult {
   candidates?: Array<{ text: string; confidence: number; format: string }>; // v1.1.84: Beam Search top-3 candidatos
 }
 
-interface MotionDetectionConfig {
-  threshold: number;
-  minPixelDifference: number;
-  stabilizationMs: number;
-}
 
 interface ProcessingProgress {
   stage: string;
