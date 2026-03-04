@@ -388,9 +388,6 @@ export class MotionDetector {
     } else {
       // Área limpa — resetar OCR flags para próximo veículo
       if (this.consecutiveMotionFrames > 0) {
-        if (!this.ocrAttempted) {
-          // Nenhuma tentativa OCR foi feita neste ciclo
-        }
         this.ocrAttempted = false;
         this.ocrSucceeded = false;
         this.lastOcrAttemptTime = 0;
@@ -409,6 +406,9 @@ export class MotionDetector {
         : OCR_RETRY_DELAY_MS; // Primeira tentativa imediata
       
       if (timeSinceLastAttempt >= OCR_RETRY_DELAY_MS) {
+        if (!this.ocrAttempted) {
+          console.log('🚀 Fast-Track: Iniciando coleta OCR (movimento detectado)');
+        }
         shouldAttemptOCR = true;
       }
     }
