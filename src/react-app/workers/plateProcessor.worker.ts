@@ -12,7 +12,6 @@ import {
   heuristicCorrection,
   validateAndCorrectPlate,
   isForbiddenText,
-  extractPlateCandidate,
   type PlateValidationResult,
 } from '../../shared/plateValidation';
 
