@@ -1,26 +1,34 @@
 
-# Plano Implementado: Pipeline Unificado v1.1.90
 
-## Status: ✅ IMPLEMENTADO
+# Diagnóstico: OCR não inicia automaticamente após detecção de veículo
 
-## Arquivos Criados/Modificados
+## Bug Identificado
 
-| Arquivo | Ação | Status |
-|---------|------|--------|
-| `src/shared/plateValidation.ts` | CRIADO — Módulo canônico de validação (zero deps browser) | ✅ |
-| `src/react-app/utils/plateValidator.ts` | SIMPLIFICADO — Re-export do shared module | ✅ |
-| `src/react-app/workers/plateProcessor.worker.ts` | LIMPO — ~550 linhas removidas, homografia adicionada, single-pass OCR | ✅ |
-| `src/react-app/utils/plateDetector.ts` | REMOVIDO — 494 linhas de código morto (Sobel + Sliding Window) | ✅ |
-| `src/react-app/hooks/usePlateRecognition.ts` | LIMPO — Removido import e bloco debug do plateDetector | ✅ |
-| `src/react-app/hooks/usePlateWorker.ts` | LIMPO — Removido detectMotion, MotionDetectionConfig | ✅ |
-| `src/react-app/pages/Configuracoes.tsx` | Versão 1.1.90 (Pipeline Unificado) | ✅ |
+**Arquivo:** `src/react-app/hooks/useContinuousMonitoring.ts`, **linha 412**
 
-## Impacto
+```typescript
+if (!videoRef.current || status !== 'monitoring') return false;
+```
 
-| Métrica | Antes | Depois |
-|---------|-------|--------|
-| Tempo OCR/frame | ~300ms (2× ONNX) | ~150ms (1× ONNX) |
-| Linhas validação duplicadas | ~600 | 0 |
-| Código morto removido | 0 | ~700 linhas |
-| Tabelas de substituição divergentes | 2 | 1 (canônica) |
-| Homografia projetiva | Nenhuma | Função pronta para OBB |
+### Fluxo do problema:
+
+1. `handleMotionResult` detecta movimento → seta `status` para `'motion_detected'` (linha 177)
+2. Na mesma callback, chama `processFrameForOCRRef.current?.()` (linha 187)
+3. `processFrameForOCR` verifica `status !== 'monitoring'` → como o status acabou de mudar para `'motion_detected'`, **retorna `false` imediatamente sem executar o OCR**
+
+O status `'motion_detected'` é uma condição legítima para iniciar o OCR, mas o guard na linha 412 só aceita `'monitoring'`.
+
+## Correção
+
+**Linha 412** — alterar o guard para aceitar ambos os estados:
+
+```typescript
+if (!videoRef.current || (status !== 'monitoring' && status !== 'motion_detected')) return false;
+```
+
+Mudança de **1 linha**. Nenhum outro arquivo afetado.
+
+## Por que "Leitura Manual" funciona
+
+O botão de leitura manual provavelmente chama `recognizeFromCanvas` diretamente, sem passar pelo guard de status, por isso funciona mesmo quando o fluxo automático está bloqueado.
+
