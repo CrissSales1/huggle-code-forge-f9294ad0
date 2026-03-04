@@ -185,6 +185,8 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
     }
     
     if (result.shouldAttemptOCR) {
+      // Lock síncrono ANTES de chamar OCR — impede re-triggers durante propagação async
+      motionDetectorRef.current.markOcrAttempted();
       processFrameForOCRRef.current?.();
     }
   }, []);
