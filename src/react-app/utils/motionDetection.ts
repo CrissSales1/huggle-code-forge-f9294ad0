@@ -388,6 +388,9 @@ export class MotionDetector {
     } else {
       // Área limpa — resetar OCR flags para próximo veículo
       if (this.consecutiveMotionFrames > 0) {
+        if (!this.ocrAttempted) {
+          // Nenhuma tentativa OCR foi feita neste ciclo
+        }
         this.ocrAttempted = false;
         this.ocrSucceeded = false;
         this.lastOcrAttemptTime = 0;
