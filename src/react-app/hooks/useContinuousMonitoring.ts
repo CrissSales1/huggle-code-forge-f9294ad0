@@ -409,7 +409,7 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
   
   // Processar frame para OCR com Fast-Track
   const processFrameForOCR = useCallback(async (): Promise<boolean> => {
-    if (!videoRef.current || status !== 'monitoring') return false;
+    if (!videoRef.current || (status !== 'monitoring' && status !== 'motion_detected')) return false;
     
     // Fast-Track: Se já validou este veículo, ignora
     if (fastTrackValidatedRef.current) {
