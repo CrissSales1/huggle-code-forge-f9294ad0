@@ -58,7 +58,6 @@ type WorkerResponse =
   | { type: 'MODEL_LOADED'; payload: { success: boolean; permanentFailure?: boolean; error?: string } }
   | { type: 'PLATE_RESULT'; payload: OCRResult }
   | { type: 'MOTION_RESULT'; payload: { motionPercent: number } }
-  | { type: 'ERROR'; payload: { message: string } }
   | { type: 'PROGRESS'; payload: ProcessingProgress };
 
 interface UsePlateWorkerReturn {
