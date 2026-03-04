@@ -406,10 +406,10 @@ export class MotionDetector {
         : OCR_RETRY_DELAY_MS; // Primeira tentativa imediata
       
       if (timeSinceLastAttempt >= OCR_RETRY_DELAY_MS) {
-        shouldAttemptOCR = true;
         if (!this.ocrAttempted) {
           console.log('🚀 Fast-Track: Iniciando coleta OCR (movimento detectado)');
         }
+        shouldAttemptOCR = true;
       }
     }
     

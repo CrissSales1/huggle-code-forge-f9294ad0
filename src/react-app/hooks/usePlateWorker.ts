@@ -100,6 +100,7 @@ export function usePlateWorker(): UsePlateWorkerReturn {
   const [modelFailed, setModelFailed] = useState(false);
   
   const pendingPlateResolve = useRef<((result: OCRResult | null) => void) | null>(null);
+  const isProcessingPlateRef = useRef(false);
   
   useEffect(() => {
     try {
@@ -130,6 +131,7 @@ export function usePlateWorker(): UsePlateWorkerReturn {
             break;
             
           case 'PLATE_RESULT':
+            isProcessingPlateRef.current = false;
             setIsProcessing(false);
             setProgress(null);
             if (pendingPlateResolve.current) {
@@ -144,6 +146,7 @@ export function usePlateWorker(): UsePlateWorkerReturn {
             
           case 'ERROR':
             setError(event.data.payload.message);
+            isProcessingPlateRef.current = false;
             setIsProcessing(false);
             setProgress(null);
             if (pendingPlateResolve.current) {
@@ -185,11 +188,11 @@ export function usePlateWorker(): UsePlateWorkerReturn {
       return null;
     }
     
-    if (isProcessing) {
-      console.warn('Processamento já em andamento');
+    if (isProcessingPlateRef.current) {
       return null;
     }
     
+    isProcessingPlateRef.current = true;
     setIsProcessing(true);
     setError(null);
     
@@ -227,7 +230,7 @@ export function usePlateWorker(): UsePlateWorkerReturn {
         [imageData.data.buffer]
       );
     });
-  }, [isReady, isProcessing]);
+  }, [isReady]);
   
   const loadYoloModel = useCallback(() => {
     if (!workerRef.current || modelLoaded || modelLoading) return;
