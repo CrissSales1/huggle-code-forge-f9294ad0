@@ -1,7 +1,7 @@
 /**
  * Hook para gerenciar o Web Worker de processamento de placas
  * Fornece interface simples para processar frames em background
- * v1.1.90: Pipeline Unificado — removido detectMotion (delegado ao motion.worker.ts)
+ * v1.2.0: Pipeline Unificado + Grid Thresholding
  */
 import { useState, useCallback, useRef, useEffect } from 'react';
 

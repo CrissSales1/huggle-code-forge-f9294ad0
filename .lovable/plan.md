@@ -1,45 +1,26 @@
 
+# Plano Implementado: Pipeline Unificado v1.1.90
 
-# Fix: Motion Worker MIME Error + Version Update
+## Status: ✅ IMPLEMENTADO
 
-## Problema Principal
+## Arquivos Criados/Modificados
 
-O `motion.worker.ts` falha ao carregar com erro de MIME type (`text/html` em vez de `application/javascript`). Isso acontece porque o Service Worker em cache tenta buscar o arquivo antigo (`motion.worker-CfDvscAB.js`) que não existe mais no servidor após o rebuild — o servidor retorna uma página 404 HTML.
+| Arquivo | Ação | Status |
+|---------|------|--------|
+| `src/shared/plateValidation.ts` | CRIADO — Módulo canônico de validação (zero deps browser) | ✅ |
+| `src/react-app/utils/plateValidator.ts` | SIMPLIFICADO — Re-export do shared module | ✅ |
+| `src/react-app/workers/plateProcessor.worker.ts` | LIMPO — ~550 linhas removidas, homografia adicionada, single-pass OCR | ✅ |
+| `src/react-app/utils/plateDetector.ts` | REMOVIDO — 494 linhas de código morto (Sobel + Sliding Window) | ✅ |
+| `src/react-app/hooks/usePlateRecognition.ts` | LIMPO — Removido import e bloco debug do plateDetector | ✅ |
+| `src/react-app/hooks/usePlateWorker.ts` | LIMPO — Removido detectMotion, MotionDetectionConfig | ✅ |
+| `src/react-app/pages/Configuracoes.tsx` | Versão 1.1.90 (Pipeline Unificado) | ✅ |
 
-O motion worker não carrega → toda a detecção de movimento morre → OCR nunca dispara automaticamente.
+## Impacto
 
-## Correção
-
-### 1. Forçar rebuild limpo do worker
-
-O Vite gera workers com hash no nome. O Service Worker (PWA) cacheia o hash antigo. Ao atualizar o `motion.worker.ts`, o hash muda mas o SW ainda tenta o antigo.
-
-**Solução:** Adicionar `skipWaiting` na config do PWA em `vite.config.ts` para forçar ativação imediata do novo Service Worker:
-
-```typescript
-workbox: {
-  skipWaiting: true,
-  clientsClaim: true,
-  // ... resto existente
-}
-```
-
-### 2. Atualizar versões nos comentários
-
-Arquivos que ainda mostram `v1.1.89` / `v1.1.90` e precisam refletir `v1.2.0`:
-
-| Arquivo | Versão atual | Ação |
-|---------|-------------|------|
-| `useMotionWorker.ts` | v1.1.89 | → v1.2.0 |
-| `motionDetection.ts` | v1.1.89 | → v1.2.0 |
-| `usePlateWorker.ts` | v1.1.90 | → v1.2.0 |
-| `plateProcessor.worker.ts` | v1.1.90 | → v1.2.0 |
-| `plateValidator.ts` | v1.1.90 | → v1.2.0 |
-
-### Arquivos afetados
-
-| Arquivo | Mudança |
-|---------|---------|
-| `vite.config.ts` | Adicionar `skipWaiting: true, clientsClaim: true` no workbox |
-| 5 arquivos | Atualizar strings de versão para v1.2.0 |
-
+| Métrica | Antes | Depois |
+|---------|-------|--------|
+| Tempo OCR/frame | ~300ms (2× ONNX) | ~150ms (1× ONNX) |
+| Linhas validação duplicadas | ~600 | 0 |
+| Código morto removido | 0 | ~700 linhas |
+| Tabelas de substituição divergentes | 2 | 1 (canônica) |
+| Homografia projetiva | Nenhuma | Função pronta para OBB |

@@ -2,7 +2,7 @@
  * Hook para gerenciar o Motion Worker dedicado ao cálculo de Masked EMA
  * Implementa Buffer Ping-Pong: o worker devolve o ArrayBuffer para reuso
  * 
- * v1.1.89 (Masked EMA)
+ * v1.2.0 (Grid Thresholding + Masked EMA)
  */
 import { useState, useCallback, useRef, useEffect } from 'react';
 

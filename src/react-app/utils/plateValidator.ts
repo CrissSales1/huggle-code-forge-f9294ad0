@@ -1,7 +1,7 @@
 /**
  * Re-export do módulo canônico de validação de placas
  * Mantém compatibilidade com imports existentes
- * v1.1.90: Pipeline Unificado
+ * v1.2.0: Pipeline Unificado + Grid Thresholding
  */
 export {
   cleanPlateString,

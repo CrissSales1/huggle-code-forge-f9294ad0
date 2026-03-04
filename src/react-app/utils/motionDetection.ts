@@ -1,7 +1,7 @@
 /**
  * Utilitário para detecção de movimento em área virtual do vídeo
  * Suporta área poligonal definida por pontos
- * v1.1.89 - Masked EMA: Máquina de estado pura (cálculo delegado ao motion.worker.ts)
+ * v1.2.0 - Grid Thresholding + Masked EMA: Máquina de estado pura (cálculo delegado ao motion.worker.ts)
  */
 
 // Ponto relativo (0-1) no vídeo
@@ -355,7 +355,7 @@ export function compareFrames(
 
 /**
  * Máquina de estado para detecção de movimento
- * v1.1.89: Não acessa vídeo/canvas diretamente — recebe motionPercent do worker
+ * v1.2.0: Não acessa vídeo/canvas diretamente — recebe motionPercent do worker
  */
 export class MotionDetector {
   private config: MotionDetectionConfig;
