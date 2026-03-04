@@ -155,6 +155,7 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
   const frameIntervalRef = useRef<number | null>(null);
   const recentPlatesRef = useRef<Map<string, number>>(new Map());
   const isProcessingMotionRef = useRef(false); // Execution Lock
+  const isProcessingOcrRef = useRef(false); // OCR Execution Lock
   
   // Fast-Track: Buffer de consistência temporal para leituras OCR
   const ocrBufferRef = useRef<Array<{ placa: string; confidence: number; timestamp: number }>>([]);
@@ -416,6 +417,10 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
       return true;
     }
     
+    // OCR Execution Lock: se já está processando, ignora este frame
+    if (isProcessingOcrRef.current) return false;
+    isProcessingOcrRef.current = true;
+    
     setStatus('processing');
     setStatusMessage('🔍 Reconhecendo placa...');
     
@@ -540,6 +545,8 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
       finishProcessingTimer();
       setStatusMessage('❌ Erro OCR');
       return false;
+    } finally {
+      isProcessingOcrRef.current = false;
     }
     
     // Voltar ao monitoramento após 2 segundos
@@ -748,6 +755,7 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
     }
     
     motionDetectorRef.current.fullReset();
+    isProcessingOcrRef.current = false;
     setHasReference(false);
     setIsActive(false);
     setStatus('idle');
