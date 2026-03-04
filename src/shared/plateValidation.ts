@@ -3,7 +3,7 @@
  * Centraliza toda lógica de validação, correção e variação
  * Zero dependências de browser (sem DOM, ImageData, Canvas)
  * 
- * v1.1.90: Pipeline Unificado — fonte única de verdade
+ * v1.2.0: Grid Thresholding — fonte única de verdade
  */
 
 // ============ INTERFACE ============
