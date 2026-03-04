@@ -91,19 +91,19 @@ export function useMotionWorker(
   const initBackground = useCallback((imageData: ImageData) => {
     if (!workerRef.current) return;
     
-    // Transferir ownership do ArrayBuffer ao worker
+    // Transferir ownership do ArrayBuffer ao worker (inclui width/height para grid)
     workerRef.current.postMessage(
-      { type: 'INIT_BACKGROUND', payload: { imageData } },
+      { type: 'INIT_BACKGROUND', payload: { imageData, width: imageData.width, height: imageData.height } },
       [imageData.data.buffer]
     );
   }, []);
   
-  // Processar frame (envia ImageData via Transferable)
+  // Processar frame (envia ImageData via Transferable + dimensões para grid)
   const processFrame = useCallback((imageData: ImageData) => {
     if (!workerRef.current) return;
     
     workerRef.current.postMessage(
-      { type: 'PROCESS_FRAME', payload: { imageData } },
+      { type: 'PROCESS_FRAME', payload: { imageData, width: imageData.width, height: imageData.height } },
       [imageData.data.buffer]
     );
   }, []);

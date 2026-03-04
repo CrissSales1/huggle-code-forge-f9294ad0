@@ -185,6 +185,8 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
     }
     
     if (result.shouldAttemptOCR) {
+      // Lock síncrono ANTES de chamar OCR — impede re-triggers durante propagação async
+      motionDetectorRef.current.markOcrAttempted();
       processFrameForOCRRef.current?.();
     }
   }, []);
@@ -424,9 +426,7 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
     setStatus('processing');
     setStatusMessage('🔍 Reconhecendo placa...');
     
-    // Marcar que tentativa de OCR foi feita
-    motionDetectorRef.current.markOcrAttempted();
-    
+    // markOcrAttempted() já foi chamado em handleMotionResult (lock síncrono)
     // Iniciar timer de processamento
     startProcessingTimer();
     
