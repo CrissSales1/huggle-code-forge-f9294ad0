@@ -195,7 +195,7 @@ function processFrame(data: Uint8ClampedArray, buffer: ArrayBuffer, w: number, h
         stack.push(i);
         visited[i] = 1;
         let clusterSize = 0;
-        const clusterStart = clusteredCells; // snapshot
+        
         
         // Temporário: guardar membros do cluster para marcar depois
         const members: number[] = [];

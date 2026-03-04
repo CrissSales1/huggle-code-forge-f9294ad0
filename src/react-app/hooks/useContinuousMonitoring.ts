@@ -426,9 +426,7 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
     setStatus('processing');
     setStatusMessage('🔍 Reconhecendo placa...');
     
-    // Marcar que tentativa de OCR foi feita
-    motionDetectorRef.current.markOcrAttempted();
-    
+    // markOcrAttempted() já foi chamado em handleMotionResult (lock síncrono)
     // Iniciar timer de processamento
     startProcessingTimer();
     
