@@ -1,49 +1,26 @@
 
+# Plano Implementado: Pipeline Unificado v1.1.90
 
-# Fix: Forçar limpeza de cache programaticamente
+## Status: ✅ IMPLEMENTADO
 
-## Problema
+## Arquivos Criados/Modificados
 
-O código fonte está correto (v1.2.0), mas os navegadores dos usuários continuam servindo a versão antiga do Service Worker e dos assets cacheados. O `skipWaiting` e `clientsClaim` só funcionam para **novos** Service Workers — se o navegador já tem um SW antigo registrado que não reconhece essas diretivas, ele não atualiza.
+| Arquivo | Ação | Status |
+|---------|------|--------|
+| `src/shared/plateValidation.ts` | CRIADO — Módulo canônico de validação (zero deps browser) | ✅ |
+| `src/react-app/utils/plateValidator.ts` | SIMPLIFICADO — Re-export do shared module | ✅ |
+| `src/react-app/workers/plateProcessor.worker.ts` | LIMPO — ~550 linhas removidas, homografia adicionada, single-pass OCR | ✅ |
+| `src/react-app/utils/plateDetector.ts` | REMOVIDO — 494 linhas de código morto (Sobel + Sliding Window) | ✅ |
+| `src/react-app/hooks/usePlateRecognition.ts` | LIMPO — Removido import e bloco debug do plateDetector | ✅ |
+| `src/react-app/hooks/usePlateWorker.ts` | LIMPO — Removido detectMotion, MotionDetectionConfig | ✅ |
+| `src/react-app/pages/Configuracoes.tsx` | Versão 1.1.90 (Pipeline Unificado) | ✅ |
 
-## Solução
+## Impacto
 
-Adicionar um script inline no `index.html` que roda **antes** do React, detecta SWs antigos e força a limpeza:
-
-1. **`index.html`** — Adicionar `<script>` inline antes do módulo React que:
-   - Chama `navigator.serviceWorker.getRegistrations()` e faz `unregister()` de todos
-   - Limpa todos os caches via `caches.keys()` + `caches.delete()`
-   - Usa uma flag em `localStorage` (`cache_version`) para executar isso apenas uma vez por versão (evitar loop infinito de reload)
-   - Após limpar, faz `location.reload()` para carregar assets frescos
-
-```javascript
-<script>
-(function() {
-  var CURRENT_VERSION = '1.2.0';
-  var cached = localStorage.getItem('app_cache_version');
-  if (cached !== CURRENT_VERSION) {
-    localStorage.setItem('app_cache_version', CURRENT_VERSION);
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(function(regs) {
-        regs.forEach(function(r) { r.unregister(); });
-      });
-    }
-    if ('caches' in window) {
-      caches.keys().then(function(names) {
-        names.forEach(function(n) { caches.delete(n); });
-      });
-    }
-    setTimeout(function() { location.reload(); }, 300);
-  }
-})();
-</script>
-```
-
-Isso resolve o problema para **todos** os usuários sem que precisem limpar cache manualmente.
-
-## Arquivos
-
-| Arquivo | Mudança |
-|---------|---------|
-| `index.html` | Script inline de cache-busting antes do `<script type="module">` |
-
+| Métrica | Antes | Depois |
+|---------|-------|--------|
+| Tempo OCR/frame | ~300ms (2× ONNX) | ~150ms (1× ONNX) |
+| Linhas validação duplicadas | ~600 | 0 |
+| Código morto removido | 0 | ~700 linhas |
+| Tabelas de substituição divergentes | 2 | 1 (canônica) |
+| Homografia projetiva | Nenhuma | Função pronta para OBB |
