@@ -355,7 +355,7 @@ export function compareFrames(
 
 /**
  * Máquina de estado para detecção de movimento
- * v1.1.89: Não acessa vídeo/canvas diretamente — recebe motionPercent do worker
+ * v1.2.0: Não acessa vídeo/canvas diretamente — recebe motionPercent do worker
  */
 export class MotionDetector {
   private config: MotionDetectionConfig;
