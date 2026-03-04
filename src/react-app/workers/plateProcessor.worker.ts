@@ -1383,7 +1383,7 @@ async function processPlate(
       debugImages.preprocessed = await generateImageFromData(optimized.data, optimized.width, optimized.height);
     }
     
-    // Single pass OCR (v1.1.90: eliminado Multi-Crop)
+    // Single pass OCR (v1.2.0: Grid Thresholding)
     const result = await runONNXOCR(optimized.data, optimized.width, optimized.height);
     const rawText = result.text;
     const ocrConfidence = result.confidence;
@@ -1537,4 +1537,4 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
   }
 };
 
-console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.90 - Pipeline Unificado)');
+console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.2.0 - Grid Thresholding)');
