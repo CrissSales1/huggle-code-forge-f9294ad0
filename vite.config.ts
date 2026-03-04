@@ -41,7 +41,9 @@ export default defineConfig(({ mode }) => ({
           }
         ]
       },
-      workbox: {
+    workbox: {
+        skipWaiting: true,
+        clientsClaim: true,
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,wasm,onnx,bin,json,txt}'],
         maximumFileSizeToCacheInBytes: 30 * 1024 * 1024, // 30MB para modelos ML
         runtimeCaching: [

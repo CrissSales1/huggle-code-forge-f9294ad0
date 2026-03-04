@@ -3,7 +3,7 @@
  * Move OCR (ONNX Runtime), detecção de placa e motion detection para thread separada
  * Evita bloqueio da UI durante processamento pesado
  * 
- * v1.1.90: Pipeline Unificado — validação centralizada em shared/plateValidation
+ * v1.2.0: Pipeline Unificado + Grid Thresholding — validação centralizada em shared/plateValidation
  */
 
 import * as ort from 'onnxruntime-web';

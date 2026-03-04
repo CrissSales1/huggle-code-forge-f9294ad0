@@ -1,7 +1,7 @@
 /**
  * Utilitário para detecção de movimento em área virtual do vídeo
  * Suporta área poligonal definida por pontos
- * v1.1.89 - Masked EMA: Máquina de estado pura (cálculo delegado ao motion.worker.ts)
+ * v1.2.0 - Grid Thresholding + Masked EMA: Máquina de estado pura (cálculo delegado ao motion.worker.ts)
  */
 
 // Ponto relativo (0-1) no vídeo
