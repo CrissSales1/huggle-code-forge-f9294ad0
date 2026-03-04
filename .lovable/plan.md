@@ -1,33 +1,26 @@
 
+# Plano Implementado: Pipeline Unificado v1.1.90
 
-# Correção: OCR Execution Lock em `useContinuousMonitoring.ts`
+## Status: ✅ IMPLEMENTADO
 
-## Problema
+## Arquivos Criados/Modificados
 
-O Motion Worker dispara `processFrameForOCR` a cada ~350ms. Como o OCR leva ~150-300ms, múltiplas invocações se acumulam no Worker, afogando a fila de mensagens e paralisando o sistema.
+| Arquivo | Ação | Status |
+|---------|------|--------|
+| `src/shared/plateValidation.ts` | CRIADO — Módulo canônico de validação (zero deps browser) | ✅ |
+| `src/react-app/utils/plateValidator.ts` | SIMPLIFICADO — Re-export do shared module | ✅ |
+| `src/react-app/workers/plateProcessor.worker.ts` | LIMPO — ~550 linhas removidas, homografia adicionada, single-pass OCR | ✅ |
+| `src/react-app/utils/plateDetector.ts` | REMOVIDO — 494 linhas de código morto (Sobel + Sliding Window) | ✅ |
+| `src/react-app/hooks/usePlateRecognition.ts` | LIMPO — Removido import e bloco debug do plateDetector | ✅ |
+| `src/react-app/hooks/usePlateWorker.ts` | LIMPO — Removido detectMotion, MotionDetectionConfig | ✅ |
+| `src/react-app/pages/Configuracoes.tsx` | Versão 1.1.90 (Pipeline Unificado) | ✅ |
 
-Falta um Execution Lock dedicado ao OCR — existe apenas `isProcessingMotionRef` para o movimento.
+## Impacto
 
-## Correção (1 arquivo, ~6 linhas)
-
-**`src/react-app/hooks/useContinuousMonitoring.ts`:**
-
-1. **Adicionar ref** após linha 157:
-```typescript
-const isProcessingOcrRef = useRef(false);
-```
-
-2. **Guard no início de `processFrameForOCR`** (após linha 412, antes do check de `fastTrackValidatedRef`):
-```typescript
-if (isProcessingOcrRef.current) return false;
-isProcessingOcrRef.current = true;
-```
-
-3. **Unlock no `finally`** — envolver o bloco `try/catch` existente (linhas 428-543) para garantir desbloqueio em todos os caminhos:
-   - Adicionar `finally { isProcessingOcrRef.current = false; }` ao bloco try/catch existente
-   - Remover os `return` soltos que ficam antes do try (linhas 415-417 do `fastTrackValidatedRef`) e movê-los para dentro do try, após o lock
-
-4. **Reset na parada** — adicionar `isProcessingOcrRef.current = false;` no `stopMonitoring` para garantir estado limpo ao reiniciar.
-
-Nenhuma alteração no Worker ou em outros hooks.
-
+| Métrica | Antes | Depois |
+|---------|-------|--------|
+| Tempo OCR/frame | ~300ms (2× ONNX) | ~150ms (1× ONNX) |
+| Linhas validação duplicadas | ~600 | 0 |
+| Código morto removido | 0 | ~700 linhas |
+| Tabelas de substituição divergentes | 2 | 1 (canônica) |
+| Homografia projetiva | Nenhuma | Função pronta para OBB |
