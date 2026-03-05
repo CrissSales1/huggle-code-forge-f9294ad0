@@ -825,7 +825,7 @@ async function loadYoloModel(): Promise<boolean> {
       progress: 0.8 
     }});
     
-    const warmupTensor = tf.zeros([1, currentYoloInputSize, currentYoloInputSize, 3]);
+    const warmupTensor = tf.zeros([1, YOLO_INPUT_SIZE, YOLO_INPUT_SIZE, 3]);
     await yoloModel.predict(warmupTensor);
     warmupTensor.dispose();
     
@@ -839,7 +839,7 @@ async function loadYoloModel(): Promise<boolean> {
       progress: 1 
     }});
     
-    console.log(`✅ Modelo YOLO carregado (backend: ${activeBackend}, input: ${currentYoloInputSize}px)`);
+    console.log(`✅ Modelo YOLO carregado (backend: ${activeBackend}, input: ${YOLO_INPUT_SIZE}px)`);
     return true;
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
