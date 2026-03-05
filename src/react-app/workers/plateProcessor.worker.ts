@@ -868,7 +868,7 @@ async function detectPlateWithYOLO(
       height: height,
     });
     
-    const resized = tf.image.resizeBilinear(imageTensor, [currentYoloInputSize, currentYoloInputSize]);
+    const resized = tf.image.resizeBilinear(imageTensor, [YOLO_INPUT_SIZE, YOLO_INPUT_SIZE]);
     const normalized = resized.div(255.0);
     const batched = normalized.expandDims(0);
     
@@ -924,15 +924,15 @@ async function detectPlateWithYOLO(
       const isNormalized = maxCoord <= 1.0;
       
       if (isNormalized) {
-        cx *= currentYoloInputSize;
-        cy *= currentYoloInputSize;
-        w *= currentYoloInputSize;
-        h *= currentYoloInputSize;
+        cx *= YOLO_INPUT_SIZE;
+        cy *= YOLO_INPUT_SIZE;
+        w *= YOLO_INPUT_SIZE;
+        h *= YOLO_INPUT_SIZE;
       }
       
       if (confidence > bestConfidence) {
-        const scaleX = width / currentYoloInputSize;
-        const scaleY = height / currentYoloInputSize;
+        const scaleX = width / YOLO_INPUT_SIZE;
+        const scaleY = height / YOLO_INPUT_SIZE;
         
         const boxX = Math.round((cx - w/2) * scaleX);
         const boxY = Math.round((cy - h/2) * scaleY);
