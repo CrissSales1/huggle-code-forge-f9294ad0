@@ -182,6 +182,13 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
       setStatus(prev => prev === 'motion_detected' ? 'monitoring' : prev);
       setStatusMessage('🟢 Monitorando...');
       setProcessingInfo(prev => ({ ...prev, stage: 'idle', stageLabel: 'Monitorando área...' }));
+      // Resetar flags de OCR quando veículo sai da área
+      if (fastTrackValidatedRef.current) {
+        fastTrackValidatedRef.current = false;
+        ocrBufferRef.current = [];
+        lastPlateRegionRef.current = null;
+        console.log('🧹 Veículo saiu — flags OCR resetadas');
+      }
     }
     
     if (result.shouldAttemptOCR) {
@@ -525,6 +532,8 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
             setStatusMessage(`⚠️ Não cadastrado: ${placa} (Fast-Track)`);
           }
           
+          // Restaurar status para monitoring — permite que o loop de frames continue
+          setStatus('monitoring');
           return true;
         } else {
           // Sem consenso ainda, continuar coletando leituras
@@ -534,8 +543,9 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
           setStatusMessage(`🔄 Leituras: ${matchCount}/${CONSISTENCY_THRESHOLD}`);
           return false;
         }
-      } else {
+    } else {
         finishProcessingTimer();
+        setStatus('monitoring');
         setStatusMessage('❌ Não reconhecida');
         console.log('❌ OCR falhou, permitindo re-tentativa...');
         return false;
@@ -543,6 +553,7 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
     } catch (e) {
       console.error('Erro ao processar OCR:', e);
       finishProcessingTimer();
+      setStatus('monitoring');
       setStatusMessage('❌ Erro OCR');
       return false;
     } finally {

@@ -1,31 +1,26 @@
 
+# Plano Implementado: Pipeline Unificado v1.1.90
 
-# Bug: OCR automático não dispara ao detectar veículo
+## Status: ✅ IMPLEMENTADO
 
-## Causa raiz
+## Arquivos Criados/Modificados
 
-Identifiquei **dois bugs principais** em `useContinuousMonitoring.ts` que causam o travamento:
+| Arquivo | Ação | Status |
+|---------|------|--------|
+| `src/shared/plateValidation.ts` | CRIADO — Módulo canônico de validação (zero deps browser) | ✅ |
+| `src/react-app/utils/plateValidator.ts` | SIMPLIFICADO — Re-export do shared module | ✅ |
+| `src/react-app/workers/plateProcessor.worker.ts` | LIMPO — ~550 linhas removidas, homografia adicionada, single-pass OCR | ✅ |
+| `src/react-app/utils/plateDetector.ts` | REMOVIDO — 494 linhas de código morto (Sobel + Sliding Window) | ✅ |
+| `src/react-app/hooks/usePlateRecognition.ts` | LIMPO — Removido import e bloco debug do plateDetector | ✅ |
+| `src/react-app/hooks/usePlateWorker.ts` | LIMPO — Removido detectMotion, MotionDetectionConfig | ✅ |
+| `src/react-app/pages/Configuracoes.tsx` | Versão 1.1.90 (Pipeline Unificado) | ✅ |
 
-### Bug 1: Status fica preso em `'processing'` (linhas 537-541 e 480-528)
+## Impacto
 
-Quando `processFrameForOCR` executa, ele faz `setStatus('processing')` (linha 426). Isso causa o `useEffect` do interval (linha 664) a **parar o loop de frames** (pois status não é 'monitoring' nem 'motion_detected').
-
-Porém, em **dois caminhos de saída**, o status NÃO é resetado para `'monitoring'`:
-
-1. **OCR falhou** (linhas 537-541): não faz `setStatus('monitoring')` — loop morto
-2. **Consenso alcançado com sucesso** (linhas 480-528): também não reseta — loop morto após primeira leitura bem-sucedida
-
-Resultado: após qualquer tentativa de OCR que caia nesses caminhos, o motion loop para permanentemente e nenhuma detecção automática acontece mais.
-
-### Bug 2: `fastTrackValidatedRef` não reseta quando veículo sai (handleMotionResult)
-
-Quando o veículo sai da área de detecção (hasMotion = false), o `fastTrackValidatedRef` **não é resetado** (linha 181-184). Ele só reseta via timeout de 15 segundos. Se um novo veículo chega antes dos 15s, o OCR é bloqueado pela guarda na linha 417-419.
-
-## Correções
-
-| Arquivo | Linha | Mudança |
-|---------|-------|---------|
-| `useContinuousMonitoring.ts` | 537-541 | Adicionar `setStatus('monitoring')` no path de falha OCR |
-| `useContinuousMonitoring.ts` | ~527 | Adicionar `setStatus('monitoring')` após salvar detecção com consenso |
-| `useContinuousMonitoring.ts` | 181-185 | Resetar `fastTrackValidatedRef`, `ocrBufferRef` e `lastPlateRegionRef` quando hasMotion = false |
-
+| Métrica | Antes | Depois |
+|---------|-------|--------|
+| Tempo OCR/frame | ~300ms (2× ONNX) | ~150ms (1× ONNX) |
+| Linhas validação duplicadas | ~600 | 0 |
+| Código morto removido | 0 | ~700 linhas |
+| Tabelas de substituição divergentes | 2 | 1 (canônica) |
+| Homografia projetiva | Nenhuma | Função pronta para OBB |
