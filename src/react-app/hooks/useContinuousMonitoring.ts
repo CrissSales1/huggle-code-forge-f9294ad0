@@ -156,6 +156,7 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
   const recentPlatesRef = useRef<Map<string, number>>(new Map());
   const isProcessingMotionRef = useRef(false); // Execution Lock
   const isProcessingOcrRef = useRef(false); // OCR Execution Lock
+  const statusRef = useRef<MonitoringStatus>('idle'); // Ref espelho para evitar stale closure
   
   // Fast-Track: Buffer de consistência temporal para leituras OCR
   const ocrBufferRef = useRef<Array<{ placa: string; confidence: number; timestamp: number }>>([]);
