@@ -157,6 +157,7 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
   const isProcessingMotionRef = useRef(false); // Execution Lock
   const isProcessingOcrRef = useRef(false); // OCR Execution Lock
   const statusRef = useRef<MonitoringStatus>('idle'); // Ref espelho para evitar stale closure
+  statusRef.current = status; // Sincronizar a cada render
   
   // Fast-Track: Buffer de consistência temporal para leituras OCR
   const ocrBufferRef = useRef<Array<{ placa: string; confidence: number; timestamp: number }>>([]);
@@ -420,7 +421,8 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
   
   // Processar frame para OCR com Fast-Track
   const processFrameForOCR = useCallback(async (): Promise<boolean> => {
-    if (!videoRef.current || (status !== 'monitoring' && status !== 'motion_detected')) return false;
+    const currentStatus = statusRef.current;
+    if (!videoRef.current || (currentStatus !== 'monitoring' && currentStatus !== 'motion_detected')) return false;
     
     // Fast-Track: Se já validou este veículo, ignora
     if (fastTrackValidatedRef.current) {
@@ -564,7 +566,7 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
     // Voltar ao monitoramento após 2 segundos
     // (movido para processFrame para manter o fluxo)
   }, [
-    status, 
+    // statusRef usado em vez de status — sem stale closure
     virtualArea, 
     recognizeFromCanvas, 
     isPlateRecent, 
