@@ -60,7 +60,7 @@ export interface ProcessPlateOptions {
 
 type WorkerResponse = 
   | { type: 'READY' }
-  | { type: 'MODEL_LOADED'; payload: { success: boolean; permanentFailure?: boolean; error?: string } }
+  | { type: 'MODEL_LOADED'; payload: { success: boolean; permanentFailure?: boolean; error?: string; backend?: string } }
   | { type: 'PLATE_RESULT'; payload: OCRResult }
   | { type: 'MOTION_RESULT'; payload: { motionPercent: number } }
   | { type: 'ERROR'; payload: { message: string } }
@@ -74,9 +74,11 @@ interface UsePlateWorkerReturn {
   modelLoaded: boolean;
   modelLoading: boolean;
   modelFailed: boolean;
+  yoloBackend: string;
   processPlate: (canvas: HTMLCanvasElement, options?: ProcessPlateOptions) => Promise<OCRResult | null>;
   detectMotion: (currentData: Uint8ClampedArray, referenceData: Uint8ClampedArray, config: MotionDetectionConfig) => Promise<number>;
   loadYoloModel: () => void;
+  setConfig: (config: { yoloInputSize?: number }) => void;
   terminate: () => void;
 }
 
@@ -106,6 +108,7 @@ export function usePlateWorker(): UsePlateWorkerReturn {
   const [modelLoaded, setModelLoaded] = useState(false);
   const [modelLoading, setModelLoading] = useState(false);
   const [modelFailed, setModelFailed] = useState(false);
+  const [yoloBackend, setYoloBackend] = useState<string>('unknown');
   
   // Callbacks pendentes para resolver promises
   const pendingPlateResolve = useRef<((result: OCRResult | null) => void) | null>(null);
@@ -132,11 +135,14 @@ export function usePlateWorker(): UsePlateWorkerReturn {
           case 'MODEL_LOADED':
             setModelLoading(false);
             setModelLoaded(event.data.payload.success);
+            if (event.data.payload.backend) {
+              setYoloBackend(event.data.payload.backend);
+            }
             if (event.data.payload.permanentFailure) {
               setModelFailed(true);
               console.log('⚠️ Modelo YOLO falhou permanentemente:', event.data.payload.error || 'erro desconhecido');
             } else if (event.data.payload.success) {
-              console.log('🧠 Modelo YOLO carregado no worker');
+              console.log(`🧠 Modelo YOLO carregado no worker (backend: ${event.data.payload.backend})`);
             }
             break;
             
@@ -294,6 +300,12 @@ export function usePlateWorker(): UsePlateWorkerReturn {
     workerRef.current.postMessage({ type: 'LOAD_YOLO_MODEL' });
   }, [modelLoaded, modelLoading]);
   
+  // Enviar configuração ao worker
+  const setConfig = useCallback((config: { yoloInputSize?: number }) => {
+    if (!workerRef.current || !isReady) return;
+    workerRef.current.postMessage({ type: 'SET_CONFIG', payload: config });
+  }, [isReady]);
+  
   // Terminar worker
   const terminate = useCallback(() => {
     if (workerRef.current) {
@@ -313,9 +325,11 @@ export function usePlateWorker(): UsePlateWorkerReturn {
     modelLoaded,
     modelLoading,
     modelFailed,
+    yoloBackend,
     processPlate,
     detectMotion,
     loadYoloModel,
+    setConfig,
     terminate,
   };
 }
