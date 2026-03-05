@@ -246,15 +246,25 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     }
   }, [isActive, workerReady, modelLoaded, modelLoading, modelFailed, loadYoloModel]);
   
-  // Enviar configuração YOLO ao worker quando pronto
+  // Enviar configuração YOLO ao worker quando pronto + escutar mudanças
   useEffect(() => {
-    if (workerReady) {
+    if (!workerReady) return;
+    
+    const sendConfig = () => {
       try {
         const savedResolution = localStorage.getItem('portacerta_yolo_resolution');
         const yoloInputSize = savedResolution ? parseInt(savedResolution) : 640;
         setWorkerConfig({ yoloInputSize });
       } catch { /* ignore */ }
-    }
+    };
+    
+    sendConfig();
+    
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'portacerta_yolo_resolution') sendConfig();
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
   }, [workerReady, setWorkerConfig]);
   
   const [_usedFallback, setUsedFallback] = useState(false);
