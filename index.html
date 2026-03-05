@@ -32,26 +32,6 @@
   <body>
     <div id="root">
     </div>
-    <script>
-    (function() {
-      var CURRENT_VERSION = '1.2.2';
-      var cached = localStorage.getItem('app_cache_version');
-      if (cached !== CURRENT_VERSION) {
-        localStorage.setItem('app_cache_version', CURRENT_VERSION);
-        if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.getRegistrations().then(function(regs) {
-            regs.forEach(function(r) { r.unregister(); });
-          });
-        }
-        if ('caches' in window) {
-          caches.keys().then(function(names) {
-            names.forEach(function(n) { caches.delete(n); });
-          });
-        }
-        setTimeout(function() { location.reload(); }, 300);
-      }
-    })();
-    </script>
     <script type="module" src="/src/react-app/main.tsx">
     </script>
   </body>

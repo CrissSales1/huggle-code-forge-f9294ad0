@@ -1,7 +1,7 @@
 /**
  * Hook para gerenciar o Web Worker de processamento de placas
  * Fornece interface simples para processar frames em background
- * v1.2.0: Pipeline Unificado + Grid Thresholding
+ * FASE 1: Interface principal para OCR - substitui usePlateRecognition
  */
 import { useState, useCallback, useRef, useEffect } from 'react';
 
@@ -21,22 +21,28 @@ export interface OCRResult {
   ocrConfidence: number;
   processingTimeMs: number;
   usedFallback?: boolean;
-  usedYolo?: boolean;
-  debugImage?: string;
-  debugImages?: {
-    original?: string;
-    cropped?: string;
-    preprocessed?: string;
-    final?: string;
+  usedYolo?: boolean; // Indica se usou detecção YOLO
+  debugImage?: string; // Base64 da imagem com bounding box
+  debugImages?: { // Múltiplas imagens de debug do pipeline
+    original?: string;      // Frame original completo
+    cropped?: string;       // Região recortada (antes do upscale)
+    preprocessed?: string;  // Após pré-processamento
+    final?: string;         // Resultado final com bounding box
   };
-  plateRegion?: {
+  plateRegion?: { // Região da placa detectada pelo YOLO/heurística
     x: number;
     y: number;
     width: number;
     height: number;
     confidence: number;
   };
-  candidates?: Array<{ text: string; confidence: number; format: string }>;
+  candidates?: Array<{ text: string; confidence: number; format: string }>; // v1.1.84: Beam Search top-3 candidatos
+}
+
+interface MotionDetectionConfig {
+  threshold: number;
+  minPixelDifference: number;
+  stabilizationMs: number;
 }
 
 interface ProcessingProgress {
@@ -49,13 +55,14 @@ export interface ProcessPlateOptions {
   enableFallback?: boolean;
   fallbackApiUrl?: string;
   fallbackApiToken?: string;
-  forceNightMode?: boolean;
+  forceNightMode?: boolean;  // v1.1.50: Forçar correções noturnas em todas as leituras
 }
 
 type WorkerResponse = 
   | { type: 'READY' }
   | { type: 'MODEL_LOADED'; payload: { success: boolean; permanentFailure?: boolean; error?: string } }
   | { type: 'PLATE_RESULT'; payload: OCRResult }
+  | { type: 'MOTION_RESULT'; payload: { motionPercent: number } }
   | { type: 'ERROR'; payload: { message: string } }
   | { type: 'PROGRESS'; payload: ProcessingProgress };
 
@@ -68,6 +75,7 @@ interface UsePlateWorkerReturn {
   modelLoading: boolean;
   modelFailed: boolean;
   processPlate: (canvas: HTMLCanvasElement, options?: ProcessPlateOptions) => Promise<OCRResult | null>;
+  detectMotion: (currentData: Uint8ClampedArray, referenceData: Uint8ClampedArray, config: MotionDetectionConfig) => Promise<number>;
   loadYoloModel: () => void;
   terminate: () => void;
 }
@@ -99,9 +107,11 @@ export function usePlateWorker(): UsePlateWorkerReturn {
   const [modelLoading, setModelLoading] = useState(false);
   const [modelFailed, setModelFailed] = useState(false);
   
+  // Callbacks pendentes para resolver promises
   const pendingPlateResolve = useRef<((result: OCRResult | null) => void) | null>(null);
-  const isProcessingPlateRef = useRef(false);
+  const pendingMotionResolve = useRef<((percent: number) => void) | null>(null);
   
+  // Inicializar worker
   useEffect(() => {
     try {
       workerRef.current = new Worker(
@@ -131,12 +141,18 @@ export function usePlateWorker(): UsePlateWorkerReturn {
             break;
             
           case 'PLATE_RESULT':
-            isProcessingPlateRef.current = false;
             setIsProcessing(false);
             setProgress(null);
             if (pendingPlateResolve.current) {
               pendingPlateResolve.current(event.data.payload);
               pendingPlateResolve.current = null;
+            }
+            break;
+            
+          case 'MOTION_RESULT':
+            if (pendingMotionResolve.current) {
+              pendingMotionResolve.current(event.data.payload.motionPercent);
+              pendingMotionResolve.current = null;
             }
             break;
             
@@ -146,12 +162,15 @@ export function usePlateWorker(): UsePlateWorkerReturn {
             
           case 'ERROR':
             setError(event.data.payload.message);
-            isProcessingPlateRef.current = false;
             setIsProcessing(false);
             setProgress(null);
             if (pendingPlateResolve.current) {
               pendingPlateResolve.current(null);
               pendingPlateResolve.current = null;
+            }
+            if (pendingMotionResolve.current) {
+              pendingMotionResolve.current(0);
+              pendingMotionResolve.current = null;
             }
             break;
         }
@@ -163,6 +182,7 @@ export function usePlateWorker(): UsePlateWorkerReturn {
         setIsReady(false);
       };
       
+      // Inicializar Tesseract no worker
       workerRef.current.postMessage({ type: 'INIT' });
       
     } catch (err) {
@@ -179,6 +199,7 @@ export function usePlateWorker(): UsePlateWorkerReturn {
     };
   }, []);
   
+  // Processar placa usando o worker
   const processPlate = useCallback(async (
     canvas: HTMLCanvasElement,
     options?: ProcessPlateOptions
@@ -188,11 +209,11 @@ export function usePlateWorker(): UsePlateWorkerReturn {
       return null;
     }
     
-    if (isProcessingPlateRef.current) {
+    if (isProcessing) {
+      console.warn('Processamento já em andamento');
       return null;
     }
     
-    isProcessingPlateRef.current = true;
     setIsProcessing(true);
     setError(null);
     
@@ -208,15 +229,17 @@ export function usePlateWorker(): UsePlateWorkerReturn {
       
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       
+      // Carregar configurações de fallback do localStorage se não especificadas
       const fallbackConfig = loadFallbackConfig();
       const finalOptions: ProcessPlateOptions = {
         enableDebug: options?.enableDebug ?? false,
         enableFallback: options?.enableFallback ?? fallbackConfig.enabled,
         fallbackApiUrl: options?.fallbackApiUrl ?? fallbackConfig.apiUrl,
         fallbackApiToken: options?.fallbackApiToken ?? fallbackConfig.apiToken,
-        forceNightMode: options?.forceNightMode ?? false,
+        forceNightMode: options?.forceNightMode ?? false,  // v1.1.46: Passar para o worker
       };
       
+      // Usar Transferable para zero-copy
       workerRef.current!.postMessage(
         {
           type: 'PROCESS_PLATE',
@@ -230,8 +253,40 @@ export function usePlateWorker(): UsePlateWorkerReturn {
         [imageData.data.buffer]
       );
     });
+  }, [isReady, isProcessing]);
+  
+  // Detectar movimento usando o worker
+  const detectMotion = useCallback(async (
+    currentData: Uint8ClampedArray,
+    referenceData: Uint8ClampedArray,
+    config: MotionDetectionConfig
+  ): Promise<number> => {
+    if (!workerRef.current || !isReady) {
+      return 0;
+    }
+    
+    return new Promise((resolve) => {
+      pendingMotionResolve.current = resolve;
+      
+      // Clonar dados antes de transferir
+      const currentCopy = new Uint8ClampedArray(currentData);
+      const referenceCopy = new Uint8ClampedArray(referenceData);
+      
+      workerRef.current!.postMessage(
+        {
+          type: 'DETECT_MOTION',
+          payload: {
+            currentData: currentCopy,
+            referenceData: referenceCopy,
+            config,
+          },
+        },
+        [currentCopy.buffer, referenceCopy.buffer]
+      );
+    });
   }, [isReady]);
   
+  // Carregar modelo YOLO
   const loadYoloModel = useCallback(() => {
     if (!workerRef.current || modelLoaded || modelLoading) return;
     
@@ -239,6 +294,7 @@ export function usePlateWorker(): UsePlateWorkerReturn {
     workerRef.current.postMessage({ type: 'LOAD_YOLO_MODEL' });
   }, [modelLoaded, modelLoading]);
   
+  // Terminar worker
   const terminate = useCallback(() => {
     if (workerRef.current) {
       workerRef.current.postMessage({ type: 'TERMINATE' });
@@ -258,6 +314,7 @@ export function usePlateWorker(): UsePlateWorkerReturn {
     modelLoading,
     modelFailed,
     processPlate,
+    detectMotion,
     loadYoloModel,
     terminate,
   };

@@ -7,8 +7,7 @@ import React, { createContext, useContext, useState, useCallback, useRef, useEff
 import Hls from 'hls.js';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlateWorker } from '@/react-app/hooks/usePlateWorker';
-import { useMotionWorker } from '@/react-app/hooks/useMotionWorker';
-import { usePerformanceMetrics, type PerformanceMetrics } from '@/react-app/hooks/usePerformanceMetrics';
+import { usePerformanceMetrics, PerformanceMetrics } from '@/react-app/hooks/usePerformanceMetrics';
 import logger from '@/react-app/utils/logger';
 import { 
   MotionDetector, 
@@ -24,7 +23,6 @@ import {
   saveCameraResolution,
   loadMotionSensitivity,
   getSensitivityConfig,
-  extractAreaPixels,
 } from '@/react-app/utils/motionDetection';
 
 export type SourceMode = 'webcam' | 'hls';
@@ -195,7 +193,6 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   const frameIntervalRef = useRef<number | null>(null);
   const recentPlatesRef = useRef<Map<string, number>>(new Map());
   const isActiveRef = useRef(false);
-  const isProcessingMotionRef = useRef(false); // Execution Lock para motion worker
   
   // Fast-Track v1.1.29: Buffer de consistência temporal para OCR + Auto-Reset
   const ocrBufferRef = useRef<Array<{ placa: string; confidence: number; timestamp: number }>>([]);
@@ -217,54 +214,11 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     loadYoloModel,
   } = usePlateWorker();
   
-  // Motion Worker para Masked EMA
-  const handleMotionResult = useCallback((motionPercent: number) => {
-    // Unlock execution
-    isProcessingMotionRef.current = false;
-    
-    setMotionPercent(motionPercent);
-    
-    const result = motionDetectorRef.current.processMotionResult(motionPercent);
-    
-    if (result.hasMotion) {
-      noMotionCounterRef.current = 0;
-      setStatus(prev => {
-        if (prev === 'monitoring' || prev === 'motion_detected') return 'motion_detected';
-        return prev;
-      });
-      setStatusMessage('🟡 Veículo detectado...');
-      setProcessingInfo(prev => ({ ...prev, stage: 'idle', stageLabel: 'Veículo detectado!' }));
-    } else {
-      noMotionCounterRef.current++;
-      if (noMotionCounterRef.current >= 3) {
-        resetOcrBuffer();
-      }
-      setStatus(prev => {
-        if (prev === 'motion_detected') return 'monitoring';
-        return prev;
-      });
-      if (noMotionCounterRef.current >= 2) {
-        setStatusMessage('🟢 Monitorando...');
-        setProcessingInfo(prev => ({ ...prev, stage: 'idle', stageLabel: 'Monitorando área...' }));
-      }
-    }
-    
-    if (result.shouldAttemptOCR) {
-      // Capturar frame fresco para OCR (chamado assincronamente)
-      processFrameForOCR();
-    }
-  }, []);
-  
-  const {
-    initBackground: motionWorkerInitBackground,
-    processFrame: motionWorkerProcessFrame,
-    updateConfig: motionWorkerUpdateConfig,
-  } = useMotionWorker(handleMotionResult);
-  
   const {
     metrics: performanceMetrics,
     recordFrameStart,
     recordFrameEnd,
+    recordOcrTime,
     setWorkerStatus,
   } = usePerformanceMetrics();
   
@@ -360,10 +314,6 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       const sensitivity = loadMotionSensitivity();
       const config = getSensitivityConfig(sensitivity);
       motionDetectorRef.current.updateConfig(config);
-      // Atualizar motion worker com nova sensibilidade
-      if (config.minPixelDifference !== undefined) {
-        motionWorkerUpdateConfig(config.minPixelDifference);
-      }
     };
     
     window.addEventListener('storage', handleSensitivityChange);
@@ -1045,51 +995,39 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     checkOcrConsistency,
   ]);
   
-  // Capturar referência = inicializar background no motion worker
-  const initBackgroundFromVideo = useCallback(() => {
+  const captureReferenceFrame = useCallback(() => {
     if (!videoRef.current || !canvasRef.current) return false;
     
-    const video = videoRef.current;
-    if (video.videoWidth === 0 || video.videoHeight === 0) return false;
+    const success = motionDetectorRef.current.captureReference(
+      videoRef.current,
+      canvasRef.current,
+      virtualArea
+    );
     
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx) return false;
+    setHasReference(success);
     
-    // Ajustar canvas ao tamanho do vídeo
-    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-    }
-    
-    ctx.drawImage(video, 0, 0);
-    
-    const area = loadVirtualArea() || getDefaultVirtualArea();
-    const imageData = extractAreaPixels(ctx, video.videoWidth, video.videoHeight, area);
-    
-    motionWorkerInitBackground(imageData);
-    setHasReference(true);
-    
-    setProcessingInfo(prev => ({
-      ...prev,
-      stageLabel: 'Referência capturada!',
-    }));
-    
-    setTimeout(() => {
+    if (success) {
       setProcessingInfo(prev => ({
         ...prev,
-        stageLabel: 'Monitorando área...',
+        stageLabel: 'Referência capturada!',
       }));
-    }, 2000);
+      
+      setTimeout(() => {
+        setProcessingInfo(prev => ({
+          ...prev,
+          stageLabel: 'Monitorando área...',
+        }));
+      }, 2000);
+    }
     
-    return true;
-  }, []);
+    return success;
+  }, [virtualArea]);
   
   const recaptureReference = useCallback(() => {
     if (isActive && videoRef.current && canvasRef.current) {
-      initBackgroundFromVideo();
+      captureReferenceFrame();
     }
-  }, [isActive, initBackgroundFromVideo]);
+  }, [isActive, captureReferenceFrame]);
   
   // Leitura manual instantânea - não depende do status atual
   const manualCapture = useCallback(async (): Promise<boolean> => {
@@ -1258,36 +1196,74 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   const processFrame = useCallback(async () => {
     if (!videoRef.current || !canvasRef.current) return;
     if (status !== 'monitoring' && status !== 'motion_detected') return;
-    if (!hasReference) return;
+    if (!motionDetectorRef.current.hasReference()) return;
     
-    // Execution Lock: não enviar novo frame se o anterior ainda está processando
-    if (isProcessingMotionRef.current) return;
-    isProcessingMotionRef.current = true;
-    
+    // Marcar início do frame para métricas
     recordFrameStart();
     
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx || video.videoWidth === 0) {
-      isProcessingMotionRef.current = false;
-      return;
-    }
+    const result = motionDetectorRef.current.processFrame(
+      videoRef.current,
+      canvasRef.current,
+      virtualArea
+    );
     
-    // Ajustar canvas ao vídeo
-    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-    }
-    
-    ctx.drawImage(video, 0, 0);
-    
-    // Extrair ImageData da área virtual e enviar ao motion worker
-    const imageData = extractAreaPixels(ctx, video.videoWidth, video.videoHeight, virtualArea);
-    motionWorkerProcessFrame(imageData); // Transferable — result virá via handleMotionResult callback
-    
+    // Marcar fim do frame
     recordFrameEnd();
-  }, [status, virtualArea, hasReference, recordFrameStart, recordFrameEnd, motionWorkerProcessFrame]);
+    
+    setMotionPercent(result.motionPercent);
+    
+    if (result.shouldUpdateReference) {
+      captureReferenceFrame();
+    }
+    
+    if (result.hasMotion) {
+      // Reset contador de frames sem movimento
+      noMotionCounterRef.current = 0;
+      
+      setStatus('motion_detected');
+      setStatusMessage('🟡 Veículo detectado...');
+      setProcessingInfo(prev => ({
+        ...prev,
+        stage: 'idle',
+        stageLabel: 'Veículo detectado!',
+      }));
+    } else if (!result.hasMotion && status === 'motion_detected') {
+      // Fast-Track: Incrementar contador de frames sem movimento
+      noMotionCounterRef.current++;
+      
+      // Após 3 frames sem movimento (~1 segundo), limpar buffer OCR
+      // Isso indica que o veículo saiu da área de detecção
+      if (noMotionCounterRef.current >= 3) {
+        resetOcrBuffer();
+      }
+      
+      setStatus('monitoring');
+      setStatusMessage('🟢 Monitorando...');
+      setProcessingInfo(prev => ({
+        ...prev,
+        stage: 'idle',
+        stageLabel: 'Monitorando área...',
+      }));
+    } else if (status === 'monitoring' && processingInfo.stage === 'idle' && processingInfo.stageLabel === 'Aguardando') {
+      setProcessingInfo(prev => ({
+        ...prev,
+        stageLabel: 'Monitorando área...',
+      }));
+    }
+    
+    if (result.shouldAttemptOCR) {
+      const ocrStart = performance.now();
+      const success = await processFrameForOCR();
+      recordOcrTime(performance.now() - ocrStart);
+      
+      setTimeout(() => {
+        if (isActiveRef.current) {
+          setStatus('monitoring');
+          setStatusMessage(success ? '🟢 Monitorando...' : '🟡 Aguardando re-tentativa...');
+        }
+      }, 2000);
+    }
+  }, [status, virtualArea, processFrameForOCR, captureReferenceFrame, processingInfo.stage, processingInfo.stageLabel, recordFrameStart, recordFrameEnd, recordOcrTime, resetOcrBuffer]);
   
   // Loop de frames
   useEffect(() => {
@@ -1346,7 +1322,25 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       setStatusMessage('📸 Capturando referência...');
       
       setTimeout(() => {
-        initBackgroundFromVideo();
+        if (videoRef.current && canvasRef.current) {
+          const success = motionDetectorRef.current.captureReference(
+            videoRef.current,
+            canvasRef.current,
+            loadVirtualArea() || getDefaultVirtualArea()
+          );
+          
+          setHasReference(success);
+          
+          if (success) {
+            setStatusMessage('🟢 Monitorando...');
+            setProcessingInfo(prev => ({
+              ...prev,
+              stageLabel: 'Monitorando área...',
+            }));
+          } else {
+            setStatusMessage('⚠️ Erro ao capturar referência');
+          }
+        }
       }, 1000);
       
     } catch (e) {
@@ -1457,7 +1451,25 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
           setStatusMessage('📸 Capturando referência...');
           
           setTimeout(() => {
-            initBackgroundFromVideo();
+            if (videoRef.current && canvasRef.current) {
+              const success = motionDetectorRef.current.captureReference(
+                videoRef.current,
+                canvasRef.current,
+                loadVirtualArea() || getDefaultVirtualArea()
+              );
+              
+              setHasReference(success);
+              
+              if (success) {
+                setStatusMessage('🟢 Monitorando stream...');
+                setProcessingInfo(prev => ({
+                  ...prev,
+                  stageLabel: 'Monitorando área...',
+                }));
+              } else {
+                setStatusMessage('⚠️ Erro ao capturar referência');
+              }
+            }
           }, 1500);
         };
         
