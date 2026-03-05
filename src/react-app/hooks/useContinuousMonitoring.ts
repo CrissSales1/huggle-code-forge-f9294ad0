@@ -553,6 +553,7 @@ export function useContinuousMonitoring(): UseContinuousMonitoringReturn {
     } catch (e) {
       console.error('Erro ao processar OCR:', e);
       finishProcessingTimer();
+      setStatus('monitoring');
       setStatusMessage('❌ Erro OCR');
       return false;
     } finally {
