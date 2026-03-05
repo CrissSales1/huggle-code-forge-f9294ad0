@@ -186,7 +186,14 @@ async function initONNX(): Promise<void> {
     
     // Configurar ONNX Runtime para WASM (CDN com versão correta)
     ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.2/dist/';
-    ort.env.wasm.numThreads = 2; // Multi-thread para i5-6500 (4 cores: 2 para worker, 2 para UI)
+    // Detectar suporte a multi-thread (requer COOP/COEP headers para SharedArrayBuffer)
+    if (typeof SharedArrayBuffer !== 'undefined') {
+      ort.env.wasm.numThreads = 2;
+      console.log('🧵 ONNX: Multi-thread habilitado (2 threads)');
+    } else {
+      ort.env.wasm.numThreads = 1;
+      console.log('🧵 ONNX: Single-thread (SharedArrayBuffer indisponível - servidor sem headers COOP/COEP)');
+    }
     
     self.postMessage({ type: 'PROGRESS', payload: { stage: 'Baixando modelo OCR...', progress: 0.3 } });
     
