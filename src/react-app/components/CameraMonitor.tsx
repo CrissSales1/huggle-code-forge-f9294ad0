@@ -104,6 +104,7 @@ export default function CameraMonitor({ onDetection, compact = false, onPipeline
     performanceMetrics,
     modelLoaded,
     modelLoading,
+    yoloBackend,
   } = useMonitoring();
   
   const [showSettings, setShowSettings] = useState(false);
@@ -818,6 +819,7 @@ export default function CameraMonitor({ onDetection, compact = false, onPipeline
               compact 
               modelLoaded={modelLoaded}
               modelLoading={modelLoading}
+              yoloBackend={yoloBackend}
             />
           </div>
         )}
