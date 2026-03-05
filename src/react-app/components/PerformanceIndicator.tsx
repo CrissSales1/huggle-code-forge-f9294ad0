@@ -9,6 +9,7 @@ interface PerformanceIndicatorProps {
   compact?: boolean;
   modelLoaded?: boolean;
   modelLoading?: boolean;
+  yoloBackend?: string;
 }
 
 export default function PerformanceIndicator({ 
@@ -16,6 +17,7 @@ export default function PerformanceIndicator({
   compact = false,
   modelLoaded = false,
   modelLoading = false,
+  yoloBackend = 'unknown',
 }: PerformanceIndicatorProps) {
   const { fps, frameTimeMs, ocrTimeMs, memoryMB, workerStatus } = metrics;
   
@@ -53,6 +55,19 @@ export default function PerformanceIndicator({
     return 'YOLO ✗';
   };
   
+  // Backend GPU/CPU
+  const getBackendColor = () => {
+    if (yoloBackend === 'webgl') return 'text-green-400';
+    if (yoloBackend === 'cpu') return 'text-gray-400';
+    return 'text-gray-500';
+  };
+  
+  const getBackendLabel = () => {
+    if (yoloBackend === 'webgl') return 'GPU';
+    if (yoloBackend === 'cpu') return 'CPU';
+    return '—';
+  };
+  
   if (compact) {
     return (
       <div className="flex items-center gap-2 text-xs font-mono bg-gray-900/80 text-gray-300 px-2 py-1 rounded backdrop-blur-sm">
@@ -64,6 +79,9 @@ export default function PerformanceIndicator({
           <Brain className="w-3 h-3 inline mr-0.5" />
           {modelLoaded ? '✓' : modelLoading ? '...' : '✗'}
         </span>
+        {modelLoaded && (
+          <span className={getBackendColor()}>{getBackendLabel()}</span>
+        )}
       </div>
     );
   }
@@ -113,6 +131,13 @@ export default function PerformanceIndicator({
         <Brain className={`w-3.5 h-3.5 ${getModelStatusColor()}`} />
         <span className={getModelStatusColor()}>{getModelStatusText()}</span>
       </div>
+      
+      {/* Backend GPU/CPU */}
+      {modelLoaded && (
+        <div className="flex items-center gap-1.5">
+          <span className={`font-bold ${getBackendColor()}`}>{getBackendLabel()}</span>
+        </div>
+      )}
     </div>
   );
 }

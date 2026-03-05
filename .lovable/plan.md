@@ -1,123 +1,149 @@
 
 
-# Analise da Contra-Analise: GPU via OffscreenCanvas + Otimizacoes CPU
+# Plano: Melhorias no Sistema de Monitoramento - v1.1.87
 
-## Verificacao dos Pontos Levantados
+## Problemas Identificados
 
-### Ponto 1: "128 MB e so alocacao minima, HD 530 usa ate 4GB"
+1. **Area fantasma**: Sem carro mas nao fica "area limpa" - causado por mudancas de iluminacao que mantém a diferenca entre 5-10% (zona morta entre `CLEAN_THRESHOLD=5%` e `DETECTION_THRESHOLD=10%`)
+2. **Carros em sequencia**: Segundo carro nao e lido porque `fastTrackValidatedRef=true` bloqueia ate o movimento cair abaixo de 8%, o que nao acontece quando outro carro ja entrou
 
-**Correto.** A HD 530 usa UMA (Unified Memory Architecture) e pode alocar dinamicamente ate metade da RAM. Os 128 MB sao a reserva da BIOS. O gargalo real sao as 24 EUs (Execution Units) e a largura de banda compartilhada com a CPU via barramento de memoria DDR4.
+## Melhorias Propostas (4 mudancas)
 
-### Ponto 2: "OffscreenCanvas permite WebGL dentro de Worker"
+### Melhoria 1: Referencia Adaptativa (resolve area fantasma)
 
-**Correto, e o sistema ja usa OffscreenCanvas.** O worker atual (`plateProcessor.worker.ts`) ja cria dezenas de `OffscreenCanvas` para pre-processamento de imagem (linhas 269, 276, 1467, 1474, etc.). Porem, o TF.js usa `tf.browser.fromPixels()` que internamente cria tensores a partir de dados brutos - nao precisa de DOM canvas. O backend WebGL do TF.js **ja funciona** dentro do Worker porque o Chrome suporta WebGL em OffscreenCanvas desde 2019. Na verdade, na linha 801, o worker **ja tenta** `tf.setBackend('webgl')` antes de cair para CPU. Se estiver funcionando, o YOLO ja roda na GPU.
+Ao inves de comparar sempre com a mesma foto de referencia estatica, atualizar a referencia automaticamente quando a area esta na zona intermediaria (5-10%) por mais de 15 segundos sem OCR ativo. Isso absorve mudancas graduais de iluminacao.
 
-### Ponto 3: "YOLO 320px perde recall para placas pequenas"
+**Mudanca em `motionDetection.ts`:**
+- Novo threshold: `INTERMEDIATE_UPDATE_DELAY_MS = 15000` (15s na zona morta → atualiza referencia)
+- Na zona intermediaria (`!vehiclePresent && !areaClean`), se ficar 15s sem mudar, sinalizar `shouldUpdateReference = true`
+- Isso elimina o "fantasma" de iluminacao
 
-**Valido.** E uma observacao correta. A reducao so deve ser aplicada quando a placa ocupa area significativa do frame. Como o sistema usa area virtual (ROI recortada), a placa geralmente ocupa boa parte do crop, minimizando o risco. Mas deve ser configuravel, nao forcado.
+### Melhoria 2: Timeout de Validacao (resolve carros em sequencia)
 
-### Ponto 4: "Decodificacao de video ja usa GPU via QuickSync"
+Apos uma deteccao bem-sucedida, se passarem 15 segundos sem o veiculo sair (motion nao cai abaixo de 8%), forcar reset do `fastTrackValidated` e permitir nova leitura. Isso cobre o caso de um segundo carro entrar antes do primeiro sair.
 
-**Correto.** O elemento `<video>` nativo do HTML ja usa decodificacao por hardware automaticamente. Nao ha nada a fazer aqui - o navegador ja otimiza isso.
+**Mudanca em `useContinuousMonitoring.ts`:**
+- Nova ref: `lastValidationTimeRef` que guarda o timestamp da ultima validacao
+- No `processFrame`, se `fastTrackValidatedRef === true` e passaram 15s, fazer reset:
+  - `fastTrackValidatedRef = false`
+  - Limpar buffer OCR
+  - Recapturar referencia
+  - Log: `⏰ Timeout de validação - permitindo nova detecção`
 
-## O que realmente vale implementar
+### Melhoria 3: Cooldown por Placa (resolve carros em sequencia)
 
-Com base na contra-analise, ha 3 mudancas concretas que fazem sentido:
+Atualmente `fastTrackValidatedRef` bloqueia TODA a area. Mudar para cooldown por placa especifica - so bloqueia a mesma placa por 30s, mas permite ler placas diferentes imediatamente.
 
-### 1. ONNX Multi-Thread (2 threads)
+**Mudanca em `useContinuousMonitoring.ts`:**
+- Remover `fastTrackValidatedRef` como bloqueio global
+- Usar `recentPlatesRef` (ja existe) para bloquear apenas a placa especifica
+- Apos validacao, ao inves de setar `fastTrackValidatedRef = true`, apenas marcar a placa em `recentPlatesRef` e resetar o buffer OCR
+- A flag `ocrSucceeded` no MotionDetector continua controlando a recaptura de referencia
 
-O worker usa `numThreads = 1` (linha 188). O i5-6500 tem 4 cores. Mudar para 2 threads reduz o tempo de OCR em ~30-40% sem impactar a UI (que roda nos outros 2 cores).
+### Melhoria 4: Deteccao de Troca de Veiculo via YOLO
 
-**Mudanca**: Linha 188 de `plateProcessor.worker.ts`: `numThreads = 1` → `numThreads = 2`
+Quando o YOLO detecta uma placa em posicao muito diferente da anterior (>40% de deslocamento no frame), considerar que e um veiculo novo e resetar o buffer OCR.
 
-### 2. YOLO 320px como opcao configuravel
-
-Adicionar opcao nas configuracoes para escolher resolucao YOLO (320 ou 640). Maquinas fracas usam 320, maquinas fortes mantém 640. O modelo aceita qualquer resolucao multipla de 32.
-
-**Mudancas**:
-- `plateProcessor.worker.ts`: Nova mensagem `SET_CONFIG` para receber `yoloInputSize`, usar variavel em vez de constante
-- `usePlateWorker.ts`: Novo metodo `setConfig()` para enviar preferencias ao worker
-- `Configuracoes.tsx`: Seletor de resolucao YOLO (320/640) salvo no localStorage
-- `useContinuousMonitoring.ts`: Enviar config ao worker no inicio do monitoramento
-
-### 3. Monitor de backend ativo no PerformanceIndicator
-
-Mostrar qual backend o TF.js esta usando (WebGL ou CPU) e o tempo de inferencia YOLO separado do OCR. Isso responde a pergunta "a GPU esta sendo usada?" sem precisar abrir o console.
-
-**Mudancas**:
-- `plateProcessor.worker.ts`: Incluir `backend` e `yoloTimeMs` no resultado de `PLATE_RESULT` e reportar backend ativo apos carregar modelo
-- `PerformanceIndicator.tsx`: Exibir backend (WebGL/CPU) e tempo YOLO
-- `usePlateWorker.ts`: Propagar info de backend do worker
+**Mudanca em `useContinuousMonitoring.ts`:**
+- Nova ref: `lastPlateRegionRef` que guarda o ultimo `plateRegion` do resultado OCR
+- Apos cada OCR, comparar posicao do bounding box YOLO com o anterior
+- Se deslocamento X ou Y > 40% do frame, ou tamanho mudou >50%: resetar buffer
+- Log: `🔄 Troca de veículo detectada via YOLO (posição mudou)`
 
 ## Arquivos a Modificar
 
 | Arquivo | Mudanca |
 |---------|---------|
-| `src/react-app/workers/plateProcessor.worker.ts` | `numThreads=2`, mensagem `SET_CONFIG`, YOLO_INPUT_SIZE variavel, reportar backend+yoloTimeMs |
-| `src/react-app/hooks/usePlateWorker.ts` | Novo metodo `setConfig()`, propagar backend info |
-| `src/react-app/hooks/useContinuousMonitoring.ts` | Enviar config YOLO ao worker |
-| `src/react-app/pages/Configuracoes.tsx` | Seletor resolucao YOLO (320/640) + versao 1.1.89 |
-| `src/react-app/components/PerformanceIndicator.tsx` | Mostrar backend ativo e YOLO ms |
+| `src/react-app/utils/motionDetection.ts` | Melhoria 1: zona intermediaria atualiza referencia apos 15s |
+| `src/react-app/hooks/useContinuousMonitoring.ts` | Melhorias 2, 3 e 4: timeout, cooldown por placa, troca YOLO |
+| `src/react-app/pages/Configuracoes.tsx` | Versao 1.1.87 |
 
 ## Detalhes Tecnicos
 
-### Worker - SET_CONFIG + variavel YOLO
+### motionDetection.ts
 
 ```typescript
-// Estado configuravel
-let currentYoloInputSize = 640;
+const INTERMEDIATE_UPDATE_DELAY_MS = 15000; // 15s na zona morta → atualiza ref
 
-// Nova mensagem
-case 'SET_CONFIG': {
-  const { yoloInputSize } = event.data.payload;
-  if (yoloInputSize) currentYoloInputSize = yoloInputSize;
-  break;
+// Nova variavel de instancia
+private intermediateZoneStart: number = 0;
+
+// Na zona intermediaria (linhas 549-553), adicionar:
+} else if (!vehicleExited) {
+  // Zona intermediária - pode ser iluminação mudando
+  this.consecutiveMotionFrames = 0;
+  if (this.intermediateZoneStart === 0) {
+    this.intermediateZoneStart = now;
+  } else if (now - this.intermediateZoneStart >= INTERMEDIATE_UPDATE_DELAY_MS
+             && !this.ocrSucceeded) {
+    // 15s na zona morta sem OCR ativo → atualizar referência
+    shouldUpdateReference = true;
+    this.intermediateZoneStart = 0;
+    console.log('🔄 Referência atualizada (zona intermediária por 15s)');
+  }
+}
+```
+
+Reset `intermediateZoneStart = 0` quando veículo presente ou area limpa.
+
+### useContinuousMonitoring.ts
+
+```typescript
+// Melhoria 2: Timeout
+const VALIDATION_TIMEOUT_MS = 15000;
+const lastValidationTimeRef = useRef<number>(0);
+
+// No processFrame, antes de checar shouldAttemptOCR:
+if (fastTrackValidatedRef.current) {
+  const elapsed = Date.now() - lastValidationTimeRef.current;
+  if (elapsed > VALIDATION_TIMEOUT_MS) {
+    console.log('⏰ Timeout de validação - permitindo nova detecção');
+    fastTrackValidatedRef.current = false;
+    resetOcrBuffer();
+    captureReferenceFrame();
+    motionDetectorRef.current.resetOcrAttempt();
+  }
 }
 
-// Em detectPlateWithYOLO: substituir YOLO_INPUT_SIZE por currentYoloInputSize
-// Em loadYoloModel: warmup com currentYoloInputSize
+// Melhoria 3: Apos validacao bem-sucedida, NAO setar fastTrack global
+// Apenas resetar buffer e marcar placa como recente
+// fastTrackValidatedRef.current = true; → REMOVER
+// Em vez disso: apenas markPlateDetected(placa) + resetar buffer + markOcrSuccess()
+// O markOcrSuccess() ja impede novas tentativas ate veiculo sair
+
+// Melhoria 4: Troca YOLO
+const lastPlateRegionRef = useRef<{x:number,y:number,w:number,h:number}|null>(null);
+
+// Apos receber resultado OCR com plateRegion:
+if (result.plateRegion && lastPlateRegionRef.current) {
+  const prev = lastPlateRegionRef.current;
+  const curr = result.plateRegion;
+  const dx = Math.abs(curr.x - prev.x) / canvasWidth;
+  const dy = Math.abs(curr.y - prev.y) / canvasHeight;
+  const dw = Math.abs(curr.width - prev.w) / prev.w;
+  if (dx > 0.4 || dy > 0.4 || dw > 0.5) {
+    console.log('🔄 Troca de veículo detectada via YOLO');
+    resetOcrBuffer();
+  }
+}
+lastPlateRegionRef.current = result.plateRegion ? 
+  { x: result.plateRegion.x, y: result.plateRegion.y, 
+    w: result.plateRegion.width, h: result.plateRegion.height } : null;
 ```
 
-### Worker - Reportar backend e YOLO timing
+### Versao
 
-```typescript
-// Apos carregar modelo YOLO:
-const activeBackend = tf.getBackend(); // 'webgl' ou 'cpu'
-self.postMessage({ 
-  type: 'MODEL_LOADED', 
-  payload: { success: true, backend: activeBackend } 
-});
-
-// Em detectPlateWithYOLO: medir tempo
-const yoloStart = performance.now();
-// ... inferencia ...
-const yoloTimeMs = Math.round(performance.now() - yoloStart);
-// Incluir yoloTimeMs no resultado
+```
+1.1.87 (Smart Detection)
 ```
 
-### Configuracoes - Seletor YOLO
+## Resumo do Impacto
 
-```typescript
-const YOLO_RESOLUTION_KEY = 'portacerta_yolo_resolution';
+| Problema | Melhoria | Resultado |
+|----------|----------|-----------|
+| Area fantasma (iluminacao) | Ref adaptativa 15s | Referencia se atualiza sozinha |
+| 2o carro nao lido | Timeout 15s + cooldown por placa | Desbloqueia apos 15s OU imediatamente para placa diferente |
+| Carro diferente na sequencia | Deteccao YOLO de troca | Reset instantaneo se bounding box mudou |
 
-// Toggle entre 320 e 640
-// Label: "Resolucao YOLO" com explicacao:
-// 320px = mais rapido, ideal para cameras proximas
-// 640px = mais preciso, necessario para cameras distantes
-```
-
-### PerformanceIndicator - Backend info
-
-```typescript
-// Novo indicador:
-// "GPU ✓" (verde) se backend === 'webgl'
-// "CPU" (cinza) se backend === 'cpu'
-// "YOLO 45ms" tempo da ultima inferencia
-```
-
-### Versao: 1.1.89 (Hardware Optimization)
-
-## Nota sobre GPU
-
-O sistema **ja tenta usar WebGL** (GPU) para o YOLO. A contra-analise esta correta que OffscreenCanvas permite isso, mas o codigo ja faz isso. A diferenca real e que agora o usuario **vai saber** se a GPU esta ativa ou nao, e pode ajustar a resolucao YOLO para otimizar o tradeoff velocidade/precisao para seu hardware especifico.
+Zero impacto em performance - sao apenas comparacoes de numeros e timestamps.
 

@@ -68,13 +68,14 @@ interface ProcessPlateOptions {
 type WorkerMessage = 
   | { type: 'INIT' }
   | { type: 'LOAD_YOLO_MODEL' }
+  | { type: 'SET_CONFIG'; payload: { yoloInputSize?: number } }
   | { type: 'PROCESS_PLATE'; payload: { imageData: ImageData; width: number; height: number; options?: ProcessPlateOptions } }
   | { type: 'DETECT_MOTION'; payload: { currentData: Uint8ClampedArray; referenceData: Uint8ClampedArray; config: MotionDetectionConfig } }
   | { type: 'TERMINATE' };
 
 type WorkerResponse = 
   | { type: 'READY' }
-  | { type: 'MODEL_LOADED'; payload: { success: boolean; permanentFailure?: boolean; error?: string } }
+  | { type: 'MODEL_LOADED'; payload: { success: boolean; permanentFailure?: boolean; error?: string; backend?: string } }
   | { type: 'PLATE_RESULT'; payload: OCRResult }
   | { type: 'MOTION_RESULT'; payload: { motionPercent: number } }
   | { type: 'ERROR'; payload: { message: string } }
@@ -100,7 +101,7 @@ let modelReady = false;
 let modelFailed = false; // Marca falha permanente para evitar loop infinito
 
 // Constantes YOLO
-const YOLO_INPUT_SIZE = 640;
+let currentYoloInputSize = 640; // Configurável via SET_CONFIG
 const YOLO_CONFIDENCE_THRESHOLD = 0.6;
 const YOLO_MIN_RAW_CONFIDENCE = 0.5;
 
@@ -185,7 +186,7 @@ async function initONNX(): Promise<void> {
     
     // Configurar ONNX Runtime para WASM (CDN com versão correta)
     ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.2/dist/';
-    ort.env.wasm.numThreads = 1; // Single-thread para compatibilidade máxima
+    ort.env.wasm.numThreads = 2; // Multi-thread para i5-6500 (4 cores: 2 para worker, 2 para UI)
     
     self.postMessage({ type: 'PROGRESS', payload: { stage: 'Baixando modelo OCR...', progress: 0.3 } });
     
@@ -817,19 +818,21 @@ async function loadYoloModel(): Promise<boolean> {
       progress: 0.8 
     }});
     
-    const warmupTensor = tf.zeros([1, YOLO_INPUT_SIZE, YOLO_INPUT_SIZE, 3]);
+    const warmupTensor = tf.zeros([1, currentYoloInputSize, currentYoloInputSize, 3]);
     await yoloModel.predict(warmupTensor);
     warmupTensor.dispose();
     
     modelReady = true;
     modelLoading = false;
     
+    const activeBackend = tf.getBackend();
+    
     self.postMessage({ type: 'PROGRESS', payload: { 
       stage: 'Modelo YOLO pronto!', 
       progress: 1 
     }});
     
-    console.log('✅ Modelo YOLO carregado com sucesso');
+    console.log(`✅ Modelo YOLO carregado (backend: ${activeBackend}, input: ${currentYoloInputSize}px)`);
     return true;
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
@@ -858,7 +861,7 @@ async function detectPlateWithYOLO(
       height: height,
     });
     
-    const resized = tf.image.resizeBilinear(imageTensor, [YOLO_INPUT_SIZE, YOLO_INPUT_SIZE]);
+    const resized = tf.image.resizeBilinear(imageTensor, [currentYoloInputSize, currentYoloInputSize]);
     const normalized = resized.div(255.0);
     const batched = normalized.expandDims(0);
     
@@ -914,15 +917,15 @@ async function detectPlateWithYOLO(
       const isNormalized = maxCoord <= 1.0;
       
       if (isNormalized) {
-        cx *= YOLO_INPUT_SIZE;
-        cy *= YOLO_INPUT_SIZE;
-        w *= YOLO_INPUT_SIZE;
-        h *= YOLO_INPUT_SIZE;
+        cx *= currentYoloInputSize;
+        cy *= currentYoloInputSize;
+        w *= currentYoloInputSize;
+        h *= currentYoloInputSize;
       }
       
       if (confidence > bestConfidence) {
-        const scaleX = width / YOLO_INPUT_SIZE;
-        const scaleY = height / YOLO_INPUT_SIZE;
+        const scaleX = width / currentYoloInputSize;
+        const scaleY = height / currentYoloInputSize;
         
         const boxX = Math.round((cx - w/2) * scaleX);
         const boxY = Math.round((cy - h/2) * scaleY);
@@ -2018,13 +2021,15 @@ async function processPlate(
     
     // 1. Tentar detecção com YOLO primeiro
     let plateRegion: BoundingBox | null = null;
+    let yoloTimeMs = 0;
     
     if (modelReady) {
+      const yoloStart = performance.now();
       plateRegion = await detectPlateWithYOLO(imageData, width, height);
+      yoloTimeMs = Math.round(performance.now() - yoloStart);
       usedYolo = plateRegion !== null;
       if (usedYolo && plateRegion) {
-        // v1.1.62: Log único consolidado de YOLO
-        console.log(`🧠 YOLO: ${plateRegion.width}x${plateRegion.height}px (${Math.round(plateRegion.confidence * 100)}%)`);
+        console.log(`🧠 YOLO: ${plateRegion.width}x${plateRegion.height}px (${Math.round(plateRegion.confidence * 100)}%) ${yoloTimeMs}ms`);
       }
     }
     
@@ -2289,7 +2294,20 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
         
       case 'LOAD_YOLO_MODEL': {
         const success = await loadYoloModel();
-        self.postMessage({ type: 'MODEL_LOADED', payload: { success } } as WorkerResponse);
+        const activeBackend = modelReady ? tf.getBackend() : 'unknown';
+        self.postMessage({ type: 'MODEL_LOADED', payload: { success, backend: activeBackend } } as WorkerResponse);
+        break;
+      }
+        
+      case 'SET_CONFIG': {
+        const { yoloInputSize } = event.data.payload;
+        if (yoloInputSize && (yoloInputSize === 320 || yoloInputSize === 640)) {
+          const oldSize = currentYoloInputSize;
+          currentYoloInputSize = yoloInputSize;
+          if (oldSize !== yoloInputSize) {
+            console.log(`⚙️ YOLO input size: ${oldSize} → ${yoloInputSize}px`);
+          }
+        }
         break;
       }
         
@@ -2330,4 +2348,4 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 };
 
 // Notificar que o worker está carregado
-console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.86 - Multi-Crop)');
+console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.89 - Hardware Optimization)');
