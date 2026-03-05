@@ -101,7 +101,6 @@ let modelReady = false;
 let modelFailed = false; // Marca falha permanente para evitar loop infinito
 
 // Constantes YOLO
-const YOLO_DEFAULT_INPUT_SIZE = 640;
 let currentYoloInputSize = 640; // Configurável via SET_CONFIG
 const YOLO_CONFIDENCE_THRESHOLD = 0.6;
 const YOLO_MIN_RAW_CONFIDENCE = 0.5;
