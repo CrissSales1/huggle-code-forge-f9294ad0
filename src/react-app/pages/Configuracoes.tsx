@@ -51,12 +51,6 @@ export default function Configuracoes() {
   const [customSensitivity, setCustomSensitivity] = useState<CustomSensitivity>(loadCustomSensitivity());
   const [usarApenasOCRLocal, setUsarApenasOCRLocal] = useState(!loadFallbackEnabled());
   
-  // Estado para resolução YOLO
-  const YOLO_RESOLUTION_KEY = 'portacerta_yolo_resolution';
-  const [yoloResolution, setYoloResolution] = useState<number>(() => {
-    const saved = localStorage.getItem(YOLO_RESOLUTION_KEY);
-    return saved ? parseInt(saved) : 640;
-  });
   
   // Estados para configuração de som
   const [soundEnabled, setSoundEnabled] = useState(loadSoundEnabled());
@@ -656,48 +650,13 @@ export default function Configuracoes() {
                   <span>Resolução YOLO (Detecção de Placa)</span>
                 </div>
               </label>
-              <div className="grid grid-cols-2 gap-2 sm:gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setYoloResolution(320);
-                    localStorage.setItem(YOLO_RESOLUTION_KEY, '320');
-                  }}
-                  className={`flex flex-col items-center p-2 sm:p-3 rounded-lg border-2 transition-all ${
-                    yoloResolution === 320
-                      ? 'border-purple-500 bg-purple-50 text-purple-700'
-                      : 'border-gray-200 hover:border-purple-300 hover:bg-purple-50/50 text-gray-600'
-                  }`}
-                >
-                  <span className={`text-xs sm:text-sm font-medium ${yoloResolution === 320 ? 'text-purple-700' : 'text-gray-800'}`}>
-                    ⚡ 320px (Rápido)
-                  </span>
-                  <span className={`text-[10px] sm:text-xs mt-0.5 text-center ${yoloResolution === 320 ? 'text-purple-600' : 'text-gray-500'}`}>
-                    4x mais rápido, ideal para câmeras próximas
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setYoloResolution(640);
-                    localStorage.setItem(YOLO_RESOLUTION_KEY, '640');
-                  }}
-                  className={`flex flex-col items-center p-2 sm:p-3 rounded-lg border-2 transition-all ${
-                    yoloResolution === 640
-                      ? 'border-purple-500 bg-purple-50 text-purple-700'
-                      : 'border-gray-200 hover:border-purple-300 hover:bg-purple-50/50 text-gray-600'
-                  }`}
-                >
-                  <span className={`text-xs sm:text-sm font-medium ${yoloResolution === 640 ? 'text-purple-700' : 'text-gray-800'}`}>
-                    🎯 640px (Preciso)
-                  </span>
-                  <span className={`text-[10px] sm:text-xs mt-0.5 text-center ${yoloResolution === 640 ? 'text-purple-600' : 'text-gray-500'}`}>
-                    Padrão, necessário para câmeras distantes
-                  </span>
-                </button>
+              <div className="flex items-center p-2 sm:p-3 rounded-lg border-2 border-purple-500 bg-purple-50">
+                <span className="text-xs sm:text-sm font-medium text-purple-700">
+                  🎯 640px (Fixo — modelo pré-treinado)
+                </span>
               </div>
               <p className="text-[10px] sm:text-xs text-gray-500 mt-2">
-                320px processa 75% menos pixels — recomendado para i5-6500 ou inferior. Use 640px se a placa for pequena no frame.
+                O modelo YOLO foi treinado com input fixo de 640×640px. Outras resoluções requerem retreinar o modelo.
               </p>
             </div>
 
@@ -1371,7 +1330,7 @@ export default function Configuracoes() {
       {/* Rodapé com versão */}
       <div className="mt-8 pt-4 border-t border-gray-200 text-center">
         <p className="text-xs text-gray-400">
-          Versão do Sistema: <span className="font-mono font-medium text-gray-500">1.1.90</span> <span className="text-emerald-500">(Hardware Fix)</span>
+          Versão do Sistema: <span className="font-mono font-medium text-gray-500">1.1.91</span> <span className="text-emerald-500">(YOLO Fixed Shape)</span>
         </p>
       </div>
     </div>

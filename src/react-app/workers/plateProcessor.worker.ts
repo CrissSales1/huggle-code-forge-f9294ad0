@@ -101,7 +101,7 @@ let modelReady = false;
 let modelFailed = false; // Marca falha permanente para evitar loop infinito
 
 // Constantes YOLO
-let currentYoloInputSize = 640; // Configurável via SET_CONFIG
+const YOLO_INPUT_SIZE = 640; // Modelo GraphModel fixo [1,640,640,3] - não aceita outras dimensões
 const YOLO_CONFIDENCE_THRESHOLD = 0.6;
 const YOLO_MIN_RAW_CONFIDENCE = 0.5;
 
@@ -2307,13 +2307,9 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
       }
         
       case 'SET_CONFIG': {
-        const { yoloInputSize } = event.data.payload;
-        if (yoloInputSize && (yoloInputSize === 320 || yoloInputSize === 640)) {
-          const oldSize = currentYoloInputSize;
-          currentYoloInputSize = yoloInputSize;
-          if (oldSize !== yoloInputSize) {
-            console.log(`⚙️ YOLO input size: ${oldSize} → ${yoloInputSize}px`);
-          }
+        // YOLO input size fixo em 640px - modelo GraphModel não aceita outras dimensões
+        if (event.data.payload?.yoloInputSize && event.data.payload.yoloInputSize !== 640) {
+          console.log(`⚠️ YOLO input size fixo em 640px (modelo não suporta ${event.data.payload.yoloInputSize}px)`);
         }
         break;
       }
