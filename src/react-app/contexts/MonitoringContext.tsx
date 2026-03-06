@@ -1601,21 +1601,32 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     });
   }, []);
   
-  // Derivar URL HLS a partir de URL WHEP (go2rtc)
+  // Normalizar URL do go2rtc (aceita stream.html, api/whep, etc.)
+  const normalizeStreamUrl = useCallback((url: string): string => {
+    try {
+      const u = new URL(url);
+      // Se o usuário colou a URL do player (stream.html), converter para api/whep
+      if (u.pathname.includes('stream.html')) {
+        u.pathname = '/api/whep';
+        return u.toString();
+      }
+      return url;
+    } catch {
+      return url;
+    }
+  }, []);
+  
+  // Derivar URL HLS a partir de URL WHEP (go2rtc porta única 1984)
   const deriveHlsFromWhep = useCallback((whepUrl: string): string => {
     try {
       const u = new URL(whepUrl);
-      // go2rtc: porta 8889 (WHEP) → porta 8888 (HLS)
-      // path: /api/ws?src=camera1 ou /api/whep?src=camera1 → /api/stream.m3u8?src=camera1
-      const pathMatch = whepUrl.match(/[?&]src=([^&]+)/);
-      const cameraName = pathMatch ? pathMatch[1] : u.pathname.split('/').filter(Boolean)[0] || 'camera1';
-      u.port = '8888';
+      const srcParam = u.searchParams.get('src') || 'camera1';
+      // go2rtc: mesma porta para tudo, só muda o path
       u.pathname = '/api/stream.m3u8';
-      u.search = `?src=${cameraName}`;
+      u.search = `?src=${srcParam}`;
       return u.toString();
     } catch {
-      // Fallback simples: trocar porta e path
-      return whepUrl.replace(':8889', ':8888').replace(/\/whep.*/, '/api/stream.m3u8?src=camera1');
+      return whepUrl.replace(/\/api\/whep/, '/api/stream.m3u8');
     }
   }, []);
   
