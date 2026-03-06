@@ -189,10 +189,10 @@ async function initONNX(): Promise<void> {
     // Detectar suporte a multi-thread (requer COOP/COEP headers para SharedArrayBuffer)
     if (typeof SharedArrayBuffer !== 'undefined') {
       ort.env.wasm.numThreads = 2;
-      console.log('🧵 ONNX: Multi-thread habilitado (2 threads)');
+      console.log('🧵 ONNX: Multi-thread ativo (2 threads, SharedArrayBuffer disponível)');
     } else {
       ort.env.wasm.numThreads = 1;
-      console.log('🧵 ONNX: Single-thread (SharedArrayBuffer indisponível - servidor sem headers COOP/COEP)');
+      console.log('🧵 ONNX: Single-thread (SharedArrayBuffer indisponível — configure COOP/COEP no servidor)');
     }
     
     self.postMessage({ type: 'PROGRESS', payload: { stage: 'Baixando modelo OCR...', progress: 0.3 } });
