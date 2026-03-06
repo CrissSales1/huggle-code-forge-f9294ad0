@@ -424,16 +424,16 @@ export default function CameraMonitor({ onDetection, compact = false, onPipeline
                 Webcam Local
               </button>
               <button
-                onClick={() => setSourceMode('hls')}
+                onClick={() => setSourceMode('whep')}
                 disabled={isActive}
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                  sourceMode === 'hls' 
+                  sourceMode === 'hls' || sourceMode === 'whep'
                     ? 'bg-purple-600 text-white' 
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                 } ${isActive ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 <Radio className="w-4 h-4" />
-                Stream RTSP
+                Stream IP
               </button>
             </div>
             {isActive && (
@@ -911,8 +911,8 @@ export default function CameraMonitor({ onDetection, compact = false, onPipeline
         <div className="flex items-center gap-2">
           {!isActive ? (
             <button
-              onClick={() => sourceMode === 'hls' ? startMonitoringHLS() : startMonitoring()}
-              disabled={sourceMode === 'hls' && !hlsUrl}
+              onClick={() => (sourceMode === 'hls' || sourceMode === 'whep') ? startMonitoringStream() : startMonitoring()}
+              disabled={(sourceMode === 'hls' || sourceMode === 'whep') && !hlsUrl}
               className={`flex items-center gap-2 px-4 py-2 text-white rounded-lg transition-colors ${
                 sourceMode === 'hls' 
                   ? 'bg-purple-600 hover:bg-purple-700' 
