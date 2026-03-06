@@ -1419,6 +1419,11 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       hlsRef.current = null;
     }
     
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
+    }
+    
     if (videoRef.current) {
       videoRef.current.srcObject = null;
       videoRef.current.src = '';
@@ -1436,6 +1441,8 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     setStatusMessage('Parado');
     setMotionPercent(0);
     setHlsStatus('idle');
+    setWhepStatus('idle');
+    setActiveProtocol('none');
   }, []);
   
   const startMonitoringHLS = useCallback(async () => {
