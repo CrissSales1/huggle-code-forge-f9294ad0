@@ -82,12 +82,13 @@ export default function CameraMonitor({ onDetection, compact = false, onPipeline
     hasReference,
     recaptureReference,
     reconnectStream,
-    // WHEP (WebRTC)
+    // WHEP (WebRTC) / HLS fallback
     sourceMode,
     setSourceMode,
     streamUrl,
     setStreamUrl,
     streamStatus,
+    streamProtocol,
     startMonitoringWHEP,
     // Leitura manual
     manualCapture,

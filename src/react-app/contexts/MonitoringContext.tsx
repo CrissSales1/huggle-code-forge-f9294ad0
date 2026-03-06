@@ -1438,6 +1438,107 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     setStreamProtocol(null);
   }, []);
   
+  // Função auxiliar: derivar URL HLS da URL WHEP
+  const deriveHlsUrl = useCallback((whepUrl: string): string => {
+    // http://ip:8889/path/whep → http://ip:8888/path/
+    return whepUrl
+      .replace(/:8889\b/, ':8888')
+      .replace(/\/whep\s*$/, '/');
+  }, []);
+  
+  // Função de fallback: conectar via HLS quando WHEP falha
+  const fallbackToHLS = useCallback(async (whepUrl: string) => {
+    const hlsUrl = deriveHlsUrl(whepUrl);
+    logger.log(`📺 Fallback HLS: ${hlsUrl}`);
+    
+    setStreamStatus('connecting');
+    setStatusMessage('⏳ WHEP falhou (B-frames), tentando HLS...');
+    setStreamProtocol('hls');
+    
+    try {
+      const HlsModule = await import('hls.js');
+      const Hls = HlsModule.default;
+      
+      if (!Hls.isSupported()) {
+        throw new Error('HLS não suportado neste navegador');
+      }
+      
+      // Fechar peer connection anterior
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+        peerConnectionRef.current = null;
+      }
+      
+      const hls = new Hls({
+        liveSyncDurationCount: 1,
+        liveMaxLatencyDurationCount: 3,
+        enableWorker: true,
+        lowLatencyMode: true,
+      });
+      hlsRef.current = hls;
+      
+      const video = videoRef.current!;
+      video.srcObject = null; // limpar WebRTC srcObject
+      
+      hls.loadSource(hlsUrl);
+      hls.attachMedia(video);
+      
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        video.play().catch(e => logger.warn('Erro ao reproduzir HLS:', e));
+      });
+      
+      hls.on(Hls.Events.ERROR, (_event: any, data: any) => {
+        if (data.fatal) {
+          logger.error('Erro fatal HLS:', data);
+          setStreamStatus('error');
+          setStatus('error');
+          setStatusMessage('❌ Erro no stream HLS');
+          
+          // Retry HLS após 5s
+          setTimeout(() => {
+            if (isActiveRef.current && hlsRef.current) {
+              logger.log('🔄 Reconectando HLS...');
+              hlsRef.current.destroy();
+              fallbackToHLS(whepUrl);
+            }
+          }, 5000);
+        }
+      });
+      
+      video.onplaying = () => {
+        setStreamStatus('connected');
+        setStatus('monitoring');
+        setStatusMessage('📺 Monitorando via HLS (fallback)...');
+        
+        setTimeout(() => {
+          if (videoRef.current && canvasRef.current) {
+            const success = motionDetectorRef.current.captureReference(
+              videoRef.current,
+              canvasRef.current,
+              loadVirtualArea() || getDefaultVirtualArea()
+            );
+            
+            setHasReference(success);
+            
+            if (success) {
+              setStatusMessage('📺 Monitorando via HLS...');
+              setProcessingInfo(prev => ({
+                ...prev,
+                stageLabel: 'Monitorando área (HLS)...',
+              }));
+            }
+          }
+        }, 1500);
+      };
+      
+    } catch (e) {
+      logger.error('Erro ao iniciar HLS fallback:', e);
+      setStatus('error');
+      setStreamStatus('error');
+      setStatusMessage(`❌ HLS falhou: ${e instanceof Error ? e.message : 'Erro'}`);
+    }
+  }, [deriveHlsUrl, resetOCRState]);
+
   const startMonitoringWHEP = useCallback(async () => {
     if (!streamUrl) {
       setStatus('error');
@@ -1449,6 +1550,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       setStatus('starting');
       setStatusMessage('Conectando via WebRTC...');
       setStreamStatus('connecting');
+      setStreamProtocol('whep');
       
       stopMonitoring();
       
@@ -1485,24 +1587,21 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       };
       
       // Monitorar estado da conexão ICE
+      let whepFailed = false;
       pc.oniceconnectionstatechange = () => {
         const state = pc.iceConnectionState;
         logger.log(`🔗 ICE state: ${state}`);
         
         if (state === 'connected' || state === 'completed') {
           setStreamStatus('connected');
-        } else if (state === 'failed' || state === 'disconnected') {
-          setStreamStatus('error');
-          setStatus('error');
-          setStatusMessage('❌ Conexão WebRTC perdida');
+          setStreamProtocol('whep');
+        } else if ((state === 'failed' || state === 'disconnected') && !whepFailed) {
+          whepFailed = true;
+          logger.log('⚠️ WHEP falhou (provável B-frames), usando HLS...');
           
-          // Retry automático após 5s
-          setTimeout(() => {
-            if (isActiveRef.current) {
-              logger.log('🔄 Tentando reconectar WHEP...');
-              startMonitoringWHEP();
-            }
-          }, 5000);
+          // Fallback para HLS em vez de retry WHEP
+          setIsActive(true); // manter ativo durante fallback
+          fallbackToHLS(streamUrl);
         }
       };
       
@@ -1527,6 +1626,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       // Quando o vídeo começar a tocar, capturar referência
       videoRef.current!.onplaying = () => {
         setStreamStatus('connected');
+        setStreamProtocol('whep');
         setIsActive(true);
         setStatus('monitoring');
         setStatusMessage('📸 Capturando referência...');
@@ -1560,7 +1660,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       setStreamStatus('error');
       setStatusMessage(`❌ ${e instanceof Error ? e.message : 'Erro ao conectar'}`);
     }
-  }, [streamUrl, stopMonitoring, resetOCRState, resetOcrBuffer]);
+  }, [streamUrl, stopMonitoring, resetOCRState, resetOcrBuffer, fallbackToHLS]);
   
   // Reconectar stream quando elemento de vídeo muda (navegação entre páginas)
   const reconnectStream = useCallback(() => {
@@ -1621,6 +1721,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     streamUrl,
     setStreamUrl,
     streamStatus,
+    streamProtocol,
     videoRef,
     canvasRef,
     startMonitoring,
