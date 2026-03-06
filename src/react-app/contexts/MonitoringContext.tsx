@@ -1722,7 +1722,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       setWhepStatus('fallback_hls');
       
       // Derivar URL HLS e tentar fallback
-      const hlsFallbackUrl = deriveHlsFromWhep(hlsUrl);
+      const hlsFallbackUrl = deriveHlsFromWhep(normalizedUrl);
       logger.log(`🔄 Fallback HLS: ${hlsFallbackUrl}`);
       
       // Salvar URL HLS derivada temporariamente e iniciar HLS
@@ -1743,7 +1743,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       // Restaurar URL original
       setHlsUrlState(originalUrl);
     }
-  }, [hlsUrl, detectProtocol, startMonitoringHLS, stopMonitoring, connectWHEP, deriveHlsFromWhep, resetOCRState, resetOcrBuffer]);
+  }, [hlsUrl, detectProtocol, normalizeStreamUrl, startMonitoringHLS, stopMonitoring, connectWHEP, deriveHlsFromWhep, resetOCRState, resetOcrBuffer]);
   
   // Reconectar stream quando elemento de vídeo muda (navegação entre páginas)
   const reconnectStream = useCallback(() => {
