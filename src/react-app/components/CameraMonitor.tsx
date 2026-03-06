@@ -933,8 +933,8 @@ export default function CameraMonitor({ onDetection, compact = false, onPipeline
             </>
           )}
           
-          {sourceMode === 'hls' && !hlsUrl && !isActive && (
-            <span className="text-xs text-amber-600">Configure a URL HLS nas configurações</span>
+          {sourceMode === 'whep' && !streamUrl && !isActive && (
+            <span className="text-xs text-amber-600">Configure a URL WHEP nas configurações</span>
           )}
         </div>
       </div>
