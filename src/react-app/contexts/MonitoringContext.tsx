@@ -4,7 +4,6 @@
  * Usa Web Worker para processamento pesado (OCR, detecção) em background
  */
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
-import Hls from 'hls.js';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlateWorker } from '@/react-app/hooks/usePlateWorker';
 import { usePerformanceMetrics, PerformanceMetrics } from '@/react-app/hooks/usePerformanceMetrics';
@@ -25,25 +24,26 @@ import {
   getSensitivityConfig,
 } from '@/react-app/utils/motionDetection';
 
-export type SourceMode = 'webcam' | 'hls';
+export type SourceMode = 'webcam' | 'whep';
 export type MonitoringStatus = 'idle' | 'starting' | 'monitoring' | 'motion_detected' | 'processing' | 'error';
 export type ProcessingStage = 'idle' | 'capturing' | 'preprocessing' | 'ocr' | 'validating' | 'done';
 
-// Helpers para persistência de configurações HLS
-const HLS_URL_KEY = 'portacerta_hls_url';
+// Helpers para persistência de configurações de stream
+const STREAM_URL_KEY = 'portacerta_hls_url'; // mantém chave para compatibilidade
 const SOURCE_MODE_KEY = 'portacerta_source_mode';
 
-export function loadHlsUrl(): string {
-  return localStorage.getItem(HLS_URL_KEY) || '';
+export function loadStreamUrl(): string {
+  return localStorage.getItem(STREAM_URL_KEY) || '';
 }
 
-export function saveHlsUrl(url: string): void {
-  localStorage.setItem(HLS_URL_KEY, url);
+export function saveStreamUrl(url: string): void {
+  localStorage.setItem(STREAM_URL_KEY, url);
 }
 
 export function loadSourceMode(): SourceMode {
   const saved = localStorage.getItem(SOURCE_MODE_KEY);
-  return (saved === 'hls' ? 'hls' : 'webcam') as SourceMode;
+  // Migrar 'hls' antigo para 'whep'
+  return (saved === 'hls' || saved === 'whep') ? 'whep' : 'webcam';
 }
 
 export function saveSourceMode(mode: SourceMode): void {
@@ -121,12 +121,12 @@ interface MonitoringContextType {
   selectedResolution: CameraResolution;
   setSelectedResolution: (resolution: CameraResolution) => void;
   
-  // HLS
+  // WHEP (WebRTC)
   sourceMode: SourceMode;
   setSourceMode: (mode: SourceMode) => void;
-  hlsUrl: string;
-  setHlsUrl: (url: string) => void;
-  hlsStatus: 'idle' | 'connecting' | 'connected' | 'error';
+  streamUrl: string;
+  setStreamUrl: (url: string) => void;
+  streamStatus: 'idle' | 'connecting' | 'connected' | 'error';
   
   // Refs
   videoRef: React.RefObject<HTMLVideoElement | null>;
@@ -134,7 +134,7 @@ interface MonitoringContextType {
   
   // Ações
   startMonitoring: (deviceId?: string) => Promise<void>;
-  startMonitoringHLS: () => Promise<void>;
+  startMonitoringWHEP: () => Promise<void>;
   stopMonitoring: () => void;
   updateVirtualArea: (area: VirtualArea) => void;
   recaptureReference: () => void;
@@ -172,8 +172,8 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   const [hasReference, setHasReference] = useState(false);
   
   const [sourceMode, setSourceModeState] = useState<SourceMode>(loadSourceMode());
-  const [hlsUrl, setHlsUrlState] = useState<string>(loadHlsUrl());
-  const [hlsStatus, setHlsStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
+  const [streamUrl, setStreamUrlState] = useState<string>(loadStreamUrl());
+  const [streamStatus, setStreamStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
   
   const [processingInfo, setProcessingInfo] = useState<ProcessingInfo>({
     stage: 'idle',
@@ -189,7 +189,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const hlsRef = useRef<Hls | null>(null);
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const motionDetectorRef = useRef<MotionDetector>(new MotionDetector(getSensitivityConfig(loadMotionSensitivity())));
   const frameIntervalRef = useRef<number | null>(null);
   const recentPlatesRef = useRef<Map<string, number>>(new Map());
@@ -359,9 +359,9 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     saveSourceMode(mode);
   }, []);
   
-  const setHlsUrl = useCallback((url: string) => {
-    setHlsUrlState(url);
-    saveHlsUrl(url);
+  const setStreamUrl = useCallback((url: string) => {
+    setStreamUrlState(url);
+    saveStreamUrl(url);
   }, []);
   
   const updateProcessingStage = useCallback((stage: ProcessingStage, stageLabel: string) => {
@@ -1405,9 +1405,9 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       streamRef.current = null;
     }
     
-    if (hlsRef.current) {
-      hlsRef.current.destroy();
-      hlsRef.current = null;
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
     }
     
     if (videoRef.current) {
@@ -1426,132 +1426,142 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     setStatus('idle');
     setStatusMessage('Parado');
     setMotionPercent(0);
-    setHlsStatus('idle');
+    setStreamStatus('idle');
   }, []);
   
-  const startMonitoringHLS = useCallback(async () => {
-    if (!hlsUrl) {
+  const startMonitoringWHEP = useCallback(async () => {
+    if (!streamUrl) {
       setStatus('error');
-      setStatusMessage('❌ URL HLS não configurada');
+      setStatusMessage('❌ URL WHEP não configurada');
       return;
     }
     
     try {
       setStatus('starting');
-      setStatusMessage('Conectando ao stream...');
-      setHlsStatus('connecting');
-      
-      if (!Hls.isSupported() && !videoRef.current?.canPlayType('application/vnd.apple.mpegurl')) {
-        throw new Error('Navegador não suporta HLS');
-      }
+      setStatusMessage('Conectando via WebRTC...');
+      setStreamStatus('connecting');
       
       stopMonitoring();
       
       motionDetectorRef.current.fullReset();
       recentPlatesRef.current.clear();
       resetOCRState();
-      resetOcrBuffer(); // Fast-Track: Limpar buffer de consistência
+      resetOcrBuffer();
       setHasReference(false);
       
       processingTimesRef.current = [];
       setProcessingInfo({
         stage: 'idle',
-        stageLabel: 'Conectando stream...',
+        stageLabel: 'Conectando stream WHEP...',
         currentTimeMs: 0,
         lastOcrTimeMs: 0,
         avgTimeMs: 0,
       });
       
-      if (Hls.isSupported()) {
-        const hls = new Hls({
-          enableWorker: true,
-          lowLatencyMode: true,
-          backBufferLength: 30,
-        });
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+      });
+      peerConnectionRef.current = pc;
+      
+      // Receber vídeo
+      pc.addTransceiver('video', { direction: 'recvonly' });
+      pc.addTransceiver('audio', { direction: 'recvonly' });
+      
+      // Quando receber track de vídeo, atribuir ao elemento
+      pc.ontrack = (event) => {
+        if (videoRef.current && event.streams[0]) {
+          videoRef.current.srcObject = event.streams[0];
+          videoRef.current.play().catch(e => logger.warn('Erro ao reproduzir vídeo WHEP:', e));
+        }
+      };
+      
+      // Monitorar estado da conexão ICE
+      pc.oniceconnectionstatechange = () => {
+        const state = pc.iceConnectionState;
+        logger.log(`🔗 ICE state: ${state}`);
         
-        hlsRef.current = hls;
-        
-        hls.loadSource(hlsUrl);
-        hls.attachMedia(videoRef.current!);
-        
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          videoRef.current?.play();
-        });
-        
-        hls.on(Hls.Events.ERROR, (_event, data) => {
-          logger.error('❌ HLS Error:', data);
-          if (data.fatal) {
-            setHlsStatus('error');
-            setStatus('error');
-            setStatusMessage(`❌ Erro no stream: ${data.type}`);
-            
-            setTimeout(() => {
-              if (hlsRef.current && isActiveRef.current) {
-                hls.startLoad();
-              }
-            }, 5000);
-          }
-        });
-        
-        videoRef.current!.onplaying = () => {
-          setHlsStatus('connected');
-          setIsActive(true);
-          setStatus('monitoring');
-          setStatusMessage('📸 Capturando referência...');
+        if (state === 'connected' || state === 'completed') {
+          setStreamStatus('connected');
+        } else if (state === 'failed' || state === 'disconnected') {
+          setStreamStatus('error');
+          setStatus('error');
+          setStatusMessage('❌ Conexão WebRTC perdida');
           
+          // Retry automático após 5s
           setTimeout(() => {
-            if (videoRef.current && canvasRef.current) {
-              const success = motionDetectorRef.current.captureReference(
-                videoRef.current,
-                canvasRef.current,
-                loadVirtualArea() || getDefaultVirtualArea()
-              );
-              
-              setHasReference(success);
-              
-              if (success) {
-                setStatusMessage('🟢 Monitorando stream...');
-                setProcessingInfo(prev => ({
-                  ...prev,
-                  stageLabel: 'Monitorando área...',
-                }));
-              } else {
-                setStatusMessage('⚠️ Erro ao capturar referência');
-              }
+            if (isActiveRef.current) {
+              logger.log('🔄 Tentando reconectar WHEP...');
+              startMonitoringWHEP();
             }
-          }, 1500);
-        };
-        
-      } else if (videoRef.current?.canPlayType('application/vnd.apple.mpegurl')) {
-        videoRef.current.src = hlsUrl;
-        videoRef.current.addEventListener('loadedmetadata', () => {
-          videoRef.current?.play();
-          setHlsStatus('connected');
-          setIsActive(true);
-          setStatus('monitoring');
-          setStatusMessage('🟢 Monitorando stream...');
-        });
+          }, 5000);
+        }
+      };
+      
+      // Criar SDP offer
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      
+      // Enviar offer ao endpoint WHEP via POST
+      const response = await fetch(streamUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/sdp' },
+        body: offer.sdp,
+      });
+      
+      if (!response.ok) {
+        throw new Error(`WHEP respondeu ${response.status}: ${response.statusText}`);
       }
       
+      const answerSdp = await response.text();
+      await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+      
+      // Quando o vídeo começar a tocar, capturar referência
+      videoRef.current!.onplaying = () => {
+        setStreamStatus('connected');
+        setIsActive(true);
+        setStatus('monitoring');
+        setStatusMessage('📸 Capturando referência...');
+        
+        setTimeout(() => {
+          if (videoRef.current && canvasRef.current) {
+            const success = motionDetectorRef.current.captureReference(
+              videoRef.current,
+              canvasRef.current,
+              loadVirtualArea() || getDefaultVirtualArea()
+            );
+            
+            setHasReference(success);
+            
+            if (success) {
+              setStatusMessage('🟢 Monitorando stream...');
+              setProcessingInfo(prev => ({
+                ...prev,
+                stageLabel: 'Monitorando área...',
+              }));
+            } else {
+              setStatusMessage('⚠️ Erro ao capturar referência');
+            }
+          }
+        }, 1500);
+      };
+      
     } catch (e) {
-      logger.error('Erro ao iniciar HLS:', e);
+      logger.error('Erro ao iniciar WHEP:', e);
       setStatus('error');
-      setHlsStatus('error');
+      setStreamStatus('error');
       setStatusMessage(`❌ ${e instanceof Error ? e.message : 'Erro ao conectar'}`);
     }
-  }, [hlsUrl, stopMonitoring, resetOCRState, resetOcrBuffer]);
+  }, [streamUrl, stopMonitoring, resetOCRState, resetOcrBuffer]);
   
   // Reconectar stream quando elemento de vídeo muda (navegação entre páginas)
   const reconnectStream = useCallback(() => {
     const video = videoRef.current;
     const stream = streamRef.current;
-    const hls = hlsRef.current;
     
     if (!video || !isActive) return;
     
     // Para webcam: reconectar MediaStream
     if (sourceMode === 'webcam' && stream) {
-      // Verificar se o stream não está conectado ou se é diferente
       if (video.srcObject !== stream) {
         logger.log('🔄 Reconectando stream webcam ao elemento de vídeo...');
         video.srcObject = stream;
@@ -1559,14 +1569,9 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       }
     }
     
-    // Para HLS: verificar se precisa reconectar
-    if (sourceMode === 'hls' && hls) {
-      // Verificar se o HLS não está attached ao vídeo atual
-      if (hls.media !== video) {
-        logger.log('🔄 Reconectando HLS ao elemento de vídeo...');
-        hls.attachMedia(video);
-        video.play().catch(e => logger.warn('Erro ao reproduzir vídeo HLS:', e));
-      }
+    // Para WHEP: o WebRTC mantém o stream via srcObject, apenas verificar
+    if (sourceMode === 'whep' && video.srcObject) {
+      video.play().catch(e => logger.warn('Erro ao reproduzir vídeo WHEP:', e));
     }
   }, [isActive, sourceMode]);
   
@@ -1604,13 +1609,13 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     setSelectedResolution,
     sourceMode,
     setSourceMode,
-    hlsUrl,
-    setHlsUrl,
-    hlsStatus,
+    streamUrl,
+    setStreamUrl,
+    streamStatus,
     videoRef,
     canvasRef,
     startMonitoring,
-    startMonitoringHLS,
+    startMonitoringWHEP,
     stopMonitoring,
     updateVirtualArea,
     recaptureReference,
