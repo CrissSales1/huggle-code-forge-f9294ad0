@@ -24,7 +24,7 @@ import {
   Radio,
   ScanLine
 } from 'lucide-react';
-import { useMonitoring, MonitoringStatus, type WhepStatus } from '@/react-app/contexts/MonitoringContext';
+import { useMonitoring, MonitoringStatus } from '@/react-app/contexts/MonitoringContext';
 import { 
   Point, 
   VirtualAreaPolygon, 
@@ -332,25 +332,49 @@ export default function CameraMonitor({ onDetection, compact = false, onPipeline
         <div className="flex items-center gap-2">
           {sourceMode === 'hls' ? (
             <Radio className="w-5 h-5 text-purple-600" />
+          ) : sourceMode === 'whep' ? (
+            <Radio className="w-5 h-5 text-purple-600" />
           ) : (
             <Camera className="w-5 h-5 text-blue-600" />
           )}
           <h3 className="font-semibold text-gray-900">
-            {sourceMode === 'hls' ? 'Stream RTSP (IPCamLive)' : 'Monitoramento Local'}
+            {sourceMode === 'hls' || sourceMode === 'whep' ? 'Stream IP (go2rtc)' : 'Monitoramento Local'}
           </h3>
-          {sourceMode === 'hls' && (
-            <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${
-              hlsStatus === 'connected' ? 'bg-green-100 text-green-700' :
-              hlsStatus === 'connecting' ? 'bg-yellow-100 text-yellow-700' :
-              hlsStatus === 'error' ? 'bg-red-100 text-red-700' :
-              'bg-gray-100 text-gray-600'
-            }`}>
-              {hlsStatus === 'connected' ? <Wifi className="w-3 h-3" /> : 
-               hlsStatus === 'error' ? <WifiOff className="w-3 h-3" /> : null}
-              {hlsStatus === 'connected' ? 'Conectado' :
-               hlsStatus === 'connecting' ? 'Conectando...' :
-               hlsStatus === 'error' ? 'Erro' : 'Desconectado'}
-            </span>
+          {(sourceMode === 'hls' || sourceMode === 'whep') && (
+            <>
+              {/* Protocol badge */}
+              {activeProtocol === 'whep' && (
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">
+                  <Wifi className="w-3 h-3" />
+                  WebRTC
+                </span>
+              )}
+              {activeProtocol === 'hls' && whepStatus === 'fallback_hls' && (
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-yellow-100 text-yellow-700">
+                  <Wifi className="w-3 h-3" />
+                  HLS Fallback
+                </span>
+              )}
+              {activeProtocol === 'hls' && whepStatus !== 'fallback_hls' && (
+                <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${
+                  hlsStatus === 'connected' ? 'bg-green-100 text-green-700' :
+                  hlsStatus === 'connecting' ? 'bg-yellow-100 text-yellow-700' :
+                  hlsStatus === 'error' ? 'bg-red-100 text-red-700' :
+                  'bg-gray-100 text-gray-600'
+                }`}>
+                  {hlsStatus === 'connected' ? <Wifi className="w-3 h-3" /> : 
+                   hlsStatus === 'error' ? <WifiOff className="w-3 h-3" /> : null}
+                  {hlsStatus === 'connected' ? 'HLS' :
+                   hlsStatus === 'connecting' ? 'Conectando...' :
+                   hlsStatus === 'error' ? 'Erro' : 'Desconectado'}
+                </span>
+              )}
+              {activeProtocol === 'none' && whepStatus === 'connecting' && (
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-yellow-100 text-yellow-700">
+                  Conectando WHEP...
+                </span>
+              )}
+            </>
           )}
           
           {/* Indicador de monitoramento ativo */}
