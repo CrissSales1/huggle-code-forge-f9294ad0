@@ -1645,6 +1645,8 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     }
     
     const protocol = detectProtocol(hlsUrl);
+    // Normalizar URL (stream.html → api/whep)
+    const normalizedUrl = normalizeStreamUrl(hlsUrl);
     
     if (protocol === 'hls') {
       // URL é HLS direta, usar HLS
