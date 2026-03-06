@@ -1440,11 +1440,15 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   
   // Função auxiliar: derivar URL HLS da URL WHEP
   const deriveHlsUrl = useCallback((whepUrl: string): string => {
-    // http://ip:8889/path/whep → http://ip:8888/path/
+    // http://ip:8889/path/whep → http://ip:8888/path/index.m3u8
     return whepUrl
       .replace(/:8889\b/, ':8888')
-      .replace(/\/whep\s*$/, '/');
+      .replace(/\/whep\s*$/, '/index.m3u8');
   }, []);
+  
+  // Contador de retries HLS
+  const hlsRetryCountRef = useRef<number>(0);
+  const HLS_MAX_RETRIES = 3;
   
   // Função de fallback: conectar via HLS quando WHEP falha
   const fallbackToHLS = useCallback(async (whepUrl: string) => {
@@ -1489,19 +1493,32 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       
       hls.on(Hls.Events.ERROR, (_event: any, data: any) => {
         if (data.fatal) {
-          logger.error('Erro fatal HLS:', data);
-          setStreamStatus('error');
-          setStatus('error');
-          setStatusMessage('❌ Erro no stream HLS');
+          hlsRetryCountRef.current++;
+          logger.error(`Erro fatal HLS (tentativa ${hlsRetryCountRef.current}/${HLS_MAX_RETRIES}):`, data);
           
-          // Retry HLS após 5s
-          setTimeout(() => {
-            if (isActiveRef.current && hlsRef.current) {
-              logger.log('🔄 Reconectando HLS...');
+          if (hlsRetryCountRef.current >= HLS_MAX_RETRIES) {
+            // Esgotou tentativas - parar
+            setStreamStatus('error');
+            setStatus('error');
+            setStatusMessage('❌ WHEP e HLS falharam. Verifique a URL do stream e se o mediamtx está acessível.');
+            if (hlsRef.current) {
               hlsRef.current.destroy();
-              fallbackToHLS(whepUrl);
+              hlsRef.current = null;
             }
-          }, 5000);
+          } else {
+            setStreamStatus('error');
+            setStatus('error');
+            setStatusMessage(`❌ HLS falhou (tentativa ${hlsRetryCountRef.current}/${HLS_MAX_RETRIES}), retentando...`);
+            
+            // Retry HLS após 5s
+            setTimeout(() => {
+              if (isActiveRef.current && hlsRef.current) {
+                logger.log(`🔄 Reconectando HLS (tentativa ${hlsRetryCountRef.current + 1}/${HLS_MAX_RETRIES})...`);
+                hlsRef.current.destroy();
+                fallbackToHLS(whepUrl);
+              }
+            }, 5000);
+          }
         }
       });
       
