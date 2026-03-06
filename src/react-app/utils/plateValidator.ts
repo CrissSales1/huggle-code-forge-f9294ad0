@@ -339,22 +339,53 @@ export function generateAggressiveVariations(plate: string): string[] {
  * Posições adjacentes (distância max 2) para evitar explosão combinatória
  */
 export function generateDualVariations(plate: string): string[] {
+  const MAX_DUAL_VARIATIONS = 30;
+  
+  // Priorizar posições com maior taxa de confusão OCR
+  // Ordem: pares mais confusos primeiro (0/O, 1/I, 8/B, 6/G, 5/S)
+  const HIGH_CONFUSION: Record<string, number> = {
+    '0': 5, 'O': 5, 'D': 4, 'Q': 3,
+    '1': 5, 'I': 5, 'L': 3,
+    '8': 4, 'B': 4, '3': 2,
+    '6': 3, 'G': 3, '9': 3,
+    '5': 2, 'S': 2,
+    '7': 2, 'T': 2, '2': 2, 'Z': 2,
+    '4': 2, 'A': 2, 'H': 2,
+  };
+  
   const variations = new Set<string>();
   const chars = plate.split('');
   
+  // Gerar pares (i, j) ordenados por prioridade de confusão
+  const pairs: Array<{ i: number; j: number; priority: number }> = [];
   for (let i = 0; i < 7; i++) {
     const altsI = VISUAL_SIMILAR[chars[i]] || [];
+    if (altsI.length === 0) continue;
     for (let j = i + 1; j < 7 && j <= i + 2; j++) {
       const altsJ = VISUAL_SIMILAR[chars[j]] || [];
-      for (const ai of altsI) {
-        for (const aj of altsJ) {
-          const variant = [...chars];
-          variant[i] = ai;
-          variant[j] = aj;
-          const corrected = correctByPosition(variant.join(''));
-          if (isValidPlate(corrected)) {
-            variations.add(corrected);
-          }
+      if (altsJ.length === 0) continue;
+      const priority = (HIGH_CONFUSION[chars[i]] || 1) + (HIGH_CONFUSION[chars[j]] || 1);
+      pairs.push({ i, j, priority });
+    }
+  }
+  
+  // Ordenar por prioridade decrescente
+  pairs.sort((a, b) => b.priority - a.priority);
+  
+  for (const { i, j } of pairs) {
+    if (variations.size >= MAX_DUAL_VARIATIONS) break;
+    const altsI = VISUAL_SIMILAR[chars[i]] || [];
+    const altsJ = VISUAL_SIMILAR[chars[j]] || [];
+    for (const ai of altsI) {
+      if (variations.size >= MAX_DUAL_VARIATIONS) break;
+      for (const aj of altsJ) {
+        if (variations.size >= MAX_DUAL_VARIATIONS) break;
+        const variant = [...chars];
+        variant[i] = ai;
+        variant[j] = aj;
+        const corrected = correctByPosition(variant.join(''));
+        if (isValidPlate(corrected)) {
+          variations.add(corrected);
         }
       }
     }

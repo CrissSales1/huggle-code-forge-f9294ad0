@@ -678,7 +678,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     }
   }, []);
   
-  // Verificar se é visitante ativo
+  // v1.1.93: Verificar se é visitante ativo - query SQL direta com IN() (igual checkIfMorador)
   const checkIfVisitanteAtivo = useCallback(async (placa: string): Promise<{ 
     isVisitante: boolean; 
     nome?: string;
@@ -688,18 +688,15 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     try {
       const placaLimpa = placa.toUpperCase().replace(/[^A-Z0-9]/g, '');
       
-      // Buscar visitantes ativos
-      const { data: visitantes, error } = await supabase
+      // 1. Busca exata primeiro (mais rápido)
+      const { data: exactMatch, error } = await supabase
         .from('visitantes')
         .select('nome, casa_visitada, placa_veiculo')
-        .eq('is_ativo', true);
+        .eq('is_ativo', true)
+        .eq('placa_veiculo', placaLimpa)
+        .maybeSingle();
       
       if (error) throw error;
-      
-      // Busca exata primeiro
-      const exactMatch = visitantes?.find(v => 
-        v.placa_veiculo?.toUpperCase().replace(/[^A-Z0-9]/g, '') === placaLimpa
-      );
       
       if (exactMatch) {
         return { 
@@ -710,21 +707,33 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         };
       }
       
-      // v1.1.82: Fuzzy matching agressivo (mesmo padrão que checkIfMorador)
+      // 2. Fuzzy matching com IN() direto no SQL (sem full table scan)
       const { generateVariations, generateAggressiveVariations } = await import('@/react-app/utils/plateValidator');
       const variacoes = [...new Set([
         ...generateVariations(placaLimpa),
         ...generateAggressiveVariations(placaLimpa)
       ])];
       
-      for (const visitante of visitantes || []) {
-        const placaVisitante = visitante.placa_veiculo?.toUpperCase().replace(/[^A-Z0-9]/g, '') || '';
-        if (variacoes.includes(placaVisitante)) {
+      console.log(`🔍 Fuzzy visitante: ${placaLimpa} → ${variacoes.length} variações`);
+      
+      if (variacoes.length > 1) {
+        const { data: fuzzyMatch, error: fuzzyError } = await supabase
+          .from('visitantes')
+          .select('nome, casa_visitada, placa_veiculo')
+          .eq('is_ativo', true)
+          .in('placa_veiculo', variacoes)
+          .limit(1)
+          .maybeSingle();
+        
+        if (fuzzyError) throw fuzzyError;
+        
+        if (fuzzyMatch) {
+          logger.log(`🔄 Match fuzzy visitante: ${placaLimpa} → ${fuzzyMatch.placa_veiculo} (${fuzzyMatch.nome})`);
           return { 
             isVisitante: true, 
-            nome: visitante.nome,
-            casa: visitante.casa_visitada,
-            placaCadastrada: visitante.placa_veiculo
+            nome: fuzzyMatch.nome,
+            casa: fuzzyMatch.casa_visitada,
+            placaCadastrada: fuzzyMatch.placa_veiculo
           };
         }
       }
@@ -895,8 +904,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
           return true;
         }
         
-        // v1.1.84: Beam Search - tentar buscar TODOS os candidatos no banco
-        // Se algum candidato bater direto, usar esse (evita fuzzy matching)
+        // v1.1.93: Beam Search BATCH - coletar todas variações e fazer 2 queries (1 morador + 1 visitante)
         let isMorador = false;
         let casa: string | undefined;
         let placaCadastrada: string | undefined;
@@ -904,56 +912,73 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         let nomeVisitante: string | undefined;
         let casaFinal: string | undefined;
         
-        // Primeiro tentar o candidato principal
-        const mainResult = await checkIfMorador(placaConfirmada);
-        isMorador = mainResult.isMorador;
-        casa = mainResult.casa;
-        placaCadastrada = mainResult.placaCadastrada;
-        
-        // v1.1.84: Se não achou com candidato principal, tentar candidatos do beam search
-        if (!isMorador && result.candidates && result.candidates.length > 1) {
-          for (const candidate of result.candidates) {
-            if (candidate.text === placaConfirmada) continue; // Já tentou
-            
-            const candidateResult = await checkIfMorador(candidate.text);
-            if (candidateResult.isMorador) {
-              isMorador = true;
-              casa = candidateResult.casa;
-              placaCadastrada = candidateResult.placaCadastrada;
-              console.log(`🎯 Beam Search Match: Candidato "${candidate.text}" encontrou morador (Casa ${casa}) - Principal era "${placaConfirmada}"`);
-              break;
-            }
+        // Coletar TODAS as variações de TODOS os candidatos em um único array
+        const { generateVariations, generateAggressiveVariations } = await import('@/react-app/utils/plateValidator');
+        const allCandidatePlates = [placaConfirmada];
+        if (result.candidates && result.candidates.length > 1) {
+          for (const c of result.candidates) {
+            if (c.text !== placaConfirmada) allCandidatePlates.push(c.text);
           }
+        }
+        
+        const allVariations = new Set<string>();
+        for (const candidatePlate of allCandidatePlates) {
+          const clean = candidatePlate.toUpperCase().replace(/[^A-Z0-9]/g, '');
+          allVariations.add(clean);
+          for (const v of generateVariations(clean)) allVariations.add(v);
+          for (const v of generateAggressiveVariations(clean)) allVariations.add(v);
+        }
+        
+        const variacoesArray = [...allVariations];
+        console.log(`🔍 Batch Beam: ${allCandidatePlates.length} candidatos → ${variacoesArray.length} variações únicas`);
+        
+        // Query ÚNICA para moradores
+        const { data: moradorMatch, error: moradorErr } = await supabase
+          .from('veiculos_moradores')
+          .select('casa, placa_veiculo')
+          .in('placa_veiculo', variacoesArray)
+          .limit(1)
+          .maybeSingle();
+        
+        if (!moradorErr && moradorMatch) {
+          isMorador = true;
+          casa = moradorMatch.casa;
+          placaCadastrada = moradorMatch.placa_veiculo;
+          console.log(`🎯 Batch Match morador: ${moradorMatch.placa_veiculo} (Casa ${casa})`);
         }
         
         casaFinal = casa;
         let placaFinal = placaCadastrada || placaConfirmada;
         
+        // Se não é morador, query ÚNICA para visitantes
         if (!isMorador) {
-          const visitanteResult = await checkIfVisitanteAtivo(placaConfirmada);
-          if (visitanteResult.isVisitante) {
-            isVisitante = true;
-            nomeVisitante = visitanteResult.nome;
-            casaFinal = visitanteResult.casa;
-            placaFinal = visitanteResult.placaCadastrada || placaConfirmada;
-          }
+          const { data: visitanteMatch, error: visitanteErr } = await supabase
+            .from('visitantes')
+            .select('nome, casa_visitada, placa_veiculo')
+            .eq('is_ativo', true)
+            .in('placa_veiculo', variacoesArray)
+            .limit(1)
+            .maybeSingle();
           
-          // v1.1.84: Tentar candidatos do beam search para visitantes também
-          if (!isVisitante && result.candidates && result.candidates.length > 1) {
-            for (const candidate of result.candidates) {
-              if (candidate.text === placaConfirmada) continue;
-              
-              const candidateResult = await checkIfVisitanteAtivo(candidate.text);
-              if (candidateResult.isVisitante) {
-                isVisitante = true;
-                nomeVisitante = candidateResult.nome;
-                casaFinal = candidateResult.casa;
-                placaFinal = candidateResult.placaCadastrada || candidate.text;
-                console.log(`🎯 Beam Search Match: Candidato "${candidate.text}" encontrou visitante "${nomeVisitante}"`);
-                break;
-              }
-            }
+          if (!visitanteErr && visitanteMatch) {
+            isVisitante = true;
+            nomeVisitante = visitanteMatch.nome;
+            casaFinal = visitanteMatch.casa_visitada;
+            placaFinal = visitanteMatch.placa_veiculo;
+            console.log(`🎯 Batch Match visitante: ${visitanteMatch.placa_veiculo} (${nomeVisitante})`);
           }
+        }
+        
+        // v1.1.93: Atualizar status_presenca do morador na detecção
+        if (isMorador && placaCadastrada) {
+          supabase
+            .from('veiculos_moradores')
+            .update({ status_presenca: 'presente', ultima_movimentacao: new Date().toISOString() })
+            .eq('placa_veiculo', placaCadastrada)
+            .then(({ error: updateErr }) => {
+              if (updateErr) console.error('Erro ao atualizar status_presenca:', updateErr);
+              else console.log(`📍 Status presença atualizado: ${placaCadastrada} → presente`);
+            });
         }
         
         const fallbackUsed = result.usedFallback || false;
