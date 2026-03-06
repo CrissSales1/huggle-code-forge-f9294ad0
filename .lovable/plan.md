@@ -1,63 +1,149 @@
 
 
-# v1.1.93: Otimização de Backend e Limpeza de Código
+# Plano: Melhorias no Sistema de Monitoramento - v1.1.87
 
-6 melhorias em 3 categorias: queries SQL, lógica client-side e limpeza.
+## Problemas Identificados
 
-## Mudanças
+1. **Area fantasma**: Sem carro mas nao fica "area limpa" - causado por mudancas de iluminacao que mantém a diferenca entre 5-10% (zona morta entre `CLEAN_THRESHOLD=5%` e `DETECTION_THRESHOLD=10%`)
+2. **Carros em sequencia**: Segundo carro nao e lido porque `fastTrackValidatedRef=true` bloqueia ate o movimento cair abaixo de 8%, o que nao acontece quando outro carro ja entrou
 
-### Migration SQL (1 arquivo)
+## Melhorias Propostas (4 mudancas)
 
-```sql
--- Índices para acelerar fuzzy matching IN()
-CREATE INDEX IF NOT EXISTS idx_veiculos_moradores_placa ON veiculos_moradores(placa_veiculo);
-CREATE INDEX IF NOT EXISTS idx_visitantes_placa ON visitantes(placa_veiculo);
-CREATE INDEX IF NOT EXISTS idx_visitantes_ativo ON visitantes(is_ativo) WHERE is_ativo = true;
+### Melhoria 1: Referencia Adaptativa (resolve area fantasma)
+
+Ao inves de comparar sempre com a mesma foto de referencia estatica, atualizar a referencia automaticamente quando a area esta na zona intermediaria (5-10%) por mais de 15 segundos sem OCR ativo. Isso absorve mudancas graduais de iluminacao.
+
+**Mudanca em `motionDetection.ts`:**
+- Novo threshold: `INTERMEDIATE_UPDATE_DELAY_MS = 15000` (15s na zona morta → atualiza referencia)
+- Na zona intermediaria (`!vehiclePresent && !areaClean`), se ficar 15s sem mudar, sinalizar `shouldUpdateReference = true`
+- Isso elimina o "fantasma" de iluminacao
+
+### Melhoria 2: Timeout de Validacao (resolve carros em sequencia)
+
+Apos uma deteccao bem-sucedida, se passarem 15 segundos sem o veiculo sair (motion nao cai abaixo de 8%), forcar reset do `fastTrackValidated` e permitir nova leitura. Isso cobre o caso de um segundo carro entrar antes do primeiro sair.
+
+**Mudanca em `useContinuousMonitoring.ts`:**
+- Nova ref: `lastValidationTimeRef` que guarda o timestamp da ultima validacao
+- No `processFrame`, se `fastTrackValidatedRef === true` e passaram 15s, fazer reset:
+  - `fastTrackValidatedRef = false`
+  - Limpar buffer OCR
+  - Recapturar referencia
+  - Log: `⏰ Timeout de validação - permitindo nova detecção`
+
+### Melhoria 3: Cooldown por Placa (resolve carros em sequencia)
+
+Atualmente `fastTrackValidatedRef` bloqueia TODA a area. Mudar para cooldown por placa especifica - so bloqueia a mesma placa por 30s, mas permite ler placas diferentes imediatamente.
+
+**Mudanca em `useContinuousMonitoring.ts`:**
+- Remover `fastTrackValidatedRef` como bloqueio global
+- Usar `recentPlatesRef` (ja existe) para bloquear apenas a placa especifica
+- Apos validacao, ao inves de setar `fastTrackValidatedRef = true`, apenas marcar a placa em `recentPlatesRef` e resetar o buffer OCR
+- A flag `ocrSucceeded` no MotionDetector continua controlando a recaptura de referencia
+
+### Melhoria 4: Deteccao de Troca de Veiculo via YOLO
+
+Quando o YOLO detecta uma placa em posicao muito diferente da anterior (>40% de deslocamento no frame), considerar que e um veiculo novo e resetar o buffer OCR.
+
+**Mudanca em `useContinuousMonitoring.ts`:**
+- Nova ref: `lastPlateRegionRef` que guarda o ultimo `plateRegion` do resultado OCR
+- Apos cada OCR, comparar posicao do bounding box YOLO com o anterior
+- Se deslocamento X ou Y > 40% do frame, ou tamanho mudou >50%: resetar buffer
+- Log: `🔄 Troca de veículo detectada via YOLO (posição mudou)`
+
+## Arquivos a Modificar
+
+| Arquivo | Mudanca |
+|---------|---------|
+| `src/react-app/utils/motionDetection.ts` | Melhoria 1: zona intermediaria atualiza referencia apos 15s |
+| `src/react-app/hooks/useContinuousMonitoring.ts` | Melhorias 2, 3 e 4: timeout, cooldown por placa, troca YOLO |
+| `src/react-app/pages/Configuracoes.tsx` | Versao 1.1.87 |
+
+## Detalhes Tecnicos
+
+### motionDetection.ts
+
+```typescript
+const INTERMEDIATE_UPDATE_DELAY_MS = 15000; // 15s na zona morta → atualiza ref
+
+// Nova variavel de instancia
+private intermediateZoneStart: number = 0;
+
+// Na zona intermediaria (linhas 549-553), adicionar:
+} else if (!vehicleExited) {
+  // Zona intermediária - pode ser iluminação mudando
+  this.consecutiveMotionFrames = 0;
+  if (this.intermediateZoneStart === 0) {
+    this.intermediateZoneStart = now;
+  } else if (now - this.intermediateZoneStart >= INTERMEDIATE_UPDATE_DELAY_MS
+             && !this.ocrSucceeded) {
+    // 15s na zona morta sem OCR ativo → atualizar referência
+    shouldUpdateReference = true;
+    this.intermediateZoneStart = 0;
+    console.log('🔄 Referência atualizada (zona intermediária por 15s)');
+  }
+}
 ```
 
-### MonitoringContext.tsx — 4 mudanças
+Reset `intermediateZoneStart = 0` quando veículo presente ou area limpa.
 
-**Melhoria 1: checkIfVisitanteAtivo com SQL direto**
-Substituir `SELECT * FROM visitantes WHERE is_ativo = true` + filtro client-side por `.in('placa_veiculo', variacoes)` + `.eq('is_ativo', true)`, igual ao `checkIfMorador`.
+### useContinuousMonitoring.ts
 
-**Melhoria 2: Batch de candidatos Beam Search**
-Em vez de chamar `checkIfMorador` N vezes (uma por candidato), coletar TODAS as variações de TODOS os candidatos em um único array e fazer uma query `.in()` única. O mesmo para `checkIfVisitanteAtivo`. Reduz de até 6 round-trips para 2 (1 morador + 1 visitante).
+```typescript
+// Melhoria 2: Timeout
+const VALIDATION_TIMEOUT_MS = 15000;
+const lastValidationTimeRef = useRef<number>(0);
 
-**Melhoria 6: Atualizar status_presenca na detecção**
-Após confirmar morador, executar `UPDATE veiculos_moradores SET status_presenca = 'presente', ultima_movimentacao = now() WHERE placa_veiculo = ?`. Adicionar na função `saveDetection` quando `isMorador = true`.
+// No processFrame, antes de checar shouldAttemptOCR:
+if (fastTrackValidatedRef.current) {
+  const elapsed = Date.now() - lastValidationTimeRef.current;
+  if (elapsed > VALIDATION_TIMEOUT_MS) {
+    console.log('⏰ Timeout de validação - permitindo nova detecção');
+    fastTrackValidatedRef.current = false;
+    resetOcrBuffer();
+    captureReferenceFrame();
+    motionDetectorRef.current.resetOcrAttempt();
+  }
+}
 
-### plateValidator.ts — 1 mudança
+// Melhoria 3: Apos validacao bem-sucedida, NAO setar fastTrack global
+// Apenas resetar buffer e marcar placa como recente
+// fastTrackValidatedRef.current = true; → REMOVER
+// Em vez disso: apenas markPlateDetected(placa) + resetar buffer + markOcrSuccess()
+// O markOcrSuccess() ja impede novas tentativas ate veiculo sair
 
-**Melhoria 3: Limitar generateDualVariations**
-Adicionar cap de 30 variações máximas. Priorizar posições com maior taxa de confusão (3→8, 0→O, 1→I) saindo do loop cedo quando atingir o limite.
+// Melhoria 4: Troca YOLO
+const lastPlateRegionRef = useRef<{x:number,y:number,w:number,h:number}|null>(null);
 
-### Deletar useContinuousMonitoring.ts — 1 mudança
+// Apos receber resultado OCR com plateRegion:
+if (result.plateRegion && lastPlateRegionRef.current) {
+  const prev = lastPlateRegionRef.current;
+  const curr = result.plateRegion;
+  const dx = Math.abs(curr.x - prev.x) / canvasWidth;
+  const dy = Math.abs(curr.y - prev.y) / canvasHeight;
+  const dw = Math.abs(curr.width - prev.w) / prev.w;
+  if (dx > 0.4 || dy > 0.4 || dw > 0.5) {
+    console.log('🔄 Troca de veículo detectada via YOLO');
+    resetOcrBuffer();
+  }
+}
+lastPlateRegionRef.current = result.plateRegion ? 
+  { x: result.plateRegion.x, y: result.plateRegion.y, 
+    w: result.plateRegion.width, h: result.plateRegion.height } : null;
+```
 
-**Melhoria 4: Remover hook legado**
-O arquivo `src/react-app/hooks/useContinuousMonitoring.ts` (947 linhas) não é importado por nenhum componente. Todo o fluxo de monitoramento usa `MonitoringContext.tsx`. Deletar o arquivo. Manter os exports utilitários (`loadHlsUrl`, `saveHlsUrl`, `loadSourceMode`, `saveSourceMode`, tipos `SourceMode`, `MonitoringStatus`, etc.) movendo-os para um arquivo dedicado se necessário, ou verificar se o MonitoringContext já os reimplementa.
+### Versao
 
-### Configuracoes.tsx
+```
+1.1.87 (Smart Detection)
+```
 
-Versão 1.1.93 (Backend Optimization).
+## Resumo do Impacto
 
-## Arquivos
+| Problema | Melhoria | Resultado |
+|----------|----------|-----------|
+| Area fantasma (iluminacao) | Ref adaptativa 15s | Referencia se atualiza sozinha |
+| 2o carro nao lido | Timeout 15s + cooldown por placa | Desbloqueia apos 15s OU imediatamente para placa diferente |
+| Carro diferente na sequencia | Deteccao YOLO de troca | Reset instantaneo se bounding box mudou |
 
-| Arquivo | Ação |
-|---------|------|
-| `migrations/9.sql` | Índices em placa_veiculo + partial index is_ativo |
-| `src/react-app/contexts/MonitoringContext.tsx` | Melhorias 1, 2, 6 |
-| `src/react-app/utils/plateValidator.ts` | Melhoria 3: cap 30 variações |
-| `src/react-app/hooks/useContinuousMonitoring.ts` | Deletar (melhoria 4) |
-| `src/react-app/pages/Configuracoes.tsx` | Versão 1.1.93 |
-
-## Impacto
-
-| Antes | Depois |
-|-------|--------|
-| checkIfVisitanteAtivo: full table scan client-side | Query SQL indexada com IN() |
-| Beam Search: até 6 round-trips Supabase | 2 queries (1 morador + 1 visitante) |
-| generateDualVariations: ~100+ variações | Cap 30, priorizadas por frequência |
-| 947 linhas de código morto | Removidas |
-| status_presenca nunca atualizado | Atualizado automaticamente na detecção |
-| Sem índice em placa_veiculo | Índice B-tree + partial index is_ativo |
+Zero impacto em performance - sao apenas comparacoes de numeros e timestamps.
 
