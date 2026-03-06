@@ -24,7 +24,7 @@ import {
   Radio,
   ScanLine
 } from 'lucide-react';
-import { useMonitoring, MonitoringStatus } from '@/react-app/contexts/MonitoringContext';
+import { useMonitoring, MonitoringStatus, type WhepStatus } from '@/react-app/contexts/MonitoringContext';
 import { 
   Point, 
   VirtualAreaPolygon, 
@@ -89,6 +89,9 @@ export default function CameraMonitor({ onDetection, compact = false, onPipeline
     setHlsUrl,
     hlsStatus,
     startMonitoringHLS,
+    startMonitoringStream,
+    whepStatus,
+    activeProtocol,
     // Leitura manual
     manualCapture,
     // Refs do vídeo
