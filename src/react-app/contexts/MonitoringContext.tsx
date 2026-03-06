@@ -175,6 +175,8 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   const [sourceMode, setSourceModeState] = useState<SourceMode>(loadSourceMode());
   const [streamUrl, setStreamUrlState] = useState<string>(loadStreamUrl());
   const [streamStatus, setStreamStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
+  const [streamProtocol, setStreamProtocol] = useState<'whep' | 'hls' | null>(null);
+  const hlsRef = useRef<any>(null);
   
   const [processingInfo, setProcessingInfo] = useState<ProcessingInfo>({
     stage: 'idle',
@@ -1411,6 +1413,11 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       peerConnectionRef.current = null;
     }
     
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+    
     if (videoRef.current) {
       videoRef.current.srcObject = null;
       videoRef.current.src = '';
@@ -1428,6 +1435,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     setStatusMessage('Parado');
     setMotionPercent(0);
     setStreamStatus('idle');
+    setStreamProtocol(null);
   }, []);
   
   const startMonitoringWHEP = useCallback(async () => {
