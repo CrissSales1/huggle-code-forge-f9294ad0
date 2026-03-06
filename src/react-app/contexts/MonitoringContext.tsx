@@ -1453,7 +1453,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   // Função de fallback: conectar via HLS quando WHEP falha
   const fallbackToHLS = useCallback(async (whepUrl: string) => {
     const hlsUrl = deriveHlsUrl(whepUrl);
-    logger.log(`📺 Fallback HLS: ${hlsUrl}`);
+    logger.log(`📺 Fallback HLS: ${hlsUrl} (tentativa ${hlsRetryCountRef.current + 1}/${HLS_MAX_RETRIES})`);
     
     setStreamStatus('connecting');
     setStatusMessage('⏳ WHEP falhou (B-frames), tentando HLS...');
