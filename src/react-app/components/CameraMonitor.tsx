@@ -440,15 +440,15 @@ export default function CameraMonitor({ onDetection, compact = false, onPipeline
             )}
           </div>
           
-          {/* Configuração HLS */}
-          {sourceMode === 'hls' && (
+          {/* Configuração Stream IP */}
+          {(sourceMode === 'hls' || sourceMode === 'whep') && (
             <div className="flex items-center gap-3">
-              <label className="text-sm font-medium text-gray-700 min-w-[70px]">URL HLS:</label>
+              <label className="text-sm font-medium text-gray-700 min-w-[70px]">URL:</label>
               <input
                 type="url"
                 value={hlsUrl}
                 onChange={(e) => setHlsUrl(e.target.value)}
-                placeholder="https://ipcamlive.com/.../playlist.m3u8"
+                placeholder="http://192.168.1.x:8555/api/stream.m3u8?src=camera1"
                 className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white"
                 disabled={isActive}
               />
@@ -913,13 +913,13 @@ export default function CameraMonitor({ onDetection, compact = false, onPipeline
               onClick={() => (sourceMode === 'hls' || sourceMode === 'whep') ? startMonitoringStream() : startMonitoring()}
               disabled={(sourceMode === 'hls' || sourceMode === 'whep') && !hlsUrl}
               className={`flex items-center gap-2 px-4 py-2 text-white rounded-lg transition-colors ${
-                sourceMode === 'hls' 
+                (sourceMode === 'hls' || sourceMode === 'whep')
                   ? 'bg-purple-600 hover:bg-purple-700' 
                   : 'bg-green-600 hover:bg-green-700'
-              } ${sourceMode === 'hls' && !hlsUrl ? 'opacity-50 cursor-not-allowed' : ''}`}
+              } ${(sourceMode === 'hls' || sourceMode === 'whep') && !hlsUrl ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               <Play className="w-4 h-4" />
-              {sourceMode === 'hls' ? 'Conectar Stream' : 'Iniciar'}
+              {(sourceMode === 'hls' || sourceMode === 'whep') ? 'Conectar Stream' : 'Iniciar'}
             </button>
           ) : (
             <>
@@ -959,8 +959,8 @@ export default function CameraMonitor({ onDetection, compact = false, onPipeline
             </>
           )}
           
-          {sourceMode === 'hls' && !hlsUrl && !isActive && (
-            <span className="text-xs text-amber-600">Configure a URL HLS nas configurações</span>
+          {(sourceMode === 'hls' || sourceMode === 'whep') && !hlsUrl && !isActive && (
+            <span className="text-xs text-amber-600">Configure a URL do stream nas configurações</span>
           )}
         </div>
       </div>
