@@ -2351,4 +2351,4 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 };
 
 // Notificar que o worker está carregado
-console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.89 - Hardware Optimization)');
+console.log('🔧 PlateProcessor Worker carregado (ONNX OCR v1.1.92 - Multi-Thread Production)');
