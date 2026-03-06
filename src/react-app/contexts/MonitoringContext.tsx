@@ -25,8 +25,10 @@ import {
   getSensitivityConfig,
 } from '@/react-app/utils/motionDetection';
 
-export type SourceMode = 'webcam' | 'hls';
+export type SourceMode = 'webcam' | 'hls' | 'whep';
 export type MonitoringStatus = 'idle' | 'starting' | 'monitoring' | 'motion_detected' | 'processing' | 'error';
+export type WhepStatus = 'idle' | 'connecting' | 'connected' | 'error' | 'fallback_hls';
+export type StreamProtocol = 'none' | 'whep' | 'hls';
 export type ProcessingStage = 'idle' | 'capturing' | 'preprocessing' | 'ocr' | 'validating' | 'done';
 
 // Helpers para persistência de configurações HLS
@@ -43,7 +45,8 @@ export function saveHlsUrl(url: string): void {
 
 export function loadSourceMode(): SourceMode {
   const saved = localStorage.getItem(SOURCE_MODE_KEY);
-  return (saved === 'hls' ? 'hls' : 'webcam') as SourceMode;
+  if (saved === 'hls' || saved === 'whep') return saved;
+  return 'webcam';
 }
 
 export function saveSourceMode(mode: SourceMode): void {
@@ -121,12 +124,14 @@ interface MonitoringContextType {
   selectedResolution: CameraResolution;
   setSelectedResolution: (resolution: CameraResolution) => void;
   
-  // HLS
+  // HLS / WHEP
   sourceMode: SourceMode;
   setSourceMode: (mode: SourceMode) => void;
   hlsUrl: string;
   setHlsUrl: (url: string) => void;
   hlsStatus: 'idle' | 'connecting' | 'connected' | 'error';
+  whepStatus: WhepStatus;
+  activeProtocol: StreamProtocol;
   
   // Refs
   videoRef: React.RefObject<HTMLVideoElement | null>;
@@ -135,6 +140,7 @@ interface MonitoringContextType {
   // Ações
   startMonitoring: (deviceId?: string) => Promise<void>;
   startMonitoringHLS: () => Promise<void>;
+  startMonitoringStream: () => Promise<void>;
   stopMonitoring: () => void;
   updateVirtualArea: (area: VirtualArea) => void;
   recaptureReference: () => void;
@@ -174,6 +180,9 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   const [sourceMode, setSourceModeState] = useState<SourceMode>(loadSourceMode());
   const [hlsUrl, setHlsUrlState] = useState<string>(loadHlsUrl());
   const [hlsStatus, setHlsStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
+  const [whepStatus, setWhepStatus] = useState<WhepStatus>('idle');
+  const [activeProtocol, setActiveProtocol] = useState<StreamProtocol>('none');
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   
   const [processingInfo, setProcessingInfo] = useState<ProcessingInfo>({
     stage: 'idle',
