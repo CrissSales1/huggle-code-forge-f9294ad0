@@ -1615,6 +1615,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         } else if ((state === 'failed' || state === 'disconnected') && !whepFailed) {
           whepFailed = true;
           logger.log('⚠️ WHEP falhou (provável B-frames), usando HLS...');
+          hlsRetryCountRef.current = 0; // resetar contador para nova sessão
           
           // Fallback para HLS em vez de retry WHEP
           setIsActive(true); // manter ativo durante fallback
