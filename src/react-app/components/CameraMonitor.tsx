@@ -88,8 +88,8 @@ export default function CameraMonitor({ onDetection, compact = false, onPipeline
     hlsUrl,
     setHlsUrl,
     hlsStatus,
-    startMonitoringHLS,
     startMonitoringStream,
+    whepStatus,
     whepStatus,
     activeProtocol,
     // Leitura manual
