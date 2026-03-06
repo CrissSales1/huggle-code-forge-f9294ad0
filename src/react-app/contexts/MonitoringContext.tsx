@@ -1678,7 +1678,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         avgTimeMs: 0,
       });
       
-      const stream = await connectWHEP(hlsUrl);
+      const stream = await connectWHEP(normalizedUrl);
       
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
