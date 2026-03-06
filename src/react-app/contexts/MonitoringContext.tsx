@@ -121,12 +121,13 @@ interface MonitoringContextType {
   selectedResolution: CameraResolution;
   setSelectedResolution: (resolution: CameraResolution) => void;
   
-  // WHEP (WebRTC)
+  // WHEP (WebRTC) / HLS fallback
   sourceMode: SourceMode;
   setSourceMode: (mode: SourceMode) => void;
   streamUrl: string;
   setStreamUrl: (url: string) => void;
   streamStatus: 'idle' | 'connecting' | 'connected' | 'error';
+  streamProtocol: 'whep' | 'hls' | null;
   
   // Refs
   videoRef: React.RefObject<HTMLVideoElement | null>;

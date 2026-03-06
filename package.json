@@ -7,6 +7,7 @@
     "@hono/zod-validator": "^0.5.0",
     "@supabase/supabase-js": "^2.89.0",
     "@tensorflow/tfjs": "^4.22.0",
+    "hls.js": "^1.6.15",
     "hono": "4.7.7",
     "jspdf": "^2.5.2",
     "jspdf-autotable": "^3.8.4",
