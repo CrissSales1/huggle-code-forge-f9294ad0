@@ -1,115 +1,149 @@
 
 
-# v1.1.94: Suporte WHEP (WebRTC via go2rtc)
+# Plano: Melhorias no Sistema de Monitoramento - v1.1.87
 
-## Problema
+## Problemas Identificados
 
-O sistema só aceita HLS. Com go2rtc instalado, funciona via HLS mas com 3-8s de latência. O go2rtc oferece WHEP (WebRTC) com ~200ms de latência — ideal para detecção de placas em tempo real.
+1. **Area fantasma**: Sem carro mas nao fica "area limpa" - causado por mudancas de iluminacao que mantém a diferenca entre 5-10% (zona morta entre `CLEAN_THRESHOLD=5%` e `DETECTION_THRESHOLD=10%`)
+2. **Carros em sequencia**: Segundo carro nao e lido porque `fastTrackValidatedRef=true` bloqueia ate o movimento cair abaixo de 8%, o que nao acontece quando outro carro ja entrou
 
-## Solução
+## Melhorias Propostas (4 mudancas)
 
-Adicionar WHEP como protocolo prioritário com fallback automático para HLS.
+### Melhoria 1: Referencia Adaptativa (resolve area fantasma)
 
-## Mudanças
+Ao inves de comparar sempre com a mesma foto de referencia estatica, atualizar a referencia automaticamente quando a area esta na zona intermediaria (5-10%) por mais de 15 segundos sem OCR ativo. Isso absorve mudancas graduais de iluminacao.
 
-### 1. `MonitoringContext.tsx`
+**Mudanca em `motionDetection.ts`:**
+- Novo threshold: `INTERMEDIATE_UPDATE_DELAY_MS = 15000` (15s na zona morta → atualiza referencia)
+- Na zona intermediaria (`!vehiclePresent && !areaClean`), se ficar 15s sem mudar, sinalizar `shouldUpdateReference = true`
+- Isso elimina o "fantasma" de iluminacao
 
-- Novo `SourceMode`: `'webcam' | 'hls' | 'whep'` (renomear label de "Stream RTSP" para ser genérico)
-- Nova função `startMonitoringWHEP()`:
-  - Cria `RTCPeerConnection` com offer SDP
-  - POST para URL WHEP do go2rtc (ex: `http://IP:8889/camera1/whep`)
-  - Recebe answer SDP, conecta track de vídeo ao `<video>`
-  - ICE candidates via STUN local
-- Fallback automático: se WHEP falhar (timeout 5s ou erro de conexão), derivar URL HLS trocando porta 8889→8888 e sufixo `/whep`→`/api/stream.m3u8?src=...`, e iniciar HLS
-- Novo estado `whepStatus: 'idle' | 'connecting' | 'connected' | 'error' | 'fallback_hls'`
+### Melhoria 2: Timeout de Validacao (resolve carros em sequencia)
 
-### 2. `CameraMonitor.tsx`
+Apos uma deteccao bem-sucedida, se passarem 15 segundos sem o veiculo sair (motion nao cai abaixo de 8%), forcar reset do `fastTrackValidated` e permitir nova leitura. Isso cobre o caso de um segundo carro entrar antes do primeiro sair.
 
-- Atualizar seletor de fonte: 3 opções (Webcam, WHEP/WebRTC, HLS)
-- Ou melhor: manter 2 opções (Webcam, Stream IP) e dentro de "Stream IP" o campo URL aceita tanto WHEP quanto HLS, detectando automaticamente pelo path (`/whep` → WebRTC, `.m3u8` → HLS)
-- Campo de URL com placeholder: `http://192.168.1.x:8889/camera1/whep`
-- Badge de status diferenciado: "WebRTC" (verde) vs "HLS Fallback" (amarelo)
+**Mudanca em `useContinuousMonitoring.ts`:**
+- Nova ref: `lastValidationTimeRef` que guarda o timestamp da ultima validacao
+- No `processFrame`, se `fastTrackValidatedRef === true` e passaram 15s, fazer reset:
+  - `fastTrackValidatedRef = false`
+  - Limpar buffer OCR
+  - Recapturar referencia
+  - Log: `⏰ Timeout de validação - permitindo nova detecção`
 
-### 3. Auto-detecção de protocolo
+### Melhoria 3: Cooldown por Placa (resolve carros em sequencia)
 
-A URL inserida pelo usuário determina o protocolo:
-- Contém `/whep` → tenta WHEP primeiro, fallback HLS
-- Contém `.m3u8` → HLS direto
-- Caso contrário → tenta WHEP, fallback HLS
+Atualmente `fastTrackValidatedRef` bloqueia TODA a area. Mudar para cooldown por placa especifica - so bloqueia a mesma placa por 30s, mas permite ler placas diferentes imediatamente.
 
-Fallback HLS derivado automaticamente:
-```
-WHEP:  http://192.168.1.100:8889/camera1/whep
-→ HLS: http://192.168.1.100:8888/api/stream.m3u8?src=camera1
-```
+**Mudanca em `useContinuousMonitoring.ts`:**
+- Remover `fastTrackValidatedRef` como bloqueio global
+- Usar `recentPlatesRef` (ja existe) para bloquear apenas a placa especifica
+- Apos validacao, ao inves de setar `fastTrackValidatedRef = true`, apenas marcar a placa em `recentPlatesRef` e resetar o buffer OCR
+- A flag `ocrSucceeded` no MotionDetector continua controlando a recaptura de referencia
 
-### 4. `Configuracoes.tsx`
+### Melhoria 4: Deteccao de Troca de Veiculo via YOLO
 
-Versão 1.1.94 (WHEP/WebRTC Support).
+Quando o YOLO detecta uma placa em posicao muito diferente da anterior (>40% de deslocamento no frame), considerar que e um veiculo novo e resetar o buffer OCR.
 
-## Arquivos
+**Mudanca em `useContinuousMonitoring.ts`:**
+- Nova ref: `lastPlateRegionRef` que guarda o ultimo `plateRegion` do resultado OCR
+- Apos cada OCR, comparar posicao do bounding box YOLO com o anterior
+- Se deslocamento X ou Y > 40% do frame, ou tamanho mudou >50%: resetar buffer
+- Log: `🔄 Troca de veículo detectada via YOLO (posição mudou)`
 
-| Arquivo | Ação |
-|---------|------|
-| `src/react-app/contexts/MonitoringContext.tsx` | Adicionar `startMonitoringWHEP`, fallback, auto-detecção |
-| `src/react-app/components/CameraMonitor.tsx` | UI atualizada para Stream IP com badge de protocolo |
-| `src/react-app/pages/Configuracoes.tsx` | Versão 1.1.94 |
+## Arquivos a Modificar
 
-## Fluxo WHEP (WebRTC)
+| Arquivo | Mudanca |
+|---------|---------|
+| `src/react-app/utils/motionDetection.ts` | Melhoria 1: zona intermediaria atualiza referencia apos 15s |
+| `src/react-app/hooks/useContinuousMonitoring.ts` | Melhorias 2, 3 e 4: timeout, cooldown por placa, troca YOLO |
+| `src/react-app/pages/Configuracoes.tsx` | Versao 1.1.87 |
 
-```text
-Usuario insere URL → Auto-detecta protocolo
-                          │
-                    ┌──────┴──────┐
-                    │  /whep?     │
-                    └──────┬──────┘
-                     sim   │   não (.m3u8)
-                     ▼          ▼
-              RTCPeerConnection  HLS direto
-              POST offer SDP
-              Recebe answer
-              ICE connected
-                     │
-                  sucesso?
-                 /        \
-               sim        não (5s timeout)
-                │            │
-            WebRTC ativo   Fallback HLS
-            (~200ms)       (3-8s latência)
-```
+## Detalhes Tecnicos
 
-## Implementação WHEP (core)
+### motionDetection.ts
 
 ```typescript
-async function connectWHEP(url: string): Promise<MediaStream> {
-  const pc = new RTCPeerConnection({
-    iceServers: [] // go2rtc local não precisa STUN
-  });
-  
-  pc.addTransceiver('video', { direction: 'recvonly' });
-  
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-  
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/sdp' },
-    body: offer.sdp,
-  });
-  
-  if (!res.ok) throw new Error(`WHEP ${res.status}`);
-  
-  const answer = await res.text();
-  await pc.setRemoteDescription({ type: 'answer', sdp: answer });
-  
-  // Aguardar track de vídeo
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('WHEP timeout')), 5000);
-    pc.ontrack = (e) => {
-      clearTimeout(timeout);
-      resolve(e.streams[0]);
-    };
-  });
+const INTERMEDIATE_UPDATE_DELAY_MS = 15000; // 15s na zona morta → atualiza ref
+
+// Nova variavel de instancia
+private intermediateZoneStart: number = 0;
+
+// Na zona intermediaria (linhas 549-553), adicionar:
+} else if (!vehicleExited) {
+  // Zona intermediária - pode ser iluminação mudando
+  this.consecutiveMotionFrames = 0;
+  if (this.intermediateZoneStart === 0) {
+    this.intermediateZoneStart = now;
+  } else if (now - this.intermediateZoneStart >= INTERMEDIATE_UPDATE_DELAY_MS
+             && !this.ocrSucceeded) {
+    // 15s na zona morta sem OCR ativo → atualizar referência
+    shouldUpdateReference = true;
+    this.intermediateZoneStart = 0;
+    console.log('🔄 Referência atualizada (zona intermediária por 15s)');
+  }
 }
 ```
+
+Reset `intermediateZoneStart = 0` quando veículo presente ou area limpa.
+
+### useContinuousMonitoring.ts
+
+```typescript
+// Melhoria 2: Timeout
+const VALIDATION_TIMEOUT_MS = 15000;
+const lastValidationTimeRef = useRef<number>(0);
+
+// No processFrame, antes de checar shouldAttemptOCR:
+if (fastTrackValidatedRef.current) {
+  const elapsed = Date.now() - lastValidationTimeRef.current;
+  if (elapsed > VALIDATION_TIMEOUT_MS) {
+    console.log('⏰ Timeout de validação - permitindo nova detecção');
+    fastTrackValidatedRef.current = false;
+    resetOcrBuffer();
+    captureReferenceFrame();
+    motionDetectorRef.current.resetOcrAttempt();
+  }
+}
+
+// Melhoria 3: Apos validacao bem-sucedida, NAO setar fastTrack global
+// Apenas resetar buffer e marcar placa como recente
+// fastTrackValidatedRef.current = true; → REMOVER
+// Em vez disso: apenas markPlateDetected(placa) + resetar buffer + markOcrSuccess()
+// O markOcrSuccess() ja impede novas tentativas ate veiculo sair
+
+// Melhoria 4: Troca YOLO
+const lastPlateRegionRef = useRef<{x:number,y:number,w:number,h:number}|null>(null);
+
+// Apos receber resultado OCR com plateRegion:
+if (result.plateRegion && lastPlateRegionRef.current) {
+  const prev = lastPlateRegionRef.current;
+  const curr = result.plateRegion;
+  const dx = Math.abs(curr.x - prev.x) / canvasWidth;
+  const dy = Math.abs(curr.y - prev.y) / canvasHeight;
+  const dw = Math.abs(curr.width - prev.w) / prev.w;
+  if (dx > 0.4 || dy > 0.4 || dw > 0.5) {
+    console.log('🔄 Troca de veículo detectada via YOLO');
+    resetOcrBuffer();
+  }
+}
+lastPlateRegionRef.current = result.plateRegion ? 
+  { x: result.plateRegion.x, y: result.plateRegion.y, 
+    w: result.plateRegion.width, h: result.plateRegion.height } : null;
+```
+
+### Versao
+
+```
+1.1.87 (Smart Detection)
+```
+
+## Resumo do Impacto
+
+| Problema | Melhoria | Resultado |
+|----------|----------|-----------|
+| Area fantasma (iluminacao) | Ref adaptativa 15s | Referencia se atualiza sozinha |
+| 2o carro nao lido | Timeout 15s + cooldown por placa | Desbloqueia apos 15s OU imediatamente para placa diferente |
+| Carro diferente na sequencia | Deteccao YOLO de troca | Reset instantaneo se bounding box mudou |
+
+Zero impacto em performance - sao apenas comparacoes de numeros e timestamps.
 

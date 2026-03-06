@@ -88,7 +88,9 @@ export default function CameraMonitor({ onDetection, compact = false, onPipeline
     hlsUrl,
     setHlsUrl,
     hlsStatus,
-    startMonitoringHLS,
+    startMonitoringStream,
+    whepStatus,
+    activeProtocol,
     // Leitura manual
     manualCapture,
     // Refs do vídeo
@@ -329,25 +331,49 @@ export default function CameraMonitor({ onDetection, compact = false, onPipeline
         <div className="flex items-center gap-2">
           {sourceMode === 'hls' ? (
             <Radio className="w-5 h-5 text-purple-600" />
+          ) : sourceMode === 'whep' ? (
+            <Radio className="w-5 h-5 text-purple-600" />
           ) : (
             <Camera className="w-5 h-5 text-blue-600" />
           )}
           <h3 className="font-semibold text-gray-900">
-            {sourceMode === 'hls' ? 'Stream RTSP (IPCamLive)' : 'Monitoramento Local'}
+            {sourceMode === 'hls' || sourceMode === 'whep' ? 'Stream IP (go2rtc)' : 'Monitoramento Local'}
           </h3>
-          {sourceMode === 'hls' && (
-            <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${
-              hlsStatus === 'connected' ? 'bg-green-100 text-green-700' :
-              hlsStatus === 'connecting' ? 'bg-yellow-100 text-yellow-700' :
-              hlsStatus === 'error' ? 'bg-red-100 text-red-700' :
-              'bg-gray-100 text-gray-600'
-            }`}>
-              {hlsStatus === 'connected' ? <Wifi className="w-3 h-3" /> : 
-               hlsStatus === 'error' ? <WifiOff className="w-3 h-3" /> : null}
-              {hlsStatus === 'connected' ? 'Conectado' :
-               hlsStatus === 'connecting' ? 'Conectando...' :
-               hlsStatus === 'error' ? 'Erro' : 'Desconectado'}
-            </span>
+          {(sourceMode === 'hls' || sourceMode === 'whep') && (
+            <>
+              {/* Protocol badge */}
+              {activeProtocol === 'whep' && (
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">
+                  <Wifi className="w-3 h-3" />
+                  WebRTC
+                </span>
+              )}
+              {activeProtocol === 'hls' && whepStatus === 'fallback_hls' && (
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-yellow-100 text-yellow-700">
+                  <Wifi className="w-3 h-3" />
+                  HLS Fallback
+                </span>
+              )}
+              {activeProtocol === 'hls' && whepStatus !== 'fallback_hls' && (
+                <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${
+                  hlsStatus === 'connected' ? 'bg-green-100 text-green-700' :
+                  hlsStatus === 'connecting' ? 'bg-yellow-100 text-yellow-700' :
+                  hlsStatus === 'error' ? 'bg-red-100 text-red-700' :
+                  'bg-gray-100 text-gray-600'
+                }`}>
+                  {hlsStatus === 'connected' ? <Wifi className="w-3 h-3" /> : 
+                   hlsStatus === 'error' ? <WifiOff className="w-3 h-3" /> : null}
+                  {hlsStatus === 'connected' ? 'HLS' :
+                   hlsStatus === 'connecting' ? 'Conectando...' :
+                   hlsStatus === 'error' ? 'Erro' : 'Desconectado'}
+                </span>
+              )}
+              {activeProtocol === 'none' && whepStatus === 'connecting' && (
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-yellow-100 text-yellow-700">
+                  Conectando WHEP...
+                </span>
+              )}
+            </>
           )}
           
           {/* Indicador de monitoramento ativo */}
@@ -397,16 +423,16 @@ export default function CameraMonitor({ onDetection, compact = false, onPipeline
                 Webcam Local
               </button>
               <button
-                onClick={() => setSourceMode('hls')}
+                onClick={() => setSourceMode('whep')}
                 disabled={isActive}
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                  sourceMode === 'hls' 
+                  sourceMode === 'hls' || sourceMode === 'whep'
                     ? 'bg-purple-600 text-white' 
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                 } ${isActive ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 <Radio className="w-4 h-4" />
-                Stream RTSP
+                Stream IP
               </button>
             </div>
             {isActive && (
@@ -414,15 +440,15 @@ export default function CameraMonitor({ onDetection, compact = false, onPipeline
             )}
           </div>
           
-          {/* Configuração HLS */}
-          {sourceMode === 'hls' && (
+          {/* Configuração Stream IP */}
+          {(sourceMode === 'hls' || sourceMode === 'whep') && (
             <div className="flex items-center gap-3">
-              <label className="text-sm font-medium text-gray-700 min-w-[70px]">URL HLS:</label>
+              <label className="text-sm font-medium text-gray-700 min-w-[70px]">URL:</label>
               <input
                 type="url"
                 value={hlsUrl}
                 onChange={(e) => setHlsUrl(e.target.value)}
-                placeholder="https://ipcamlive.com/.../playlist.m3u8"
+                placeholder="http://192.168.1.x:8555/api/stream.m3u8?src=camera1"
                 className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white"
                 disabled={isActive}
               />
@@ -884,16 +910,16 @@ export default function CameraMonitor({ onDetection, compact = false, onPipeline
         <div className="flex items-center gap-2">
           {!isActive ? (
             <button
-              onClick={() => sourceMode === 'hls' ? startMonitoringHLS() : startMonitoring()}
-              disabled={sourceMode === 'hls' && !hlsUrl}
+              onClick={() => (sourceMode === 'hls' || sourceMode === 'whep') ? startMonitoringStream() : startMonitoring()}
+              disabled={(sourceMode === 'hls' || sourceMode === 'whep') && !hlsUrl}
               className={`flex items-center gap-2 px-4 py-2 text-white rounded-lg transition-colors ${
-                sourceMode === 'hls' 
+                (sourceMode === 'hls' || sourceMode === 'whep')
                   ? 'bg-purple-600 hover:bg-purple-700' 
                   : 'bg-green-600 hover:bg-green-700'
-              } ${sourceMode === 'hls' && !hlsUrl ? 'opacity-50 cursor-not-allowed' : ''}`}
+              } ${(sourceMode === 'hls' || sourceMode === 'whep') && !hlsUrl ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               <Play className="w-4 h-4" />
-              {sourceMode === 'hls' ? 'Conectar Stream' : 'Iniciar'}
+              {(sourceMode === 'hls' || sourceMode === 'whep') ? 'Conectar Stream' : 'Iniciar'}
             </button>
           ) : (
             <>
@@ -933,8 +959,8 @@ export default function CameraMonitor({ onDetection, compact = false, onPipeline
             </>
           )}
           
-          {sourceMode === 'hls' && !hlsUrl && !isActive && (
-            <span className="text-xs text-amber-600">Configure a URL HLS nas configurações</span>
+          {(sourceMode === 'hls' || sourceMode === 'whep') && !hlsUrl && !isActive && (
+            <span className="text-xs text-amber-600">Configure a URL do stream nas configurações</span>
           )}
         </div>
       </div>
