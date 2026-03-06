@@ -82,12 +82,13 @@ export default function CameraMonitor({ onDetection, compact = false, onPipeline
     hasReference,
     recaptureReference,
     reconnectStream,
-    // WHEP (WebRTC)
+    // WHEP (WebRTC) / HLS fallback
     sourceMode,
     setSourceMode,
     streamUrl,
     setStreamUrl,
     streamStatus,
+    streamProtocol,
     startMonitoringWHEP,
     // Leitura manual
     manualCapture,
@@ -344,8 +345,9 @@ export default function CameraMonitor({ onDetection, compact = false, onPipeline
             }`}>
               {streamStatus === 'connected' ? <Wifi className="w-3 h-3" /> : 
                streamStatus === 'error' ? <WifiOff className="w-3 h-3" /> : null}
-              {streamStatus === 'connected' ? 'Conectado' :
-               streamStatus === 'connecting' ? 'Conectando...' :
+              {streamStatus === 'connected' 
+                ? (streamProtocol === 'hls' ? 'HLS (fallback)' : 'WHEP') 
+                : streamStatus === 'connecting' ? 'Conectando...' :
                streamStatus === 'error' ? 'Erro' : 'Desconectado'}
             </span>
           )}
