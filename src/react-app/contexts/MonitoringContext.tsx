@@ -1721,16 +1721,69 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       logger.warn('⚠️ WHEP falhou, tentando fallback HLS:', e);
       setWhepStatus('fallback_hls');
       
-      // Derivar URL HLS e tentar fallback
+      // Derivar URL HLS a partir da URL normalizada (não do state)
       const hlsFallbackUrl = deriveHlsFromWhep(normalizedUrl);
       logger.log(`🔄 Fallback HLS: ${hlsFallbackUrl}`);
       
-      // Salvar URL HLS derivada temporariamente e iniciar HLS
-      const originalUrl = hlsUrl;
-      setHlsUrlState(hlsFallbackUrl);
-      
       try {
-        await startMonitoringHLS();
+        // Iniciar HLS diretamente com a URL derivada (sem depender do state assíncrono)
+        if (!videoRef.current) throw new Error('Elemento de vídeo não disponível');
+        
+        stopMonitoring();
+        motionDetectorRef.current.fullReset();
+        recentPlatesRef.current.clear();
+        resetOCRState();
+        resetOcrBuffer();
+        setHasReference(false);
+        
+        if (Hls.isSupported()) {
+          const hls = new Hls({
+            enableWorker: true,
+            lowLatencyMode: true,
+            backBufferLength: 30,
+          });
+          
+          hlsRef.current = hls;
+          hls.loadSource(hlsFallbackUrl); // Usa URL derivada diretamente
+          hls.attachMedia(videoRef.current);
+          
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            videoRef.current?.play();
+          });
+          
+          hls.on(Hls.Events.ERROR, (_event, data) => {
+            logger.error('❌ HLS Error:', data);
+            if (data.fatal) {
+              setHlsStatus('error');
+              setStatus('error');
+              setStatusMessage(`❌ Erro no stream: ${data.type}`);
+            }
+          });
+          
+          videoRef.current.onplaying = () => {
+            setHlsStatus('connected');
+            setIsActive(true);
+            setStatus('monitoring');
+            setStatusMessage('📸 Capturando referência...');
+            
+            setTimeout(() => {
+              if (videoRef.current && canvasRef.current) {
+                const success = motionDetectorRef.current.captureReference(
+                  videoRef.current,
+                  canvasRef.current,
+                  loadVirtualArea() || getDefaultVirtualArea()
+                );
+                setHasReference(success);
+                if (success) {
+                  setStatusMessage('🟢 Monitorando (HLS fallback)...');
+                }
+              }
+            }, 1000);
+          };
+        } else {
+          throw new Error('Navegador não suporta HLS');
+        }
+        
         setActiveProtocol('hls');
         logger.log('✅ Fallback HLS conectado');
       } catch (hlsErr) {
@@ -1739,9 +1792,6 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         setStatus('error');
         setStatusMessage('❌ WHEP e HLS falharam');
       }
-      
-      // Restaurar URL original
-      setHlsUrlState(originalUrl);
     }
   }, [hlsUrl, detectProtocol, normalizeStreamUrl, startMonitoringHLS, stopMonitoring, connectWHEP, deriveHlsFromWhep, resetOCRState, resetOcrBuffer]);
   
