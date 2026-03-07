@@ -1605,9 +1605,9 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   const normalizeStreamUrl = useCallback((url: string): string => {
     try {
       const u = new URL(url);
-      // Se o usuário colou a URL do player (stream.html), converter para api/whep
+      // Se o usuário colou a URL do player (stream.html), converter para api/webrtc
       if (u.pathname.includes('stream.html')) {
-        u.pathname = '/api/whep';
+        u.pathname = '/api/webrtc';
         return u.toString();
       }
       return url;
@@ -1626,7 +1626,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       u.search = `?src=${srcParam}`;
       return u.toString();
     } catch {
-      return whepUrl.replace(/\/api\/whep/, '/api/stream.m3u8');
+      return whepUrl.replace(/\/api\/webrtc/, '/api/stream.m3u8');
     }
   }, []);
   
@@ -1645,7 +1645,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     }
     
     const protocol = detectProtocol(hlsUrl);
-    // Normalizar URL (stream.html → api/whep)
+    // Normalizar URL (stream.html → api/webrtc)
     const normalizedUrl = normalizeStreamUrl(hlsUrl);
     
     if (protocol === 'hls') {
