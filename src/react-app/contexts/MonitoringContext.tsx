@@ -25,10 +25,10 @@ import {
   getSensitivityConfig,
 } from '@/react-app/utils/motionDetection';
 
-export type SourceMode = 'webcam' | 'hls' | 'whep';
+export type SourceMode = 'webcam' | 'hls' | 'stream';
 export type MonitoringStatus = 'idle' | 'starting' | 'monitoring' | 'motion_detected' | 'processing' | 'error';
-export type WhepStatus = 'idle' | 'connecting' | 'connected' | 'error' | 'fallback_hls';
-export type StreamProtocol = 'none' | 'whep' | 'hls';
+export type WebRTCStatus = 'idle' | 'connecting' | 'connected' | 'error' | 'fallback_hls';
+export type StreamProtocol = 'none' | 'webrtc' | 'hls';
 export type ProcessingStage = 'idle' | 'capturing' | 'preprocessing' | 'ocr' | 'validating' | 'done';
 
 // Helpers para persistência de configurações HLS
@@ -45,7 +45,8 @@ export function saveHlsUrl(url: string): void {
 
 export function loadSourceMode(): SourceMode {
   const saved = localStorage.getItem(SOURCE_MODE_KEY);
-  if (saved === 'hls' || saved === 'whep') return saved;
+  if (saved === 'hls' || saved === 'stream') return saved;
+  if (saved === 'whep') return 'stream'; // migração legado
   return 'webcam';
 }
 
@@ -124,13 +125,13 @@ interface MonitoringContextType {
   selectedResolution: CameraResolution;
   setSelectedResolution: (resolution: CameraResolution) => void;
   
-  // HLS / WHEP
+   // HLS / WebRTC (go2rtc)
   sourceMode: SourceMode;
   setSourceMode: (mode: SourceMode) => void;
   hlsUrl: string;
   setHlsUrl: (url: string) => void;
   hlsStatus: 'idle' | 'connecting' | 'connected' | 'error';
-  whepStatus: WhepStatus;
+  webrtcStatus: WebRTCStatus;
   activeProtocol: StreamProtocol;
   
   // Refs
@@ -180,7 +181,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   const [sourceMode, setSourceModeState] = useState<SourceMode>(loadSourceMode());
   const [hlsUrl, setHlsUrlState] = useState<string>(loadHlsUrl());
   const [hlsStatus, setHlsStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
-  const [whepStatus, setWhepStatus] = useState<WhepStatus>('idle');
+  const [webrtcStatus, setWebRTCStatus] = useState<WebRTCStatus>('idle');
   const [activeProtocol, setActiveProtocol] = useState<StreamProtocol>('none');
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   
@@ -1441,7 +1442,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     setStatusMessage('Parado');
     setMotionPercent(0);
     setHlsStatus('idle');
-    setWhepStatus('idle');
+    setWebRTCStatus('idle');
     setActiveProtocol('none');
   }, []);
   
@@ -1557,8 +1558,8 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     }
   }, [hlsUrl, stopMonitoring, resetOCRState, resetOcrBuffer]);
   
-  // ========== WHEP (WebRTC) via go2rtc ==========
-  const connectWHEP = useCallback(async (url: string): Promise<MediaStream> => {
+  // ========== WebRTC via go2rtc ==========
+  const connectWebRTC = useCallback(async (url: string): Promise<MediaStream> => {
     const pc = new RTCPeerConnection({
       iceServers: [] // go2rtc local não precisa STUN
     });
@@ -1591,7 +1592,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         pc.close();
-        reject(new Error('WHEP timeout (5s)'));
+        reject(new Error('WebRTC timeout (5s)'));
       }, 5000);
       
       pc.ontrack = (e) => {
@@ -1602,13 +1603,13 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       pc.onconnectionstatechange = () => {
         if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
           clearTimeout(timeout);
-          reject(new Error(`WHEP connection ${pc.connectionState}`));
+          reject(new Error(`WebRTC connection ${pc.connectionState}`));
         }
       };
     });
   }, []);
   
-  // Normalizar URL do go2rtc (aceita stream.html, api/whep, etc.)
+  // Normalizar URL do go2rtc (aceita stream.html, api/webrtc, etc.)
   const normalizeStreamUrl = useCallback((url: string): string => {
     try {
       const u = new URL(url);
@@ -1623,24 +1624,24 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     }
   }, []);
   
-  // Derivar URL HLS a partir de URL WHEP (go2rtc porta única 1984)
-  const deriveHlsFromWhep = useCallback((whepUrl: string): string => {
+  // Derivar URL HLS a partir de URL WebRTC (go2rtc porta única 1984)
+  const deriveHlsFromWebRTC = useCallback((webrtcUrl: string): string => {
     try {
-      const u = new URL(whepUrl);
+      const u = new URL(webrtcUrl);
       const srcParam = u.searchParams.get('src') || 'camera1';
       // go2rtc: mesma porta para tudo, só muda o path
       u.pathname = '/api/stream.m3u8';
       u.search = `?src=${srcParam}`;
       return u.toString();
     } catch {
-      return whepUrl.replace(/\/api\/webrtc/, '/api/stream.m3u8');
+      return webrtcUrl.replace(/\/api\/webrtc/, '/api/stream.m3u8');
     }
   }, []);
   
   // Auto-detectar protocolo pela URL
-  const detectProtocol = useCallback((url: string): 'whep' | 'hls' => {
+  const detectProtocol = useCallback((url: string): 'webrtc' | 'hls' => {
     if (url.includes('.m3u8')) return 'hls';
-    return 'whep'; // Default: tenta WHEP primeiro
+    return 'webrtc'; // Default: tenta WebRTC primeiro
   }, []);
   
   // Iniciar monitoramento com auto-detecção de protocolo
@@ -1662,11 +1663,11 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       return;
     }
     
-    // Tentar WHEP primeiro
+    // Tentar WebRTC primeiro
     try {
       setStatus('starting');
       setStatusMessage('Conectando via WebRTC...');
-      setWhepStatus('connecting');
+      setWebRTCStatus('connecting');
       
       stopMonitoring();
       
@@ -1679,13 +1680,13 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       processingTimesRef.current = [];
       setProcessingInfo({
         stage: 'idle',
-        stageLabel: 'Conectando WHEP...',
+        stageLabel: 'Conectando WebRTC...',
         currentTimeMs: 0,
         lastOcrTimeMs: 0,
         avgTimeMs: 0,
       });
       
-      const stream = await connectWHEP(normalizedUrl);
+      const stream = await connectWebRTC(normalizedUrl);
       
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -1693,13 +1694,13 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       }
       
       streamRef.current = stream;
-      setWhepStatus('connected');
-      setActiveProtocol('whep');
+      setWebRTCStatus('connected');
+      setActiveProtocol('webrtc');
       setIsActive(true);
       setStatus('monitoring');
       setStatusMessage('📸 Capturando referência...');
       
-      logger.log('✅ WHEP conectado com sucesso (~200ms latência)');
+      logger.log('✅ WebRTC conectado com sucesso (~200ms latência)');
       
       // Capturar referência após stream estabilizar
       setTimeout(() => {
@@ -1725,11 +1726,11 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       }, 1000);
       
     } catch (e) {
-      logger.warn('⚠️ WHEP falhou, tentando fallback HLS:', e);
-      setWhepStatus('fallback_hls');
+      logger.warn('⚠️ WebRTC falhou, tentando fallback HLS:', e);
+      setWebRTCStatus('fallback_hls');
       
       // Derivar URL HLS a partir da URL normalizada (não do state)
-      const hlsFallbackUrl = deriveHlsFromWhep(normalizedUrl);
+      const hlsFallbackUrl = deriveHlsFromWebRTC(normalizedUrl);
       logger.log(`🔄 Fallback HLS: ${hlsFallbackUrl}`);
       
       try {
@@ -1748,6 +1749,9 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
             enableWorker: true,
             lowLatencyMode: true,
             backBufferLength: 30,
+            manifestLoadingMaxRetry: 2,
+            levelLoadingMaxRetry: 2,
+            fragLoadingMaxRetry: 2,
           });
           
           hlsRef.current = hls;
@@ -1759,11 +1763,14 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
           });
           
           hls.on(Hls.Events.ERROR, (_event, data) => {
-            logger.error('❌ HLS Error:', data);
+            logger.error('❌ HLS Fallback Error:', data);
             if (data.fatal) {
               setHlsStatus('error');
               setStatus('error');
-              setStatusMessage(`❌ Erro no stream: ${data.type}`);
+              setStatusMessage('❌ WebRTC e HLS falharam');
+              // Destruir HLS para parar retries infinitos
+              hls.destroy();
+              hlsRef.current = null;
             }
           });
           
@@ -1795,12 +1802,12 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         logger.log('✅ Fallback HLS conectado');
       } catch (hlsErr) {
         logger.error('❌ Fallback HLS também falhou:', hlsErr);
-        setWhepStatus('error');
+        setWebRTCStatus('error');
         setStatus('error');
-        setStatusMessage('❌ WHEP e HLS falharam');
+        setStatusMessage('❌ WebRTC e HLS falharam');
       }
     }
-  }, [hlsUrl, detectProtocol, normalizeStreamUrl, startMonitoringHLS, stopMonitoring, connectWHEP, deriveHlsFromWhep, resetOCRState, resetOcrBuffer]);
+  }, [hlsUrl, detectProtocol, normalizeStreamUrl, startMonitoringHLS, stopMonitoring, connectWebRTC, deriveHlsFromWebRTC, resetOCRState, resetOcrBuffer]);
   
   // Reconectar stream quando elemento de vídeo muda (navegação entre páginas)
   const reconnectStream = useCallback(() => {
@@ -1810,8 +1817,8 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     
     if (!video || !isActive) return;
     
-    // Para webcam ou WHEP: reconectar MediaStream
-    if ((sourceMode === 'webcam' || activeProtocol === 'whep') && stream) {
+    // Para webcam ou WebRTC: reconectar MediaStream
+    if ((sourceMode === 'webcam' || activeProtocol === 'webrtc') && stream) {
       if (video.srcObject !== stream) {
         logger.log('🔄 Reconectando stream ao elemento de vídeo...');
         video.srcObject = stream;
@@ -1866,7 +1873,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     hlsUrl,
     setHlsUrl,
     hlsStatus,
-    whepStatus,
+    webrtcStatus,
     activeProtocol,
     videoRef,
     canvasRef,
