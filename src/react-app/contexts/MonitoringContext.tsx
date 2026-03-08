@@ -1741,7 +1741,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
             if (webrtcRetryCountRef.current > MAX_WEBRTC_RETRIES) {
               logger.error('❌ WebRTC: máximo de tentativas excedido');
               setStatusMessage('❌ Conexão perdida permanentemente');
-              setWebRTCStatus('failed');
+              setWebRTCStatus('error');
               setStatus('error');
               return;
             }
