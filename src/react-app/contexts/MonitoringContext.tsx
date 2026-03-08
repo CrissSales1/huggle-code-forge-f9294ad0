@@ -1498,15 +1498,25 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
           videoRef.current?.play();
         });
         
+        let hlsErrorCount = 0;
         hls.on(Hls.Events.ERROR, (_event, data) => {
           logger.error('❌ HLS Error:', data);
           if (data.fatal) {
+            hls.destroy();
+            hlsRef.current = null;
             setHlsStatus('error');
             setStatus('error');
             setStatusMessage(`❌ Erro no stream: ${data.type}`);
-            // Destruir HLS para parar retries infinitos
-            hls.destroy();
-            hlsRef.current = null;
+          } else {
+            hlsErrorCount++;
+            if (hlsErrorCount >= 3) {
+              logger.warn('⚠️ HLS: muitos erros non-fatal, destruindo');
+              hls.destroy();
+              hlsRef.current = null;
+              setHlsStatus('error');
+              setStatus('error');
+              setStatusMessage('❌ Stream HLS instável');
+            }
           }
         });
         
@@ -1762,15 +1772,25 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
             videoRef.current?.play();
           });
           
+          let hlsFallbackErrorCount = 0;
           hls.on(Hls.Events.ERROR, (_event, data) => {
             logger.error('❌ HLS Fallback Error:', data);
             if (data.fatal) {
+              hls.destroy();
+              hlsRef.current = null;
               setHlsStatus('error');
               setStatus('error');
               setStatusMessage('❌ WebRTC e HLS falharam');
-              // Destruir HLS para parar retries infinitos
-              hls.destroy();
-              hlsRef.current = null;
+            } else {
+              hlsFallbackErrorCount++;
+              if (hlsFallbackErrorCount >= 3) {
+                logger.warn('⚠️ HLS Fallback: muitos erros non-fatal, destruindo');
+                hls.destroy();
+                hlsRef.current = null;
+                setHlsStatus('error');
+                setStatus('error');
+                setStatusMessage('❌ Stream HLS instável');
+              }
             }
           });
           
