@@ -1570,16 +1570,23 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     
+    // go2rtc /api/webrtc usa JSON (não WHEP raw SDP)
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/sdp' },
-      body: offer.sdp,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'offer',
+        sdp: offer.sdp,
+      }),
     });
     
-    if (!res.ok) throw new Error(`WHEP ${res.status}`);
+    if (!res.ok) throw new Error(`WebRTC ${res.status}`);
     
-    const answer = await res.text();
-    await pc.setRemoteDescription({ type: 'answer', sdp: answer });
+    const answerData = await res.json();
+    await pc.setRemoteDescription({
+      type: 'answer',
+      sdp: answerData.sdp || answerData,
+    });
     
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
