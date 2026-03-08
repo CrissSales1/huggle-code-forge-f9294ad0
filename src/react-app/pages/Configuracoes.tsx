@@ -1330,7 +1330,7 @@ export default function Configuracoes() {
       {/* Rodapé com versão */}
       <div className="mt-8 pt-4 border-t border-gray-200 text-center">
         <p className="text-xs text-gray-400">
-          Versão do Sistema: <span className="font-mono font-medium text-gray-500">1.2.5</span> <span className="text-emerald-500">(Cleanup WHEP → WebRTC + Fix HLS Retry)</span>
+          Versão do Sistema: <span className="font-mono font-medium text-gray-500">1.2.6</span> <span className="text-emerald-500">(Fix Infinite HLS Non-Fatal Retries)</span>
         </p>
       </div>
     </div>
