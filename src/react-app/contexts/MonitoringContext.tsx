@@ -184,6 +184,8 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   const [webrtcStatus, setWebRTCStatus] = useState<WebRTCStatus>('idle');
   const [activeProtocol, setActiveProtocol] = useState<StreamProtocol>('none');
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const webrtcRetryCountRef = useRef<number>(0);
+  const MAX_WEBRTC_RETRIES = 5;
   
   const [processingInfo, setProcessingInfo] = useState<ProcessingInfo>({
     stage: 'idle',
@@ -1717,6 +1719,44 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       setStatusMessage('📸 Capturando referência...');
       
       logger.log('✅ WebRTC conectado com sucesso (~200ms latência)');
+      webrtcRetryCountRef.current = 0; // Reset retry counter on success
+      
+      // Monitorar conexão WebRTC continuamente (como webcam faz naturalmente)
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.onconnectionstatechange = () => {
+          const state = peerConnectionRef.current?.connectionState;
+          if (state === 'disconnected' || state === 'failed') {
+            logger.warn(`⚠️ WebRTC ${state} - reconectando...`);
+            setStatusMessage(`⚠️ Conexão perdida, reconectando...`);
+            setWebRTCStatus('connecting');
+            
+            // Limpar PeerConnection antigo
+            if (peerConnectionRef.current) {
+              peerConnectionRef.current.onconnectionstatechange = null;
+              peerConnectionRef.current.close();
+              peerConnectionRef.current = null;
+            }
+            
+            webrtcRetryCountRef.current += 1;
+            if (webrtcRetryCountRef.current > MAX_WEBRTC_RETRIES) {
+              logger.error('❌ WebRTC: máximo de tentativas excedido');
+              setStatusMessage('❌ Conexão perdida permanentemente');
+              setWebRTCStatus('error');
+              setStatus('error');
+              return;
+            }
+            
+            const delay = webrtcRetryCountRef.current * 3000; // backoff: 3s, 6s, 9s...
+            logger.log(`🔄 Reconectando em ${delay / 1000}s (tentativa ${webrtcRetryCountRef.current}/${MAX_WEBRTC_RETRIES})...`);
+            
+            setTimeout(() => {
+              if (isActiveRef.current) {
+                startMonitoringStream();
+              }
+            }, delay);
+          }
+        };
+      }
       
       // Capturar referência após stream estabilizar
       setTimeout(() => {
