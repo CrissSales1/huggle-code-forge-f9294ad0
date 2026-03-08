@@ -1505,6 +1505,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
           logger.error('❌ HLS Error:', data);
           if (data.fatal) {
             hlsDestroyed = true;
+            hls.stopLoad();
             hls.destroy();
             hlsRef.current = null;
             setHlsStatus('error');
@@ -1515,6 +1516,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
             if (hlsErrorCount >= 3) {
               hlsDestroyed = true;
               logger.warn('⚠️ HLS: muitos erros non-fatal, destruindo');
+              hls.stopLoad();
               hls.destroy();
               hlsRef.current = null;
               setHlsStatus('error');
@@ -1783,6 +1785,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
             logger.error('❌ HLS Fallback Error:', data);
             if (data.fatal) {
               hlsFallbackDestroyed = true;
+              hls.stopLoad();
               hls.destroy();
               hlsRef.current = null;
               setHlsStatus('error');
@@ -1793,6 +1796,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
               if (hlsFallbackErrorCount >= 3) {
                 hlsFallbackDestroyed = true;
                 logger.warn('⚠️ HLS Fallback: muitos erros non-fatal, destruindo');
+                hls.stopLoad();
                 hls.destroy();
                 hlsRef.current = null;
                 setHlsStatus('error');
