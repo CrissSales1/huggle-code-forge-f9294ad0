@@ -1484,6 +1484,9 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
           enableWorker: true,
           lowLatencyMode: true,
           backBufferLength: 30,
+          manifestLoadingMaxRetry: 2,
+          levelLoadingMaxRetry: 2,
+          fragLoadingMaxRetry: 2,
         });
         
         hlsRef.current = hls;
@@ -1501,12 +1504,9 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
             setHlsStatus('error');
             setStatus('error');
             setStatusMessage(`❌ Erro no stream: ${data.type}`);
-            
-            setTimeout(() => {
-              if (hlsRef.current && isActiveRef.current) {
-                hls.startLoad();
-              }
-            }, 5000);
+            // Destruir HLS para parar retries infinitos
+            hls.destroy();
+            hlsRef.current = null;
           }
         });
         
