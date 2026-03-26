@@ -1330,7 +1330,7 @@ export default function Configuracoes() {
       {/* Rodapé com versão */}
       <div className="mt-8 pt-4 border-t border-gray-200 text-center">
         <p className="text-xs text-gray-400">
-          Versão do Sistema: <span className="font-mono font-medium text-gray-500">1.4.2</span> <span className="text-emerald-500">(Charset Filter)</span>
+          Versão do Sistema: <span className="font-mono font-medium text-gray-500">1.5.0</span> <span className="text-emerald-500">(MJPEG Direct Detection)</span>
         </p>
       </div>
     </div>
