@@ -103,6 +103,44 @@ export function detectObjects(
 }
 
 /**
+ * Detecta objetos em um HTMLImageElement (para streams MJPEG)
+ * Usa detectForVideo com timestamp — MediaPipe aceita HTMLImageElement como input
+ */
+export function detectObjectsFromImage(
+  img: HTMLImageElement,
+  timestampMs: number
+): ObjectDetection[] {
+  if (!detector) return [];
+
+  const vw = img.naturalWidth;
+  const vh = img.naturalHeight;
+  if (vw === 0 || vh === 0) return [];
+
+  try {
+    const results = detector.detectForVideo(img as unknown as HTMLVideoElement, timestampMs);
+    if (!results.detections) return [];
+
+    return results.detections
+      .filter(d => d.categories?.[0] && d.boundingBox)
+      .map(d => {
+        const bb = d.boundingBox!;
+        return {
+          x: bb.originX,
+          y: bb.originY,
+          width: bb.width,
+          height: bb.height,
+          confidence: d.categories![0].score,
+          centerX: (bb.originX + bb.width / 2) / vw,
+          centerY: (bb.originY + bb.height / 2) / vh,
+          category: d.categories![0].categoryName,
+        };
+      });
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Filtra detecções por categorias
  */
 export function filterByCategories(

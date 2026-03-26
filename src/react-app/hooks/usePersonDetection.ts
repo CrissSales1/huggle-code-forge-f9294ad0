@@ -1,13 +1,15 @@
 /**
  * Hook para detecção contínua de pessoas em área virtual
  * Usa MediaPipe ObjectDetector + isPointInPolygon
- * v1.3.0
+ * Aceita HTMLVideoElement (webcam) ou HTMLImageElement (MJPEG)
+ * v1.4.0
  */
 
 import { useRef, useState, useCallback, useEffect } from 'react';
 import {
   initObjectDetector,
   detectObjects,
+  detectObjectsFromImage,
   filterByCategories,
   PERSON_CATEGORIES,
   type ObjectDetection,
@@ -17,6 +19,8 @@ import { playNotificationSound, unlockAudioContext } from '@/react-app/utils/not
 
 // Re-export for backward compat
 export type PersonDetection = ObjectDetection;
+
+export type DetectionSource = HTMLVideoElement | HTMLImageElement;
 
 export interface PersonDetectionState {
   isLoading: boolean;
@@ -49,14 +53,14 @@ export function usePersonDetection(options: UsePersonDetectionOptions = {}) {
     error: null,
   });
 
-  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const sourceRef = useRef<DetectionSource | null>(null);
   const areaRef = useRef<Point[]>([]);
   const intervalRef = useRef<number | null>(null);
   const lastAlertRef = useRef(0);
   const detectingRef = useRef(false);
 
-  const setVideo = useCallback((video: HTMLVideoElement | null) => {
-    videoRef.current = video;
+  const setVideo = useCallback((source: DetectionSource | null) => {
+    sourceRef.current = source;
   }, []);
 
   const setArea = useCallback((points: Point[]) => {
@@ -64,11 +68,25 @@ export function usePersonDetection(options: UsePersonDetectionOptions = {}) {
   }, []);
 
   const processFrame = useCallback(() => {
-    const video = videoRef.current;
-    if (!video || video.readyState < 2) return;
+    const source = sourceRef.current;
+    if (!source) return;
+
+    // Check readiness based on element type
+    if (source instanceof HTMLVideoElement) {
+      if (source.readyState < 2) return;
+    } else if (source instanceof HTMLImageElement) {
+      if (!source.complete || source.naturalWidth === 0) return;
+    }
 
     const timestampMs = performance.now();
-    const allDetections = detectObjects(video, timestampMs);
+
+    let allDetections: ObjectDetection[];
+    if (source instanceof HTMLVideoElement) {
+      allDetections = detectObjects(source, timestampMs);
+    } else {
+      allDetections = detectObjectsFromImage(source as HTMLImageElement, timestampMs);
+    }
+
     const allPersons = filterByCategories(allDetections, PERSON_CATEGORIES);
     const area = areaRef.current;
 
@@ -138,7 +156,6 @@ export function usePersonDetection(options: UsePersonDetectionOptions = {}) {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
-      // Don't dispose detector here - it's a shared singleton
     };
   }, []);
 
