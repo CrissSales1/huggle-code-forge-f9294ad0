@@ -1,46 +1,67 @@
 
 
-# Plano: Filtragem de Charset no Decoder CTC (v1.4.2)
+# Plano: Suporte a Câmera IP (MJPEG/HTTPS) na Vigilância
 
-## Objetivo
+## Problema
 
-Mascarar logits de caracteres irrelevantes (467 de 504) no decoder CTC, forçando 100% da probabilidade para os ~37 caracteres válidos de placas brasileiras (A-Z, 0-9 + blank).
+O `<video>` HTML não consegue reproduzir streams MJPEG diretamente (`video.src = mjpegUrl` falha com `NotSupportedError`). MJPEG funciona apenas com `<img>`. O hook `usePersonDetection` espera um `HTMLVideoElement`.
+
+## Solução
+
+Usar um `<img>` para receber o MJPEG e um canvas oculto + `captureStream()` para alimentar o `<video>` com frames, mantendo o pipeline de detecção intacto.
+
+```text
+MJPEG URL ──► <img> (renderiza stream) 
+                │
+                ├──► canvas (desenha frames a 15fps)
+                │       │
+                │       └──► captureStream() ──► <video>.srcObject
+                │                                    │
+                │                                    └──► usePersonDetection (inalterado)
+                │
+                └──► Exibido ao usuário (visível)
+```
 
 ## Mudanças
 
-### 1. `src/react-app/workers/plateProcessor.worker.ts`
+### `src/react-app/pages/Vigilancia.tsx`
 
-**Adicionar variável global** (após linha 90, junto aos estados ONNX):
-```typescript
-let validIndices: Set<number> = new Set();
-```
+1. **Adicionar refs**: `imgRef` (para o `<img>` MJPEG) e `mjpegCanvasRef` (canvas oculto de ponte).
 
-**Criar função `buildValidIndices`** (após `loadCharset`):
-- Itera o `charset` e marca como válidos apenas índices cujo caractere está em `A-Z`, `0-9`, ou é o blank token (índice 0).
+2. **Modificar `startCamera`** (linhas 80-104): No bloco `else if (ipUrl)`:
+   - Criar `<img>` com `src = ipUrl` (crossOrigin="anonymous")
+   - No evento `onload` do img, iniciar um `setInterval` a ~15fps que:
+     - Desenha o img no canvas oculto
+     - Na primeira iteração, chama `canvas.captureStream(15)` e seta `video.srcObject = stream`
+   - Chamar `video.play()` e `setVideo(video)`
 
-**Chamar `buildValidIndices()`** ao final de `initONNX()` (após linha 225, depois de `onnxReady = true`).
+3. **Modificar `stopCamera`**: Limpar o interval do MJPEG e remover o img.
 
-**Modificar `decodeCTC`** (linhas 367-370):
-- Ao construir o array de logits, setar `-Infinity` para índices fora de `validIndices`:
-```typescript
-logits.push(validIndices.has(c) ? output[t * numClasses + c] : -Infinity);
-```
+4. **No JSX**: Adicionar `<canvas>` oculto para a ponte MJPEG. Para IP mode, mostrar o `<img>` visível no lugar do `<video>` (ou manter o video com o captureStream).
 
-**Modificar `decodeCTCBeam`** (linhas 450-453 e 470-475):
-- Mesma máscara de logits na construção do array.
-- No loop de candidatos, filtrar apenas `validIndices`:
-```typescript
-if (validIndices.has(c) && c < charset.length && charset[c] !== '') {
-```
+5. **Adicionar estado** `isMjpeg` para controlar qual elemento é visível.
 
-### 2. `src/react-app/pages/Configuracoes.tsx`
+### Alternativa mais simples (recomendada)
 
-- Linha 1333: Atualizar versão para `1.4.2` com nota `(Charset Filter)`.
+Em vez de `captureStream`, modificar `usePersonDetection` para aceitar `HTMLVideoElement | HTMLImageElement`:
 
-## Impacto
+- `setVideo` aceita `HTMLVideoElement | HTMLImageElement`
+- `processFrame`: se for `<img>`, fazer `detectObjects(img, ...)` — MediaPipe aceita `HTMLImageElement` como input
+- `readyState` check: para img, verificar `img.complete && img.naturalWidth > 0`
 
-- Beam Search opera em ~37 candidatos em vez de ~504 por timestep
-- Elimina alucinações com caracteres exóticos (ñ, €, ψ, etc.)
-- Confiança calibrada sobe 20-40% por concentração de probabilidade
-- Nenhuma mudança no modelo ou dict.txt
+Isso evita o canvas intermediário e é mais eficiente.
+
+## Arquivos
+
+| Arquivo | Ação |
+|---------|------|
+| `src/react-app/hooks/usePersonDetection.ts` | Aceitar `HTMLImageElement` além de `HTMLVideoElement` |
+| `src/react-app/pages/Vigilancia.tsx` | Usar `<img>` para IP/MJPEG, passar ao hook |
+
+## Detalhes técnicos
+
+- O `<img>` com src MJPEG atualiza automaticamente (o browser faz o streaming)
+- MediaPipe `ObjectDetector.detect()` aceita `HTMLImageElement` nativamente
+- O overlay canvas de bounding boxes usa `img.naturalWidth/Height` em vez de `video.videoWidth/Height`
+- Para o desenho da área virtual, usar dimensões do `<img>` quando em modo MJPEG
 
