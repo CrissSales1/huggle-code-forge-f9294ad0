@@ -279,7 +279,7 @@ export default function Vigilancia() {
 
     animId = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(animId);
-  }, [areaPoints, drawingPoints, isDrawingArea, personsInArea, allPersons, draggingPoint]);
+  }, [areaPoints, drawingPoints, isDrawingArea, personsInArea, allPersons, draggingPoint, isMjpeg]);
 
   // Handlers para desenhar/arrastar área
   const getRelativePos = (e: React.MouseEvent | React.TouchEvent): Point | null => {
