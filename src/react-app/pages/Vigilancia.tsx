@@ -204,21 +204,23 @@ export default function Vigilancia() {
   const cooldownLabel = COOLDOWN_OPTIONS.find(o => o.value === config.cooldown)?.label ?? `${config.cooldown / 1000}s`;
 
   const statusInfo = isDetecting
-    ? { label: 'Monitorando', color: 'text-green-600', bg: 'bg-green-50 border-green-200', dot: 'bg-green-500' }
+    ? { label: 'Monitorando', color: 'text-white', bg: 'bg-gradient-to-r from-blue-600 to-blue-700 border-blue-500', dot: 'bg-white' }
     : cameraStarted
-      ? { label: 'Câmera ligada', color: 'text-yellow-600', bg: 'bg-yellow-50 border-yellow-200', dot: 'bg-yellow-500' }
-      : { label: 'Desligado', color: 'text-gray-500', bg: 'bg-gray-50 border-gray-200', dot: 'bg-gray-400' };
+      ? { label: 'Câmera ligada', color: 'text-yellow-700', bg: 'bg-gradient-to-r from-yellow-50 to-amber-50 border-yellow-300', dot: 'bg-yellow-500' }
+      : { label: 'Desligado', color: 'text-gray-500', bg: 'bg-gradient-to-r from-gray-50 to-gray-100 border-gray-300', dot: 'bg-gray-400' };
 
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 pt-2">
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <Shield className="w-5 h-5 text-primary" />
+          <div className="p-1.5 bg-blue-600 rounded-lg">
+            <Shield className="w-4 h-4 text-white" />
+          </div>
           <h2 className="text-lg font-bold text-foreground">Vigilância</h2>
           {isDetecting && (
-            <span className="flex items-center gap-1 bg-green-100 text-green-700 text-xs font-medium px-2 py-0.5 rounded-full">
-              <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+            <span className="flex items-center gap-1 bg-blue-100 text-blue-700 text-xs font-medium px-2 py-0.5 rounded-full">
+              <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
               Ativo
             </span>
           )}
@@ -233,7 +235,7 @@ export default function Vigilancia() {
 
       {/* Alerta visual — acima do grid */}
       {personsInArea.length > 0 && (
-        <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3 animate-pulse">
+        <div className="mb-3 p-3 bg-gradient-to-r from-red-50 to-red-100 border border-red-300 rounded-xl flex items-center gap-3 animate-pulse shadow-md shadow-red-100">
           <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0" />
           <div>
             <p className="font-bold text-red-700 text-sm">
@@ -465,12 +467,12 @@ export default function Vigilancia() {
         {/* Coluna direita — Painel informativo */}
         <div className="flex flex-col gap-3">
           {/* Status do sistema */}
-          <div className={`rounded-xl border p-4 ${statusInfo.bg}`}>
+          <div className={`rounded-xl border p-4 shadow-sm ${statusInfo.bg}`}>
             <div className="flex items-center gap-2 mb-1">
               <span className={`w-2.5 h-2.5 rounded-full ${statusInfo.dot} ${isDetecting ? 'animate-pulse' : ''}`} />
               <span className={`font-semibold text-sm ${statusInfo.color}`}>{statusInfo.label}</span>
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className={`text-xs ${isDetecting ? 'text-blue-100' : 'text-muted-foreground'}`}>
               {isDetecting
                 ? 'O sistema está monitorando a área em tempo real.'
                 : cameraStarted
@@ -480,28 +482,49 @@ export default function Vigilancia() {
           </div>
 
           {/* Última movimentação */}
-          <div className="rounded-xl border border-border bg-card p-4">
+          <div className="rounded-xl border border-blue-200 bg-gradient-to-br from-white to-blue-50 p-4 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center gap-2 mb-2">
-              <Eye className="w-4 h-4 text-muted-foreground" />
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Última movimentação</span>
+              <Eye className="w-4 h-4 text-blue-600" />
+              <span className="text-xs font-medium text-blue-600 uppercase tracking-wide">Última movimentação</span>
             </div>
             <p className="text-lg font-bold text-foreground">
               {formatTimeSince(lastAlertTime)}
             </p>
           </div>
 
-          {/* Horário de alertas */}
-          <div className="rounded-xl border border-border bg-card p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Volume2 className="w-4 h-4 text-muted-foreground" />
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Alertas sonoros</span>
+          {/* Alertas sonoros — com toggle de agendamento */}
+          <div className="rounded-xl border border-blue-200 bg-gradient-to-br from-white to-blue-50 p-4 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Volume2 className="w-4 h-4 text-orange-500" />
+                <span className="text-xs font-medium text-orange-600 uppercase tracking-wide">Alertas sonoros</span>
+              </div>
+              <button
+                onClick={() => updateConfig({ alertScheduleEnabled: !config.alertScheduleEnabled })}
+                className={`relative w-10 h-5 rounded-full transition-colors ${config.alertScheduleEnabled ? 'bg-blue-600' : 'bg-gray-300'}`}
+                title={config.alertScheduleEnabled ? 'Desativar agendamento' : 'Ativar agendamento'}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${config.alertScheduleEnabled ? 'translate-x-5' : ''}`} />
+              </button>
             </div>
             {config.alertScheduleEnabled ? (
               <div>
-                <p className="text-sm font-semibold text-foreground">
-                  {config.alertStartTime} → {config.alertEndTime}
-                </p>
-                <p className="text-xs text-muted-foreground mt-0.5">Horário agendado</p>
+                <div className="flex items-center gap-2 mt-2">
+                  <input
+                    type="time"
+                    value={config.alertStartTime}
+                    onChange={e => updateConfig({ alertStartTime: e.target.value })}
+                    className="text-sm border border-blue-200 rounded-lg px-2 py-1 bg-white text-foreground w-24"
+                  />
+                  <span className="text-blue-400 text-sm">→</span>
+                  <input
+                    type="time"
+                    value={config.alertEndTime}
+                    onChange={e => updateConfig({ alertEndTime: e.target.value })}
+                    className="text-sm border border-blue-200 rounded-lg px-2 py-1 bg-white text-foreground w-24"
+                  />
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1.5">Alertas sonoros apenas neste horário</p>
               </div>
             ) : (
               <p className="text-sm text-foreground font-semibold">Sempre ativo</p>
@@ -509,10 +532,10 @@ export default function Vigilancia() {
           </div>
 
           {/* Cooldown */}
-          <div className="rounded-xl border border-border bg-card p-4">
+          <div className="rounded-xl border border-blue-200 bg-gradient-to-br from-white to-blue-50 p-4 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center gap-2 mb-2">
-              <Clock className="w-4 h-4 text-muted-foreground" />
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Cooldown</span>
+              <Clock className="w-4 h-4 text-green-600" />
+              <span className="text-xs font-medium text-green-600 uppercase tracking-wide">Cooldown</span>
             </div>
             <p className="text-lg font-bold text-foreground">{cooldownLabel}</p>
             <p className="text-xs text-muted-foreground">Intervalo entre alertas</p>
@@ -523,7 +546,7 @@ export default function Vigilancia() {
             {!cameraStarted ? (
               <button
                 onClick={startVigilancia}
-                className="flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2.5 rounded-lg transition-colors text-sm font-medium w-full"
+                className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-4 py-2.5 rounded-xl transition-all text-sm font-medium w-full shadow-md shadow-blue-200"
               >
                 <Play className="w-4 h-4" /> Iniciar Vigilância
               </button>
@@ -533,7 +556,7 @@ export default function Vigilancia() {
                   <button
                     onClick={startVigilancia}
                     disabled={isLoading}
-                    className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white px-4 py-2.5 rounded-lg transition-colors text-sm font-medium w-full"
+                    className="flex items-center justify-center gap-2 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 disabled:from-green-400 disabled:to-green-400 text-white px-4 py-2.5 rounded-xl transition-all text-sm font-medium w-full shadow-md shadow-green-200"
                   >
                     <Shield className="w-4 h-4" />
                     {isLoading ? 'Carregando...' : 'Iniciar Detecção'}
@@ -541,14 +564,14 @@ export default function Vigilancia() {
                 ) : (
                   <button
                     onClick={stopVigilancia}
-                    className="flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-lg transition-colors text-sm font-medium w-full"
+                    className="flex items-center justify-center gap-2 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white px-4 py-2.5 rounded-xl transition-all text-sm font-medium w-full shadow-md shadow-red-200"
                   >
                     <Square className="w-4 h-4" /> Parar Detecção
                   </button>
                 )}
                 <button
                   onClick={stopVigilancia}
-                  className="flex items-center justify-center gap-2 bg-muted hover:bg-accent text-foreground px-4 py-2 rounded-lg transition-colors text-sm border border-border w-full"
+                  className="flex items-center justify-center gap-2 bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-xl transition-colors text-sm border border-gray-300 w-full"
                 >
                   <EyeOff className="w-4 h-4" /> Desligar Câmera
                 </button>
