@@ -1,22 +1,12 @@
 /**
- * Página de Vigilância - Detecção de Pessoas com MediaPipe
- * v1.3.0
+ * Página de Vigilância - Consome VigilanciaContext
+ * v1.6.0 — Background + Persistência + Agendamento
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Shield, Play, Square, Camera, Maximize2, AlertTriangle, User, Settings, RotateCcw } from 'lucide-react';
-import { usePersonDetection } from '@/react-app/hooks/usePersonDetection';
+import { Shield, Play, Square, Camera, Maximize2, AlertTriangle, User, Settings, RotateCcw, Clock } from 'lucide-react';
+import { useVigilancia } from '@/react-app/contexts/VigilanciaContext';
 import { type Point } from '@/react-app/utils/motionDetection';
-// v1.4.0: Uses objectDetector.ts under the hood via usePersonDetection
-
-type CameraSource = 'webcam' | 'ip';
-
-const DEFAULT_AREA: Point[] = [
-  { x: 0.15, y: 0.15 },
-  { x: 0.85, y: 0.15 },
-  { x: 0.85, y: 0.85 },
-  { x: 0.15, y: 0.85 },
-];
 
 const COOLDOWN_OPTIONS = [
   { value: 5000, label: '5s' },
@@ -25,141 +15,45 @@ const COOLDOWN_OPTIONS = [
   { value: 60000, label: '1min' },
 ];
 
+const DEFAULT_AREA: Point[] = [
+  { x: 0.15, y: 0.15 },
+  { x: 0.85, y: 0.15 },
+  { x: 0.85, y: 0.85 },
+  { x: 0.15, y: 0.85 },
+];
+
 export default function Vigilancia() {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const imgRef = useRef<HTMLImageElement>(null);
-
-  const [cameraSource, setCameraSource] = useState<CameraSource>('webcam');
-  const [ipUrl, setIpUrl] = useState('');
-  const [cameraStarted, setCameraStarted] = useState(false);
-  const [isMjpeg, setIsMjpeg] = useState(false);
-  const [areaPoints, setAreaPoints] = useState<Point[]>(DEFAULT_AREA);
-  const [isDrawingArea, setIsDrawingArea] = useState(false);
-  const [drawingPoints, setDrawingPoints] = useState<Point[]>([]);
-  const [cooldown, setCooldown] = useState(10000);
-  const [showSettings, setShowSettings] = useState(false);
-  const [selectedDeviceId, setSelectedDeviceId] = useState('');
-  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
-  const [draggingPoint, setDraggingPoint] = useState<number | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-
+  const vig = useVigilancia();
   const {
+    config,
+    updateConfig,
     isLoading,
     isDetecting,
     personsInArea,
     allPersons,
     lastAlertTime,
     error,
-    setVideo,
-    setArea,
-    startDetection,
-    stopDetection,
-  } = usePersonDetection({ cooldownMs: cooldown });
+    videoRef,
+    imgRef,
+    canvasRef,
+    startVigilancia,
+    stopVigilancia,
+    devices,
+    isMjpeg,
+    cameraStarted,
+  } = vig;
 
-  // Listar câmeras disponíveis
-  useEffect(() => {
-    navigator.mediaDevices?.enumerateDevices().then(devs => {
-      const videoDevs = devs.filter(d => d.kind === 'videoinput');
-      setDevices(videoDevs);
-      if (videoDevs.length > 0 && !selectedDeviceId) {
-        setSelectedDeviceId(videoDevs[0].deviceId);
-      }
-    });
-  }, []);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  // Manter área sincronizada com o hook
-  useEffect(() => {
-    setArea(areaPoints);
-  }, [areaPoints, setArea]);
-
-  // Helpers para limpar bridge MJPEG
-  const cleanupMjpeg = useCallback(() => {
-    if (imgRef.current) {
-      imgRef.current.src = '';
-    }
-    setIsMjpeg(false);
-  }, []);
-
-  // Iniciar câmera
-  const startCamera = useCallback(async () => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    try {
-      if (cameraSource === 'webcam') {
-        const constraints: MediaStreamConstraints = {
-          video: {
-            deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-        };
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        streamRef.current = stream;
-        video.srcObject = stream;
-        await video.play();
-        setIsMjpeg(false);
-      } else if (ipUrl) {
-        // MJPEG: pass <img> directly to detection hook (no canvas bridge, no CORS issues)
-        setIsMjpeg(true);
-        const img = imgRef.current;
-        if (!img) return;
-
-        img.src = ipUrl;
-
-        // Wait for first frame to load
-        await new Promise<void>((resolve, reject) => {
-          const timeout = setTimeout(() => reject(new Error('Timeout ao conectar ao stream MJPEG')), 15000);
-          img.onload = () => { clearTimeout(timeout); resolve(); };
-          img.onerror = () => { clearTimeout(timeout); reject(new Error('Erro ao conectar ao stream MJPEG')); };
-        });
-
-        setCameraStarted(true);
-        setVideo(img); // Pass img directly — hook accepts HTMLImageElement
-        return;
-      }
-
-      setCameraStarted(true);
-      setVideo(video);
-    } catch (err) {
-      console.error('Erro ao iniciar câmera:', err);
-      cleanupMjpeg();
-      alert('Erro ao acessar a câmera. Verifique as permissões e a URL.');
-    }
-  }, [cameraSource, selectedDeviceId, ipUrl, setVideo, cleanupMjpeg]);
-
-  // Parar câmera
-  const stopCamera = useCallback(() => {
-    stopDetection();
-    cleanupMjpeg();
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
-      streamRef.current = null;
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-      videoRef.current.src = '';
-    }
-    setCameraStarted(false);
-  }, [stopDetection, cleanupMjpeg]);
-
-  // Cleanup
-  useEffect(() => {
-    return () => {
-      cleanupMjpeg();
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(t => t.stop());
-      }
-    };
-  }, [cleanupMjpeg]);
+  const [isDrawingArea, setIsDrawingArea] = useState(false);
+  const [drawingPoints, setDrawingPoints] = useState<Point[]>([]);
+  const [showSettings, setShowSettings] = useState(false);
+  const [draggingPoint, setDraggingPoint] = useState<number | null>(null);
 
   // Desenhar overlay no canvas
   useEffect(() => {
     const canvas = canvasRef.current;
-    const video = videoRef.current;
-    if (!canvas || !video) return;
+    if (!canvas) return;
 
     let animId: number;
     const draw = () => {
@@ -167,7 +61,7 @@ export default function Vigilancia() {
       if (!ctx) return;
 
       const container = containerRef.current;
-      if (!container) return;
+      if (!container) { animId = requestAnimationFrame(draw); return; }
 
       const rect = container.getBoundingClientRect();
       canvas.width = rect.width;
@@ -177,9 +71,9 @@ export default function Vigilancia() {
       const w = canvas.width;
       const h = canvas.height;
 
-      // Desenhar área virtual
-      const points = isDrawingArea ? drawingPoints : areaPoints;
-      if (points.length >= 2) {
+      // Desenhar área virtual (only if showDetectionArea or drawing)
+      const points = isDrawingArea ? drawingPoints : config.areaPoints;
+      if ((config.showDetectionArea || isDrawingArea) && points.length >= 2) {
         ctx.beginPath();
         ctx.moveTo(points[0].x * w, points[0].y * h);
         for (let i = 1; i < points.length; i++) {
@@ -189,21 +83,16 @@ export default function Vigilancia() {
           ctx.closePath();
         }
 
-        // Preenchimento
         const hasAlert = personsInArea.length > 0;
-        ctx.fillStyle = hasAlert
-          ? 'rgba(239, 68, 68, 0.25)'
-          : 'rgba(59, 130, 246, 0.15)';
+        ctx.fillStyle = hasAlert ? 'rgba(239, 68, 68, 0.25)' : 'rgba(59, 130, 246, 0.15)';
         ctx.fill();
 
-        // Borda
         ctx.strokeStyle = hasAlert ? '#ef4444' : '#3b82f6';
         ctx.lineWidth = 2;
         ctx.setLineDash(hasAlert ? [] : [8, 4]);
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // Pontos arrastáveis
         points.forEach((p, i) => {
           ctx.beginPath();
           ctx.arc(p.x * w, p.y * h, 6, 0, Math.PI * 2);
@@ -215,10 +104,9 @@ export default function Vigilancia() {
         });
       }
 
-      // Desenhar bounding boxes de pessoas
-      // Use img dimensions for MJPEG, video dimensions for webcam
-      const sourceW = isMjpeg && imgRef.current ? imgRef.current.naturalWidth : video.videoWidth;
-      const sourceH = isMjpeg && imgRef.current ? imgRef.current.naturalHeight : video.videoHeight;
+      // Bounding boxes
+      const sourceW = isMjpeg && imgRef.current ? imgRef.current.naturalWidth : (videoRef.current?.videoWidth ?? 0);
+      const sourceH = isMjpeg && imgRef.current ? imgRef.current.naturalHeight : (videoRef.current?.videoHeight ?? 0);
       if (sourceW > 0) {
         const scaleX = w / sourceW;
         const scaleY = h / sourceH;
@@ -234,7 +122,6 @@ export default function Vigilancia() {
           ctx.lineWidth = 2;
           ctx.strokeRect(bx, by, bw, bh);
 
-          // Label
           const label = `Pessoa ${Math.round(person.confidence * 100)}%`;
           ctx.font = '12px sans-serif';
           const textW = ctx.measureText(label).width;
@@ -250,18 +137,16 @@ export default function Vigilancia() {
 
     animId = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(animId);
-  }, [areaPoints, drawingPoints, isDrawingArea, personsInArea, allPersons, draggingPoint, isMjpeg]);
+  }, [config.areaPoints, config.showDetectionArea, drawingPoints, isDrawingArea, personsInArea, allPersons, draggingPoint, isMjpeg, canvasRef, imgRef, videoRef]);
 
   // Handlers para desenhar/arrastar área
-  const getRelativePos = (e: React.MouseEvent | React.TouchEvent): Point | null => {
+  const getRelativePos = (e: React.MouseEvent): Point | null => {
     const container = containerRef.current;
     if (!container) return null;
     const rect = container.getBoundingClientRect();
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
     return {
-      x: Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)),
-      y: Math.max(0, Math.min(1, (clientY - rect.top) / rect.height)),
+      x: Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)),
+      y: Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height)),
     };
   };
 
@@ -271,11 +156,10 @@ export default function Vigilancia() {
 
     if (isDrawingArea) {
       if (drawingPoints.length >= 2) {
-        // Fechar se clicar perto do primeiro ponto
         const first = drawingPoints[0];
         const dist = Math.sqrt((pos.x - first.x) ** 2 + (pos.y - first.y) ** 2);
         if (dist < 0.04 && drawingPoints.length >= 3) {
-          setAreaPoints([...drawingPoints]);
+          updateConfig({ areaPoints: [...drawingPoints] });
           setIsDrawingArea(false);
           setDrawingPoints([]);
           return;
@@ -285,11 +169,8 @@ export default function Vigilancia() {
       return;
     }
 
-    // Verificar se clicou em um ponto existente para arrastar
-    const container = containerRef.current;
-    if (!container) return;
-    for (let i = 0; i < areaPoints.length; i++) {
-      const dist = Math.sqrt((pos.x - areaPoints[i].x) ** 2 + (pos.y - areaPoints[i].y) ** 2);
+    for (let i = 0; i < config.areaPoints.length; i++) {
+      const dist = Math.sqrt((pos.x - config.areaPoints[i].x) ** 2 + (pos.y - config.areaPoints[i].y) ** 2);
       if (dist < 0.03) {
         setDraggingPoint(i);
         return;
@@ -301,23 +182,13 @@ export default function Vigilancia() {
     if (draggingPoint === null) return;
     const pos = getRelativePos(e);
     if (!pos) return;
-    setAreaPoints(prev => prev.map((p, i) => (i === draggingPoint ? pos : p)));
+    updateConfig({ areaPoints: config.areaPoints.map((p, i) => (i === draggingPoint ? pos : p)) });
   };
 
-  const handlePointerUp = () => {
-    setDraggingPoint(null);
-  };
+  const handlePointerUp = () => setDraggingPoint(null);
 
-  const startDrawingArea = () => {
-    setIsDrawingArea(true);
-    setDrawingPoints([]);
-  };
-
-  const resetArea = () => {
-    setAreaPoints(DEFAULT_AREA);
-    setIsDrawingArea(false);
-    setDrawingPoints([]);
-  };
+  const startDrawingArea = () => { setIsDrawingArea(true); setDrawingPoints([]); };
+  const resetArea = () => { updateConfig({ areaPoints: DEFAULT_AREA }); setIsDrawingArea(false); setDrawingPoints([]); };
 
   const timeSinceAlert = lastAlertTime ? Math.round((Date.now() - lastAlertTime) / 1000) : null;
 
@@ -365,26 +236,26 @@ export default function Vigilancia() {
             <label className="text-xs text-gray-500 block mb-1">Fonte da câmera</label>
             <div className="flex gap-2">
               <button
-                onClick={() => setCameraSource('webcam')}
-                className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${cameraSource === 'webcam' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                onClick={() => updateConfig({ cameraSource: 'webcam' })}
+                className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${config.cameraSource === 'webcam' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
               >
                 <Camera className="w-4 h-4 inline mr-1" /> Webcam
               </button>
               <button
-                onClick={() => setCameraSource('ip')}
-                className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${cameraSource === 'ip' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                onClick={() => updateConfig({ cameraSource: 'ip' })}
+                className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${config.cameraSource === 'ip' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
               >
                 IP / URL
               </button>
             </div>
           </div>
 
-          {cameraSource === 'webcam' && devices.length > 1 && (
+          {config.cameraSource === 'webcam' && devices.length > 1 && (
             <div>
               <label className="text-xs text-gray-500 block mb-1">Câmera</label>
               <select
-                value={selectedDeviceId}
-                onChange={e => setSelectedDeviceId(e.target.value)}
+                value={config.selectedDeviceId}
+                onChange={e => updateConfig({ selectedDeviceId: e.target.value })}
                 className="w-full text-sm border border-gray-300 rounded-lg px-3 py-1.5"
               >
                 {devices.map(d => (
@@ -396,13 +267,13 @@ export default function Vigilancia() {
             </div>
           )}
 
-          {cameraSource === 'ip' && (
+          {config.cameraSource === 'ip' && (
             <div>
               <label className="text-xs text-gray-500 block mb-1">URL do stream</label>
               <input
                 type="text"
-                value={ipUrl}
-                onChange={e => setIpUrl(e.target.value)}
+                value={config.ipUrl}
+                onChange={e => updateConfig({ ipUrl: e.target.value })}
                 placeholder="http://192.168.1.100:8080/video"
                 className="w-full text-sm border border-gray-300 rounded-lg px-3 py-1.5"
               />
@@ -415,13 +286,69 @@ export default function Vigilancia() {
               {COOLDOWN_OPTIONS.map(opt => (
                 <button
                   key={opt.value}
-                  onClick={() => setCooldown(opt.value)}
-                  className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${cooldown === opt.value ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                  onClick={() => updateConfig({ cooldown: opt.value })}
+                  className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${config.cooldown === opt.value ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
                 >
                   {opt.label}
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Mostrar/ocultar área */}
+          <div className="flex items-center justify-between">
+            <label className="text-xs text-gray-500">Mostrar área de detecção</label>
+            <button
+              onClick={() => updateConfig({ showDetectionArea: !config.showDetectionArea })}
+              className={`relative w-10 h-5 rounded-full transition-colors ${config.showDetectionArea ? 'bg-blue-600' : 'bg-gray-300'}`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${config.showDetectionArea ? 'translate-x-5' : ''}`} />
+            </button>
+          </div>
+
+          {/* Agendamento de alertas */}
+          <div className="border-t border-gray-100 pt-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Clock className="w-4 h-4 text-gray-500" />
+                <label className="text-xs text-gray-500">Agendar alertas sonoros</label>
+              </div>
+              <button
+                onClick={() => updateConfig({ alertScheduleEnabled: !config.alertScheduleEnabled })}
+                className={`relative w-10 h-5 rounded-full transition-colors ${config.alertScheduleEnabled ? 'bg-blue-600' : 'bg-gray-300'}`}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${config.alertScheduleEnabled ? 'translate-x-5' : ''}`} />
+              </button>
+            </div>
+
+            {config.alertScheduleEnabled && (
+              <>
+                <p className="text-[10px] text-gray-400">
+                  Alertas sonoros apenas no horário definido. Ideal para porteiros noturnos.
+                </p>
+                <div className="flex items-center gap-2">
+                  <div>
+                    <label className="text-[10px] text-gray-400 block">Início</label>
+                    <input
+                      type="time"
+                      value={config.alertStartTime}
+                      onChange={e => updateConfig({ alertStartTime: e.target.value })}
+                      className="text-sm border border-gray-300 rounded-lg px-2 py-1"
+                    />
+                  </div>
+                  <span className="text-gray-400 mt-3">→</span>
+                  <div>
+                    <label className="text-[10px] text-gray-400 block">Fim</label>
+                    <input
+                      type="time"
+                      value={config.alertEndTime}
+                      onChange={e => updateConfig({ alertEndTime: e.target.value })}
+                      className="text-sm border border-gray-300 rounded-lg px-2 py-1"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -441,35 +368,31 @@ export default function Vigilancia() {
           muted
           className={`w-full h-full object-contain ${isMjpeg ? 'hidden' : ''}`}
         />
-        {/* Single stable img element — visibility toggled via CSS to keep ref stable */}
         <img
           ref={imgRef}
           alt="Stream MJPEG"
           className={`w-full h-full object-contain ${isMjpeg ? '' : 'hidden'}`}
         />
-        {/* Overlay canvas */}
         <canvas
           ref={canvasRef}
           className="absolute inset-0 w-full h-full"
           style={{ cursor: isDrawingArea ? 'crosshair' : draggingPoint !== null ? 'grabbing' : 'default' }}
         />
 
-        {/* Overlay quando câmera não iniciada */}
         {!cameraStarted && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 text-white">
             <Camera className="w-12 h-12 text-gray-400 mb-3" />
-            <p className="text-gray-400 text-sm mb-4">Inicie a câmera para começar</p>
+            <p className="text-gray-400 text-sm mb-4">Inicie a vigilância para começar</p>
             <button
-              onClick={startCamera}
+              onClick={startVigilancia}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
             >
               <Play className="w-4 h-4" />
-              Iniciar Câmera
+              Iniciar Vigilância
             </button>
           </div>
         )}
 
-        {/* Loading do modelo */}
         {isLoading && (
           <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-60">
             <div className="text-center text-white">
@@ -480,7 +403,6 @@ export default function Vigilancia() {
           </div>
         )}
 
-        {/* Info overlay */}
         {cameraStarted && isDetecting && (
           <div className="absolute top-3 left-3 flex flex-col gap-1">
             <span className="bg-black bg-opacity-60 text-white text-xs px-2 py-1 rounded">
@@ -495,7 +417,6 @@ export default function Vigilancia() {
           </div>
         )}
 
-        {/* Instrução de desenho */}
         {isDrawingArea && (
           <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black bg-opacity-70 text-white text-xs px-3 py-2 rounded-lg">
             Clique para adicionar pontos. Clique no primeiro ponto para fechar a área ({drawingPoints.length} pontos).
@@ -507,16 +428,16 @@ export default function Vigilancia() {
       <div className="flex flex-wrap gap-2 mb-4">
         {!cameraStarted ? (
           <button
-            onClick={startCamera}
+            onClick={startVigilancia}
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors text-sm"
           >
-            <Play className="w-4 h-4" /> Iniciar Câmera
+            <Play className="w-4 h-4" /> Iniciar Vigilância
           </button>
         ) : (
           <>
             {!isDetecting ? (
               <button
-                onClick={startDetection}
+                onClick={startVigilancia}
                 disabled={isLoading}
                 className="flex items-center gap-2 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white px-4 py-2 rounded-lg transition-colors text-sm"
               >
@@ -525,7 +446,7 @@ export default function Vigilancia() {
               </button>
             ) : (
               <button
-                onClick={stopDetection}
+                onClick={stopVigilancia}
                 className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors text-sm"
               >
                 <Square className="w-4 h-4" /> Parar
@@ -548,16 +469,15 @@ export default function Vigilancia() {
             </button>
 
             <button
-              onClick={stopCamera}
+              onClick={stopVigilancia}
               className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg transition-colors text-sm border border-gray-300"
             >
-              <Square className="w-4 h-4" /> Desligar Câmera
+              <Square className="w-4 h-4" /> Desligar
             </button>
           </>
         )}
       </div>
 
-      {/* Erro */}
       {error && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
           <AlertTriangle className="w-4 h-4 inline mr-2" />
@@ -565,7 +485,6 @@ export default function Vigilancia() {
         </div>
       )}
 
-      {/* Status */}
       {isDetecting && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="bg-white rounded-lg border border-gray-200 p-3 text-center">
@@ -579,7 +498,7 @@ export default function Vigilancia() {
             <p className="text-xs text-gray-500">Na Área Monitorada</p>
           </div>
           <div className="bg-white rounded-lg border border-gray-200 p-3 text-center">
-            <p className="text-2xl font-bold text-gray-800">{areaPoints.length}</p>
+            <p className="text-2xl font-bold text-gray-800">{config.areaPoints.length}</p>
             <p className="text-xs text-gray-500">Pontos da Área</p>
           </div>
           <div className="bg-white rounded-lg border border-gray-200 p-3 text-center">
