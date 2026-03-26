@@ -162,6 +162,7 @@ export default function Vigilancia() {
   // Parar câmera
   const stopCamera = useCallback(() => {
     stopDetection();
+    cleanupMjpegBridge();
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
@@ -171,16 +172,17 @@ export default function Vigilancia() {
       videoRef.current.src = '';
     }
     setCameraStarted(false);
-  }, [stopDetection]);
+  }, [stopDetection, cleanupMjpegBridge]);
 
   // Cleanup
   useEffect(() => {
     return () => {
+      cleanupMjpegBridge();
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(t => t.stop());
       }
     };
-  }, []);
+  }, [cleanupMjpegBridge]);
 
   // Desenhar overlay no canvas
   useEffect(() => {
