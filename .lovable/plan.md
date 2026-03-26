@@ -1,38 +1,66 @@
 
 
-# Plano: Vigilancia com cores e agendamento corrigido (v1.7.1)
+# Plano: Remover motos e corrigir Smart Crop (v1.7.2)
 
-## Problemas identificados
+## Problema
 
-1. **Sem cores**: Os cards do painel lateral usam `bg-card border-border` (branco/cinza generico). O resto do app usa azul (`from-blue-600 to-blue-800`, `bg-blue-600`). A pagina ficou sem identidade visual.
-2. **Agendamento nao clicavel**: O toggle "Agendar alertas sonoros" esta dentro do painel de configuracoes (`showSettings`), que so aparece ao clicar na engrenagem. Na screenshot, ele aparece como texto estatico no painel de settings, nao como botao interativo separado.
+1. **Motos disparam OCR**: `VEHICLE_CATEGORIES` inclui `motorcycle`, que aciona o pipeline de leitura de placas. O usuário quer ignorar motos.
+2. **Clock capturado como placa**: Quando o veículo dispara OCR, o sistema captura a **area poligonal inteira** (`captureAreaFromVideo`), que inclui o relogio sobreposto no topo do video. O YOLO detecta o texto do relogio como se fosse placa.
 
 ## Solucao
 
-### 1. Adicionar cores do sistema ao painel lateral
+### 1. Remover `motorcycle` das categorias de veiculos
 
-- **Card de Status**: Usar gradiente azul quando ativo (`bg-gradient-to-r from-blue-600 to-blue-700 text-white`), manter verde/amarelo/cinza para estados
-- **Cards informativos**: Adicionar borda azul sutil (`border-blue-200`), icones em azul (`text-blue-600`) em vez de `text-muted-foreground`
-- **Botao Iniciar**: Ja usa `bg-primary`, mas reforcar com gradiente azul (`bg-gradient-to-r from-blue-600 to-blue-700`)
-- **Header da pagina**: Adicionar um mini-banner azul ou manter o icone Shield em azul forte
+**Arquivo**: `src/react-app/utils/objectDetector.ts` (linha 22)
 
-### 2. Tornar "Agendar alertas sonoros" acessivel fora das configuracoes
+```typescript
+// Antes
+export const VEHICLE_CATEGORIES = ['car', 'truck', 'bus', 'motorcycle'];
 
-- Mover o toggle de agendamento para o card "Alertas Sonoros" no painel lateral direito
-- Clicar no card ou no toggle alterna `alertScheduleEnabled`
-- Quando ativado, mostrar os inputs de horario inline no card
-- Manter uma copia simplificada nas configuracoes tambem
+// Depois
+export const VEHICLE_CATEGORIES = ['car', 'truck', 'bus'];
+```
 
-### 3. Melhorar visual geral
+### 2. Smart Crop: recortar a partir do bounding box do veiculo
 
-- Cards com `hover:shadow-md` para dar mais vida
-- Icones coloridos (azul, verde, laranja) em vez de todos cinza
-- Status "Monitorando" com fundo azul gradiente + texto branco (mais impactante)
+**Arquivo**: `src/react-app/contexts/MonitoringContext.tsx`
 
-## Arquivo modificado
+Em `processFrameForOCR` (linha 788-792), em vez de capturar a area poligonal inteira, usar o bounding box do veiculo detectado (`vehicleBBox`) para recortar apenas a regiao do veiculo com margem de 15%. Isso elimina o relogio e outros artefatos fora do veiculo.
+
+```typescript
+// Antes: captura area poligonal inteira
+const capturedCanvas = captureAreaFromVideo(videoRef.current, virtualArea);
+
+// Depois: Smart Crop — recorta bounding box do veiculo com margem
+const vbb = vehicleBBoxRef.current; // precisamos de um ref
+let capturedCanvas: HTMLCanvasElement;
+
+if (vbb) {
+  // Crop ao redor do veiculo com 15% de margem
+  capturedCanvas = cropVehicleRegion(videoRef.current, vbb, 0.15);
+} else {
+  // Fallback: area poligonal completa
+  capturedCanvas = captureAreaFromVideo(videoRef.current, virtualArea);
+}
+```
+
+Criar funcao helper `cropVehicleRegion` em `motionDetection.ts`:
+- Recebe video, ObjectDetection (com x, y, width, height em pixels), e margem
+- Calcula regiao com margem clamped aos limites do video
+- Retorna canvas recortado
+
+Adicionar `vehicleBBoxRef` (useRef) sincronizado com `vehicleBBox` state para acesso sincrono no callback.
+
+### 3. Versao
+
+**Arquivo**: `src/react-app/pages/Configuracoes.tsx` → `1.7.2`
+
+## Arquivos modificados
 
 | Arquivo | Mudanca |
 |---------|---------|
-| `src/react-app/pages/Vigilancia.tsx` | Cores azuis nos cards, agendamento interativo no painel lateral |
-| `src/react-app/pages/Configuracoes.tsx` | Versao 1.7.1 |
+| `src/react-app/utils/objectDetector.ts` | Remover `motorcycle` de VEHICLE_CATEGORIES |
+| `src/react-app/utils/motionDetection.ts` | Nova funcao `cropVehicleRegion` |
+| `src/react-app/contexts/MonitoringContext.tsx` | Smart Crop usando vehicleBBox + vehicleBBoxRef |
+| `src/react-app/pages/Configuracoes.tsx` | Versao 1.7.2 |
 
