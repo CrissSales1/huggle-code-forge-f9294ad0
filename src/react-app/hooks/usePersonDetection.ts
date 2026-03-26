@@ -1,8 +1,8 @@
 /**
  * Hook para detecção contínua de pessoas em área virtual
  * Usa MediaPipe ObjectDetector + isPointInPolygon
- * Aceita HTMLVideoElement (webcam) ou HTMLImageElement (MJPEG)
- * v1.4.0
+ * Aceita HTMLVideoElement, HTMLImageElement, ou HTMLCanvasElement
+ * v1.6.1 — Canvas support + heartbeat logging
  */
 
 import { useRef, useState, useCallback, useEffect } from 'react';
@@ -10,6 +10,7 @@ import {
   initObjectDetector,
   detectObjects,
   detectObjectsFromImage,
+  detectObjectsFromCanvas,
   filterByCategories,
   PERSON_CATEGORIES,
   type ObjectDetection,
@@ -20,7 +21,7 @@ import { playNotificationSound, unlockAudioContext } from '@/react-app/utils/not
 // Re-export for backward compat
 export type PersonDetection = ObjectDetection;
 
-export type DetectionSource = HTMLVideoElement | HTMLImageElement;
+export type DetectionSource = HTMLVideoElement | HTMLImageElement | HTMLCanvasElement;
 
 export interface PersonDetectionState {
   isLoading: boolean;
@@ -32,9 +33,9 @@ export interface PersonDetectionState {
 }
 
 interface UsePersonDetectionOptions {
-  cooldownMs?: number;        // Cooldown entre alertas (default 10s)
-  intervalMs?: number;        // Intervalo de detecção (default 300ms)
-  soundEnabled?: boolean;     // Tocar som no alerta
+  cooldownMs?: number;
+  intervalMs?: number;
+  soundEnabled?: boolean;
 }
 
 export function usePersonDetection(options: UsePersonDetectionOptions = {}) {
@@ -58,6 +59,7 @@ export function usePersonDetection(options: UsePersonDetectionOptions = {}) {
   const intervalRef = useRef<number | null>(null);
   const lastAlertRef = useRef(0);
   const detectingRef = useRef(false);
+  const frameCountRef = useRef(0);
 
   const setVideo = useCallback((source: DetectionSource | null) => {
     sourceRef.current = source;
@@ -76,6 +78,8 @@ export function usePersonDetection(options: UsePersonDetectionOptions = {}) {
       if (source.readyState < 2) return;
     } else if (source instanceof HTMLImageElement) {
       if (!source.complete || source.naturalWidth === 0) return;
+    } else if (source instanceof HTMLCanvasElement) {
+      if (source.width === 0 || source.height === 0) return;
     }
 
     const timestampMs = performance.now();
@@ -83,8 +87,17 @@ export function usePersonDetection(options: UsePersonDetectionOptions = {}) {
     let allDetections: ObjectDetection[];
     if (source instanceof HTMLVideoElement) {
       allDetections = detectObjects(source, timestampMs);
+    } else if (source instanceof HTMLCanvasElement) {
+      allDetections = detectObjectsFromCanvas(source, timestampMs);
     } else {
       allDetections = detectObjectsFromImage(source as HTMLImageElement, timestampMs);
+    }
+
+    // Heartbeat log every 30 frames
+    frameCountRef.current++;
+    if (frameCountRef.current % 30 === 0) {
+      const sourceType = source instanceof HTMLVideoElement ? 'video' : source instanceof HTMLCanvasElement ? 'canvas' : 'img';
+      console.log(`💓 Vigilância heartbeat: frame #${frameCountRef.current}, source=${sourceType}, detections=${allDetections.length}`);
     }
 
     const allPersons = filterByCategories(allDetections, PERSON_CATEGORIES);
@@ -124,6 +137,7 @@ export function usePersonDetection(options: UsePersonDetectionOptions = {}) {
       unlockAudioContext();
       await initObjectDetector();
       detectingRef.current = true;
+      frameCountRef.current = 0;
 
       intervalRef.current = window.setInterval(processFrame, intervalMs);
 

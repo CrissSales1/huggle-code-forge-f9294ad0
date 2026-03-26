@@ -2,7 +2,7 @@
  * Detector de objetos genérico usando MediaPipe Vision ObjectDetector
  * Modelo EfficientDet-Lite baixado do CDN oficial (~4MB)
  * Detecta todas as 80 classes COCO - filtro por categoria no código
- * v1.4.0
+ * v1.6.1 — Added logging + canvas support
  */
 
 import { ObjectDetector, FilesetResolver } from '@mediapipe/tasks-vision';
@@ -53,7 +53,6 @@ export async function initObjectDetector(): Promise<ObjectDetector> {
       runningMode: 'VIDEO',
       maxResults: 20,
       scoreThreshold: 0.35,
-      // Sem categoryAllowlist - detecta tudo, filtra depois
     });
     console.log('✅ MediaPipe ObjectDetector pronto');
     return detector;
@@ -63,6 +62,30 @@ export async function initObjectDetector(): Promise<ObjectDetector> {
   } finally {
     isInitializing = false;
   }
+}
+
+/** Helper to map detections to ObjectDetection[] */
+function mapDetections(
+  results: ReturnType<ObjectDetector['detectForVideo']>,
+  sourceWidth: number,
+  sourceHeight: number
+): ObjectDetection[] {
+  if (!results.detections) return [];
+  return results.detections
+    .filter(d => d.categories?.[0] && d.boundingBox)
+    .map(d => {
+      const bb = d.boundingBox!;
+      return {
+        x: bb.originX,
+        y: bb.originY,
+        width: bb.width,
+        height: bb.height,
+        confidence: d.categories![0].score,
+        centerX: (bb.originX + bb.width / 2) / sourceWidth,
+        centerY: (bb.originY + bb.height / 2) / sourceHeight,
+        category: d.categories![0].categoryName,
+      };
+    });
 }
 
 /**
@@ -80,31 +103,15 @@ export function detectObjects(
 
   try {
     const results = detector.detectForVideo(video, timestampMs);
-    if (!results.detections) return [];
-
-    return results.detections
-      .filter(d => d.categories?.[0] && d.boundingBox)
-      .map(d => {
-        const bb = d.boundingBox!;
-        return {
-          x: bb.originX,
-          y: bb.originY,
-          width: bb.width,
-          height: bb.height,
-          confidence: d.categories![0].score,
-          centerX: (bb.originX + bb.width / 2) / vw,
-          centerY: (bb.originY + bb.height / 2) / vh,
-          category: d.categories![0].categoryName,
-        };
-      });
-  } catch {
+    return mapDetections(results, vw, vh);
+  } catch (err) {
+    console.warn('⚠️ detectObjects error:', err);
     return [];
   }
 }
 
 /**
  * Detecta objetos em um HTMLImageElement (para streams MJPEG)
- * Usa detectForVideo com timestamp — MediaPipe aceita HTMLImageElement como input
  */
 export function detectObjectsFromImage(
   img: HTMLImageElement,
@@ -118,24 +125,32 @@ export function detectObjectsFromImage(
 
   try {
     const results = detector.detectForVideo(img as unknown as HTMLVideoElement, timestampMs);
-    if (!results.detections) return [];
+    return mapDetections(results, vw, vh);
+  } catch (err) {
+    console.warn('⚠️ detectObjectsFromImage error (cross-origin?):', err);
+    return [];
+  }
+}
 
-    return results.detections
-      .filter(d => d.categories?.[0] && d.boundingBox)
-      .map(d => {
-        const bb = d.boundingBox!;
-        return {
-          x: bb.originX,
-          y: bb.originY,
-          width: bb.width,
-          height: bb.height,
-          confidence: d.categories![0].score,
-          centerX: (bb.originX + bb.width / 2) / vw,
-          centerY: (bb.originY + bb.height / 2) / vh,
-          category: d.categories![0].categoryName,
-        };
-      });
-  } catch {
+/**
+ * Detecta objetos em um HTMLCanvasElement (para MJPEG via canvas intermediário)
+ * Evita problemas de cross-origin WebGL com imagens tainted
+ */
+export function detectObjectsFromCanvas(
+  canvas: HTMLCanvasElement,
+  timestampMs: number
+): ObjectDetection[] {
+  if (!detector) return [];
+
+  const vw = canvas.width;
+  const vh = canvas.height;
+  if (vw === 0 || vh === 0) return [];
+
+  try {
+    const results = detector.detectForVideo(canvas as unknown as HTMLVideoElement, timestampMs);
+    return mapDetections(results, vw, vh);
+  } catch (err) {
+    console.warn('⚠️ detectObjectsFromCanvas error:', err);
     return [];
   }
 }

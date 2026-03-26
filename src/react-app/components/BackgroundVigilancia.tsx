@@ -1,8 +1,9 @@
 /**
  * Renderiza vídeo/img oculto para manter detecção de pessoas ativa
  * quando fora da página /vigilancia
+ * v1.6.1 — Guard ref to prevent reconnect spam
  */
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router';
 import { useVigilancia } from '@/react-app/contexts/VigilanciaContext';
 
@@ -10,11 +11,23 @@ export default function BackgroundVigilancia() {
   const { videoRef, imgRef, canvasRef, isActive, isMjpeg, reconnectSource } = useVigilancia();
   const location = useLocation();
   const isOnPage = location.pathname === '/vigilancia';
+  const hasReconnectedRef = useRef(false);
+
+  // Reset guard when returning to the page
+  useEffect(() => {
+    if (isOnPage) {
+      hasReconnectedRef.current = false;
+    }
+  }, [isOnPage]);
 
   useEffect(() => {
-    if (!isOnPage && isActive) {
-      console.log('🔄 BackgroundVigilancia: reconectando stream em segundo plano');
-      reconnectSource();
+    if (!isOnPage && isActive && !hasReconnectedRef.current) {
+      hasReconnectedRef.current = true;
+      const timer = setTimeout(() => {
+        console.log('🔄 BackgroundVigilancia: reconectando stream em segundo plano (once)');
+        reconnectSource();
+      }, 150);
+      return () => clearTimeout(timer);
     }
   }, [isOnPage, isActive, reconnectSource]);
 

@@ -1,6 +1,6 @@
 /**
  * Contexto global de Vigilância — mantém detecção ativa ao navegar entre páginas
- * v1.6.0 — Background Vigilância + Persistência + Agendamento de Alertas
+ * v1.6.1 — Stable reconnect + MJPEG canvas fallback
  */
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import { usePersonDetection } from '@/react-app/hooks/usePersonDetection';
@@ -138,12 +138,21 @@ export function VigilanciaProvider({ children }: { children: React.ReactNode }) 
   const streamRef = useRef<MediaStream | null>(null);
   const configRef = useRef(config);
   configRef.current = config;
+  const statusRef = useRef(status);
+  statusRef.current = status;
+  const reconnectingRef = useRef(false);
+
+  // Hidden canvas for MJPEG → canvas → MediaPipe pipeline
+  const mjpegCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const mjpegDrawIntervalRef = useRef<number | null>(null);
 
   // Person detection hook — sound disabled here, we handle it with schedule logic
   const detection = usePersonDetection({
     cooldownMs: config.cooldown,
-    soundEnabled: false, // We handle sound ourselves for scheduling
+    soundEnabled: false,
   });
+  const detectionRef = useRef(detection);
+  detectionRef.current = detection;
 
   // Custom alert logic with schedule
   const lastCustomAlertRef = useRef(0);
@@ -165,7 +174,6 @@ export function VigilanciaProvider({ children }: { children: React.ReactNode }) 
   const updateConfig = useCallback((partial: Partial<VigilanciaConfig>) => {
     setConfigState(prev => {
       const next = { ...prev, ...partial };
-      // Persist each changed key
       if (partial.cameraSource !== undefined) lsSet(LS.CAMERA_SOURCE, next.cameraSource);
       if (partial.ipUrl !== undefined) lsSet(LS.IP_URL, next.ipUrl);
       if (partial.cooldown !== undefined) lsSet(LS.COOLDOWN, String(next.cooldown));
@@ -195,10 +203,35 @@ export function VigilanciaProvider({ children }: { children: React.ReactNode }) 
     });
   }, []);
 
+  /** Stop MJPEG canvas draw interval */
+  const stopMjpegDrawLoop = useCallback(() => {
+    if (mjpegDrawIntervalRef.current) {
+      clearInterval(mjpegDrawIntervalRef.current);
+      mjpegDrawIntervalRef.current = null;
+    }
+  }, []);
+
+  /** Start drawing MJPEG img to canvas continuously so MediaPipe can read it */
+  const startMjpegDrawLoop = useCallback((img: HTMLImageElement, canvas: HTMLCanvasElement) => {
+    stopMjpegDrawLoop();
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    mjpegDrawIntervalRef.current = window.setInterval(() => {
+      if (!img.complete || img.naturalWidth === 0) return;
+      if (canvas.width !== img.naturalWidth || canvas.height !== img.naturalHeight) {
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+      }
+      ctx.drawImage(img, 0, 0);
+    }, 100);
+  }, [stopMjpegDrawLoop]);
+
   const connectSource = useCallback(async () => {
     const video = videoRef.current;
     const img = imgRef.current;
     const cfg = configRef.current;
+    const det = detectionRef.current;
 
     if (cfg.cameraSource === 'webcam') {
       if (!video) return;
@@ -214,7 +247,8 @@ export function VigilanciaProvider({ children }: { children: React.ReactNode }) 
       video.srcObject = stream;
       await video.play();
       setIsMjpeg(false);
-      detection.setVideo(video);
+      stopMjpegDrawLoop();
+      det.setVideo(video);
     } else if (cfg.ipUrl && img) {
       setIsMjpeg(true);
       img.src = cfg.ipUrl;
@@ -223,26 +257,47 @@ export function VigilanciaProvider({ children }: { children: React.ReactNode }) 
         img.onload = () => { clearTimeout(timeout); resolve(); };
         img.onerror = () => { clearTimeout(timeout); reject(new Error('Erro MJPEG')); };
       });
-      detection.setVideo(img);
+
+      // Create hidden canvas for MJPEG → canvas pipeline (avoids cross-origin WebGL issues)
+      if (!mjpegCanvasRef.current) {
+        mjpegCanvasRef.current = document.createElement('canvas');
+      }
+      const canvas = mjpegCanvasRef.current;
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      if (ctx) ctx.drawImage(img, 0, 0);
+
+      // Start continuous draw loop
+      startMjpegDrawLoop(img, canvas);
+
+      // Pass canvas to detector instead of img
+      det.setVideo(canvas as unknown as HTMLVideoElement);
+      console.log('📷 MJPEG: usando canvas intermediário para detecção');
     }
     setCameraStarted(true);
-  }, [detection]);
+  }, [startMjpegDrawLoop, stopMjpegDrawLoop]);
+
+  // Stable ref for connectSource to avoid reconnectSource instability
+  const connectSourceRef = useRef(connectSource);
+  connectSourceRef.current = connectSource;
 
   const startVigilancia = useCallback(async () => {
-    if (status === 'active') return;
+    if (statusRef.current === 'active') return;
     try {
       unlockAudioContext();
-      await connectSource();
-      await detection.startDetection();
+      await connectSourceRef.current();
+      await detectionRef.current.startDetection();
       setStatus('active');
     } catch (err) {
       console.error('Erro ao iniciar vigilância:', err);
       alert('Erro ao iniciar vigilância. Verifique câmera/URL.');
     }
-  }, [status, connectSource, detection]);
+  }, []);
 
   const stopVigilancia = useCallback(() => {
-    detection.stopDetection();
+    detectionRef.current.stopDetection();
+    stopMjpegDrawLoop();
     if (imgRef.current) imgRef.current.src = '';
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop());
@@ -254,26 +309,33 @@ export function VigilanciaProvider({ children }: { children: React.ReactNode }) 
     setIsMjpeg(false);
     setCameraStarted(false);
     setStatus('idle');
-  }, [detection]);
+  }, [stopMjpegDrawLoop]);
 
   const reconnectSource = useCallback(() => {
-    if (status !== 'active') return;
-    // Re-assign source to refs after DOM re-mount
+    if (statusRef.current !== 'active') return;
+    if (reconnectingRef.current) return;
+    reconnectingRef.current = true;
+
     setTimeout(async () => {
       try {
-        await connectSource();
-      } catch { /* ignore */ }
+        await connectSourceRef.current();
+      } catch (err) {
+        console.warn('⚠️ Reconnect falhou:', err);
+      } finally {
+        reconnectingRef.current = false;
+      }
     }, 150);
-  }, [status, connectSource]);
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      stopMjpegDrawLoop();
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(t => t.stop());
       }
     };
-  }, []);
+  }, [stopMjpegDrawLoop]);
 
   return (
     <VigilanciaContext.Provider
