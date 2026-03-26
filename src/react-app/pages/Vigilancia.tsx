@@ -29,10 +29,14 @@ export default function Vigilancia() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const mjpegCanvasRef = useRef<HTMLCanvasElement>(null);
+  const mjpegIntervalRef = useRef<number | null>(null);
 
   const [cameraSource, setCameraSource] = useState<CameraSource>('webcam');
   const [ipUrl, setIpUrl] = useState('');
   const [cameraStarted, setCameraStarted] = useState(false);
+  const [isMjpeg, setIsMjpeg] = useState(false);
   const [areaPoints, setAreaPoints] = useState<Point[]>(DEFAULT_AREA);
   const [isDrawingArea, setIsDrawingArea] = useState(false);
   const [drawingPoints, setDrawingPoints] = useState<Point[]>([]);
