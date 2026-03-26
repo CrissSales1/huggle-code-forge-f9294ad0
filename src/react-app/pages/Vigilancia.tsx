@@ -453,8 +453,7 @@ export default function Vigilancia() {
         {!isMjpeg && (
           <img ref={imgRef} alt="" className="hidden" />
         )}
-        {/* Hidden canvas for MJPEG → video bridge */}
-        <canvas ref={mjpegCanvasRef} className="hidden" />
+        {/* Overlay canvas */}
         <canvas
           ref={canvasRef}
           className="absolute inset-0 w-full h-full"
