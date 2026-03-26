@@ -3,7 +3,7 @@
  * v1.6.0 — Background Vigilância + Persistência + Agendamento de Alertas
  */
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
-import { usePersonDetection, type DetectionSource } from '@/react-app/hooks/usePersonDetection';
+import { usePersonDetection } from '@/react-app/hooks/usePersonDetection';
 import { type Point } from '@/react-app/utils/motionDetection';
 import { playNotificationSound, unlockAudioContext } from '@/react-app/utils/notificationSounds';
 
