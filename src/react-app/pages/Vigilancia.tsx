@@ -233,18 +233,6 @@ export default function Vigilancia() {
         </button>
       </div>
 
-      {/* Alerta visual — acima do grid */}
-      {personsInArea.length > 0 && (
-        <div className="mb-3 p-3 bg-gradient-to-r from-red-50 to-red-100 border border-red-300 rounded-xl flex items-center gap-3 animate-pulse shadow-md shadow-red-100">
-          <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0" />
-          <div>
-            <p className="font-bold text-red-700 text-sm">
-              ⚠️ {personsInArea.length} pessoa(s) na área monitorada!
-            </p>
-            <p className="text-red-600 text-xs">Verifique a câmera imediatamente.</p>
-          </div>
-        </div>
-      )}
 
       {/* Settings panel */}
       {showSettings && (
@@ -466,6 +454,18 @@ export default function Vigilancia() {
 
         {/* Coluna direita — Painel informativo */}
         <div className="flex flex-col gap-3">
+          {/* Alerta visual — dentro do painel lateral */}
+          {personsInArea.length > 0 && (
+            <div className="p-3 bg-gradient-to-r from-red-50 to-red-100 border border-red-300 rounded-xl flex items-center gap-3 animate-pulse shadow-md shadow-red-100">
+              <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0" />
+              <div>
+                <p className="font-bold text-red-700 text-sm">
+                  ⚠️ {personsInArea.length} pessoa(s) na área!
+                </p>
+                <p className="text-red-600 text-xs">Verifique a câmera imediatamente.</p>
+              </div>
+            </div>
+          )}
           {/* Status do sistema */}
           <div className={`rounded-xl border p-4 shadow-sm ${statusInfo.bg}`}>
             <div className="flex items-center gap-2 mb-1">
