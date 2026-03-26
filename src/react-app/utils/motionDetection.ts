@@ -316,6 +316,38 @@ export function getPolygonPoints(area: VirtualArea): Point[] {
 }
 
 /**
+ * Captura a área virtual como canvas separado (standalone, suporta polígono)
+ * v1.4.0: Extraído de MotionDetector para uso independente
+ */
+export function captureAreaFromVideo(
+  video: HTMLVideoElement,
+  area: VirtualArea
+): HTMLCanvasElement {
+  const points = getPolygonPoints(area);
+  const bbox = getPolygonBoundingBox(points);
+  
+  const x = Math.floor(bbox.minX * video.videoWidth);
+  const y = Math.floor(bbox.minY * video.videoHeight);
+  const width = Math.floor((bbox.maxX - bbox.minX) * video.videoWidth);
+  const height = Math.floor((bbox.maxY - bbox.minY) * video.videoHeight);
+  
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, width);
+  canvas.height = Math.max(1, height);
+  
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (ctx) {
+    ctx.drawImage(
+      video,
+      x, y, width, height,
+      0, 0, canvas.width, canvas.height
+    );
+  }
+  
+  return canvas;
+}
+
+/**
  * Extrai pixels da área virtual de um canvas (suporta polígono)
  */
 function extractAreaPixels(

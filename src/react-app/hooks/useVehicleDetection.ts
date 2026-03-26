@@ -1,7 +1,7 @@
 /**
- * Hook para detecção contínua de pessoas em área virtual
- * Usa MediaPipe ObjectDetector + isPointInPolygon
- * v1.3.0
+ * Hook para detecção contínua de veículos em área virtual
+ * Usa MediaPipe ObjectDetector com filtro para categorias de veículos
+ * v1.4.0
  */
 
 import { useRef, useState, useCallback, useEffect } from 'react';
@@ -9,50 +9,37 @@ import {
   initObjectDetector,
   detectObjects,
   filterByCategories,
-  PERSON_CATEGORIES,
+  VEHICLE_CATEGORIES,
   type ObjectDetection,
 } from '@/react-app/utils/objectDetector';
 import { isPointInPolygon, type Point } from '@/react-app/utils/motionDetection';
-import { playNotificationSound, unlockAudioContext } from '@/react-app/utils/notificationSounds';
 
-// Re-export for backward compat
-export type PersonDetection = ObjectDetection;
-
-export interface PersonDetectionState {
+export interface VehicleDetectionState {
   isLoading: boolean;
   isDetecting: boolean;
-  personsInArea: ObjectDetection[];
-  allPersons: ObjectDetection[];
-  lastAlertTime: number;
+  vehiclesInArea: ObjectDetection[];
+  allVehicles: ObjectDetection[];
   error: string | null;
 }
 
-interface UsePersonDetectionOptions {
-  cooldownMs?: number;        // Cooldown entre alertas (default 10s)
+interface UseVehicleDetectionOptions {
   intervalMs?: number;        // Intervalo de detecção (default 300ms)
-  soundEnabled?: boolean;     // Tocar som no alerta
 }
 
-export function usePersonDetection(options: UsePersonDetectionOptions = {}) {
-  const {
-    cooldownMs = 10000,
-    intervalMs = 300,
-    soundEnabled = true,
-  } = options;
+export function useVehicleDetection(options: UseVehicleDetectionOptions = {}) {
+  const { intervalMs = 300 } = options;
 
-  const [state, setState] = useState<PersonDetectionState>({
+  const [state, setState] = useState<VehicleDetectionState>({
     isLoading: false,
     isDetecting: false,
-    personsInArea: [] as ObjectDetection[],
-    allPersons: [] as ObjectDetection[],
-    lastAlertTime: 0,
+    vehiclesInArea: [],
+    allVehicles: [],
     error: null,
   });
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const areaRef = useRef<Point[]>([]);
   const intervalRef = useRef<number | null>(null);
-  const lastAlertRef = useRef(0);
   const detectingRef = useRef(false);
 
   const setVideo = useCallback((video: HTMLVideoElement | null) => {
@@ -69,48 +56,35 @@ export function usePersonDetection(options: UsePersonDetectionOptions = {}) {
 
     const timestampMs = performance.now();
     const allDetections = detectObjects(video, timestampMs);
-    const allPersons = filterByCategories(allDetections, PERSON_CATEGORIES);
+    const allVehicles = filterByCategories(allDetections, VEHICLE_CATEGORIES);
     const area = areaRef.current;
 
-    let personsInArea: ObjectDetection[] = [];
+    let vehiclesInArea: ObjectDetection[] = [];
     if (area.length >= 3) {
-      personsInArea = allPersons.filter(p =>
-        isPointInPolygon(p.centerX, p.centerY, area)
+      vehiclesInArea = allVehicles.filter(v =>
+        isPointInPolygon(v.centerX, v.centerY, area)
       );
-    }
-
-    const now = Date.now();
-    const shouldAlert = personsInArea.length > 0 && (now - lastAlertRef.current > cooldownMs);
-
-    if (shouldAlert) {
-      lastAlertRef.current = now;
-      if (soundEnabled) {
-        playNotificationSound('desconhecido');
-      }
-      console.log(`🚨 Pessoa detectada na área! (${personsInArea.length} pessoa(s))`);
     }
 
     setState(prev => ({
       ...prev,
-      allPersons,
-      personsInArea,
-      lastAlertTime: shouldAlert ? now : prev.lastAlertTime,
+      allVehicles,
+      vehiclesInArea,
     }));
-  }, [cooldownMs, soundEnabled]);
+  }, []);
 
   const startDetection = useCallback(async () => {
     if (detectingRef.current) return;
 
     setState(prev => ({ ...prev, isLoading: true, error: null }));
     try {
-      unlockAudioContext();
       await initObjectDetector();
       detectingRef.current = true;
 
       intervalRef.current = window.setInterval(processFrame, intervalMs);
 
       setState(prev => ({ ...prev, isLoading: false, isDetecting: true }));
-      console.log('▶️ Detecção de pessoas iniciada');
+      console.log('▶️ Detecção de veículos iniciada');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erro ao inicializar detector';
       setState(prev => ({ ...prev, isLoading: false, error: msg }));
@@ -126,10 +100,10 @@ export function usePersonDetection(options: UsePersonDetectionOptions = {}) {
     setState(prev => ({
       ...prev,
       isDetecting: false,
-      personsInArea: [],
-      allPersons: [],
+      vehiclesInArea: [],
+      allVehicles: [],
     }));
-    console.log('⏹️ Detecção de pessoas parada');
+    console.log('⏹️ Detecção de veículos parada');
   }, []);
 
   // Cleanup on unmount
@@ -138,7 +112,7 @@ export function usePersonDetection(options: UsePersonDetectionOptions = {}) {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
-      // Don't dispose detector here - it's a shared singleton
+      // Don't dispose detector here - it's shared singleton
     };
   }, []);
 
