@@ -23,6 +23,7 @@ import {
   getPolygonPoints,
   isPointInPolygon,
   captureAreaFromVideo,
+  cropVehicleRegion,
 } from '@/react-app/utils/motionDetection';
 import {
   initObjectDetector,
@@ -786,11 +787,15 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     
     try {
       updateProcessingStage('capturing', 'Capturando frame...');
-      // v1.4.0: Usar captureAreaFromVideo standalone (sem MotionDetector)
-      const capturedCanvas = captureAreaFromVideo(
-        videoRef.current,
-        virtualArea
-      );
+      // v1.7.2: Smart Crop — usar bounding box do veículo se disponível
+      const vbb = vehicleBBoxRef.current;
+      let capturedCanvas: HTMLCanvasElement;
+
+      if (vbb) {
+        capturedCanvas = cropVehicleRegion(videoRef.current, vbb, 0.15);
+      } else {
+        capturedCanvas = captureAreaFromVideo(videoRef.current, virtualArea);
+      }
       
       updateProcessingStage('ocr', 'Executando OCR no Worker...');
       const result = await processPlateWorker(capturedCanvas, { 
@@ -1196,7 +1201,9 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     const hasVehicle = vehiclesInArea.length > 0;
     
     setVehicleDetected(hasVehicle);
-    setVehicleBBox(hasVehicle ? vehiclesInArea[0] : null);
+    const bestVehicle = hasVehicle ? vehiclesInArea[0] : null;
+    setVehicleBBox(bestVehicle);
+    vehicleBBoxRef.current = bestVehicle;
     
     if (hasVehicle) {
       noMotionCounterRef.current = 0;
