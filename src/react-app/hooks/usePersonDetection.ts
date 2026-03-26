@@ -93,13 +93,12 @@ export function usePersonDetection(options: UsePersonDetectionOptions = {}) {
       allDetections = detectObjectsFromImage(source as HTMLImageElement, timestampMs);
     }
 
-    // Log only when persons are detected
-    if (allDetections.length > 0) {
-      const sourceType = source instanceof HTMLVideoElement ? 'video' : source instanceof HTMLCanvasElement ? 'canvas' : 'img';
-      console.log(`👁️ Detecções: ${allDetections.length} objeto(s), source=${sourceType}`);
-    }
-
     const allPersons = filterByCategories(allDetections, PERSON_CATEGORIES);
+
+    if (allPersons.length > 0) {
+      const sourceType = source instanceof HTMLVideoElement ? 'video' : source instanceof HTMLCanvasElement ? 'canvas' : 'img';
+      console.log(`👁️ Pessoa(s) detectada(s): ${allPersons.length}, source=${sourceType}`);
+    }
     const area = areaRef.current;
 
     let personsInArea: ObjectDetection[] = [];
