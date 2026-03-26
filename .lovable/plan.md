@@ -1,67 +1,59 @@
 
 
-# Plano: Suporte a Câmera IP (MJPEG/HTTPS) na Vigilância
+# Plano: Eliminar Canvas Bridge, Suporte Direto a `<img>` MJPEG
 
-## Problema
+## Problema raiz
 
-O `<video>` HTML não consegue reproduzir streams MJPEG diretamente (`video.src = mjpegUrl` falha com `NotSupportedError`). MJPEG funciona apenas com `<img>`. O hook `usePersonDetection` espera um `HTMLVideoElement`.
+`img.crossOrigin = 'anonymous'` (linha 117 de Vigilancia.tsx) exige headers CORS no stream. O `flask_cors` não injeta headers em streaming responses `multipart/x-mixed-replace` de forma consistente. O canvas bridge também falha porque `drawImage()` num img cross-origin "tainta" o canvas.
 
 ## Solução
 
-Usar um `<img>` para receber o MJPEG e um canvas oculto + `captureStream()` para alimentar o `<video>` com frames, mantendo o pipeline de detecção intacto.
+Remover `crossOrigin`, eliminar o canvas bridge, e passar o `<img>` diretamente ao hook de detecção. MediaPipe `detectForVideo()` aceita `HTMLImageElement` como input nativo.
 
 ```text
-MJPEG URL ──► <img> (renderiza stream) 
+MJPEG URL ──► <img src="..."> (sem crossOrigin)
                 │
-                ├──► canvas (desenha frames a 15fps)
-                │       │
-                │       └──► captureStream() ──► <video>.srcObject
-                │                                    │
-                │                                    └──► usePersonDetection (inalterado)
-                │
-                └──► Exibido ao usuário (visível)
+                ├──► Exibido ao usuário (visível)
+                └──► usePersonDetection.processFrame(img, timestamp)
+                       └──► detectForVideo(img, ts) ← MediaPipe aceita img
 ```
 
 ## Mudanças
 
-### `src/react-app/pages/Vigilancia.tsx`
+### 1. `src/react-app/utils/objectDetector.ts`
 
-1. **Adicionar refs**: `imgRef` (para o `<img>` MJPEG) e `mjpegCanvasRef` (canvas oculto de ponte).
+Adicionar função `detectObjectsFromImage(source, timestampMs)` que aceita `HTMLImageElement`:
+- Usa o mesmo `detector.detectForVideo(source, timestampMs)` (API MediaPipe aceita ImageSource)
+- Usa `source.naturalWidth / naturalHeight` em vez de `videoWidth / videoHeight`
 
-2. **Modificar `startCamera`** (linhas 80-104): No bloco `else if (ipUrl)`:
-   - Criar `<img>` com `src = ipUrl` (crossOrigin="anonymous")
-   - No evento `onload` do img, iniciar um `setInterval` a ~15fps que:
-     - Desenha o img no canvas oculto
-     - Na primeira iteração, chama `canvas.captureStream(15)` e seta `video.srcObject = stream`
-   - Chamar `video.play()` e `setVideo(video)`
+### 2. `src/react-app/hooks/usePersonDetection.ts`
 
-3. **Modificar `stopCamera`**: Limpar o interval do MJPEG e remover o img.
+- Mudar tipo de `videoRef` para `HTMLVideoElement | HTMLImageElement | null`
+- Mudar `setVideo` para aceitar ambos os tipos
+- Em `processFrame`: verificar tipo do elemento:
+  - `HTMLVideoElement`: manter lógica atual (`readyState >= 2`)
+  - `HTMLImageElement`: verificar `img.complete && img.naturalWidth > 0`, chamar `detectObjectsFromImage()`
 
-4. **No JSX**: Adicionar `<canvas>` oculto para a ponte MJPEG. Para IP mode, mostrar o `<img>` visível no lugar do `<video>` (ou manter o video com o captureStream).
+### 3. `src/react-app/hooks/useVehicleDetection.ts`
 
-5. **Adicionar estado** `isMjpeg` para controlar qual elemento é visível.
+- Mesma adaptação do tipo para consistência (aceitar `HTMLImageElement`)
 
-### Alternativa mais simples (recomendada)
+### 4. `src/react-app/pages/Vigilancia.tsx`
 
-Em vez de `captureStream`, modificar `usePersonDetection` para aceitar `HTMLVideoElement | HTMLImageElement`:
+- **Remover** `crossOrigin = 'anonymous'` (linha 117)
+- **Remover** todo o canvas bridge (linhas 127-150): `mjpegCanvasRef`, `captureStream`, `setInterval`
+- **Simplificar** bloco IP/MJPEG no `startCamera`:
+  - Setar `img.src = ipUrl` (sem crossOrigin)
+  - Aguardar `img.onload`
+  - Chamar `setVideo(img)` passando o img diretamente
+  - Não precisa de `<video>` neste modo
+- **Remover** `<canvas ref={mjpegCanvasRef}>` do JSX
+- Overlay canvas continua funcionando (lê do `containerRef`, não do img)
 
-- `setVideo` aceita `HTMLVideoElement | HTMLImageElement`
-- `processFrame`: se for `<img>`, fazer `detectObjects(img, ...)` — MediaPipe aceita `HTMLImageElement` como input
-- `readyState` check: para img, verificar `img.complete && img.naturalWidth > 0`
+## Resultado
 
-Isso evita o canvas intermediário e é mais eficiente.
-
-## Arquivos
-
-| Arquivo | Ação |
-|---------|------|
-| `src/react-app/hooks/usePersonDetection.ts` | Aceitar `HTMLImageElement` além de `HTMLVideoElement` |
-| `src/react-app/pages/Vigilancia.tsx` | Usar `<img>` para IP/MJPEG, passar ao hook |
-
-## Detalhes técnicos
-
-- O `<img>` com src MJPEG atualiza automaticamente (o browser faz o streaming)
-- MediaPipe `ObjectDetector.detect()` aceita `HTMLImageElement` nativamente
-- O overlay canvas de bounding boxes usa `img.naturalWidth/Height` em vez de `video.videoWidth/Height`
-- Para o desenho da área virtual, usar dimensões do `<img>` quando em modo MJPEG
+- Sem CORS: `<img>` sem `crossOrigin` carrega qualquer URL livremente
+- Sem canvas bridge: menos complexidade, menos CPU, sem tainted canvas
+- Detecção funciona: MediaPipe opera diretamente no `<img>` MJPEG
+- Servidor Flask não precisa de alteração
 
