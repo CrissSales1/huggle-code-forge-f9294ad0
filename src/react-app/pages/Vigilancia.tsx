@@ -1,10 +1,10 @@
 /**
- * Página de Vigilância - Consome VigilanciaContext
- * v1.6.0 — Background + Persistência + Agendamento
+ * Página de Vigilância - Layout 2 colunas para porteiro
+ * v1.7.0 — Redesign elegante com painel lateral
  */
 
 import { useState, useRef, useEffect } from 'react';
-import { Shield, Play, Square, Camera, Maximize2, AlertTriangle, User, Settings, RotateCcw, Clock } from 'lucide-react';
+import { Shield, Play, Square, Camera, Maximize2, AlertTriangle, User, Settings, RotateCcw, Clock, Eye, EyeOff, Volume2 } from 'lucide-react';
 import { useVigilancia } from '@/react-app/contexts/VigilanciaContext';
 import { type Point } from '@/react-app/utils/motionDetection';
 
@@ -49,6 +49,13 @@ export default function Vigilancia() {
   const [drawingPoints, setDrawingPoints] = useState<Point[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [draggingPoint, setDraggingPoint] = useState<number | null>(null);
+  const [now, setNow] = useState(Date.now());
+
+  // Atualizar relógio a cada segundo para "último alerta"
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   // Desenhar overlay no canvas
   useEffect(() => {
@@ -71,7 +78,6 @@ export default function Vigilancia() {
       const w = canvas.width;
       const h = canvas.height;
 
-      // Desenhar área virtual (only if showDetectionArea or drawing)
       const points = isDrawingArea ? drawingPoints : config.areaPoints;
       if ((config.showDetectionArea || isDrawingArea) && points.length >= 2) {
         ctx.beginPath();
@@ -79,14 +85,11 @@ export default function Vigilancia() {
         for (let i = 1; i < points.length; i++) {
           ctx.lineTo(points[i].x * w, points[i].y * h);
         }
-        if (!isDrawingArea || points.length >= 3) {
-          ctx.closePath();
-        }
+        if (!isDrawingArea || points.length >= 3) ctx.closePath();
 
         const hasAlert = personsInArea.length > 0;
         ctx.fillStyle = hasAlert ? 'rgba(239, 68, 68, 0.25)' : 'rgba(59, 130, 246, 0.15)';
         ctx.fill();
-
         ctx.strokeStyle = hasAlert ? '#ef4444' : '#3b82f6';
         ctx.lineWidth = 2;
         ctx.setLineDash(hasAlert ? [] : [8, 4]);
@@ -186,64 +189,78 @@ export default function Vigilancia() {
   };
 
   const handlePointerUp = () => setDraggingPoint(null);
-
   const startDrawingArea = () => { setIsDrawingArea(true); setDrawingPoints([]); };
   const resetArea = () => { updateConfig({ areaPoints: DEFAULT_AREA }); setIsDrawingArea(false); setDrawingPoints([]); };
 
-  const timeSinceAlert = lastAlertTime ? Math.round((Date.now() - lastAlertTime) / 1000) : null;
+  // Formatar tempo desde último alerta
+  const formatTimeSince = (ts: number | null): string => {
+    if (!ts) return '—';
+    const diff = Math.max(0, Math.round((now - ts) / 1000));
+    if (diff < 60) return `${diff}s atrás`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}min atrás`;
+    return `${Math.floor(diff / 3600)}h atrás`;
+  };
+
+  const cooldownLabel = COOLDOWN_OPTIONS.find(o => o.value === config.cooldown)?.label ?? `${config.cooldown / 1000}s`;
+
+  const statusInfo = isDetecting
+    ? { label: 'Monitorando', color: 'text-green-600', bg: 'bg-green-50 border-green-200', dot: 'bg-green-500' }
+    : cameraStarted
+      ? { label: 'Câmera ligada', color: 'text-yellow-600', bg: 'bg-yellow-50 border-yellow-200', dot: 'bg-yellow-500' }
+      : { label: 'Desligado', color: 'text-gray-500', bg: 'bg-gray-50 border-gray-200', dot: 'bg-gray-400' };
 
   return (
-    <div className="max-w-6xl mx-auto px-3 sm:px-4 lg:px-6">
+    <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 pt-2">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <Shield className="w-6 h-6 text-blue-600" />
-          <h2 className="text-lg sm:text-xl font-bold text-gray-800">Vigilância</h2>
+          <Shield className="w-5 h-5 text-primary" />
+          <h2 className="text-lg font-bold text-foreground">Vigilância</h2>
           {isDetecting && (
-            <span className="flex items-center gap-1 bg-green-100 text-green-700 text-xs font-medium px-2 py-1 rounded-full">
-              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+            <span className="flex items-center gap-1 bg-green-100 text-green-700 text-xs font-medium px-2 py-0.5 rounded-full">
+              <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
               Ativo
             </span>
           )}
         </div>
         <button
           onClick={() => setShowSettings(!showSettings)}
-          className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+          className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
         >
           <Settings className="w-5 h-5" />
         </button>
       </div>
 
-      {/* Alerta visual */}
+      {/* Alerta visual — acima do grid */}
       {personsInArea.length > 0 && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3 animate-pulse">
-          <AlertTriangle className="w-6 h-6 text-red-600 flex-shrink-0" />
+        <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3 animate-pulse">
+          <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0" />
           <div>
-            <p className="font-bold text-red-700">
-              ⚠️ {personsInArea.length} pessoa(s) detectada(s) na área monitorada!
+            <p className="font-bold text-red-700 text-sm">
+              ⚠️ {personsInArea.length} pessoa(s) na área monitorada!
             </p>
-            <p className="text-red-600 text-sm">Verifique a câmera imediatamente.</p>
+            <p className="text-red-600 text-xs">Verifique a câmera imediatamente.</p>
           </div>
         </div>
       )}
 
       {/* Settings panel */}
       {showSettings && (
-        <div className="mb-4 p-4 bg-white border border-gray-200 rounded-lg shadow-sm space-y-3">
-          <h3 className="font-semibold text-gray-700 text-sm">Configurações de Vigilância</h3>
+        <div className="mb-3 p-4 bg-card border border-border rounded-lg shadow-sm space-y-3">
+          <h3 className="font-semibold text-foreground text-sm">Configurações</h3>
 
           <div>
-            <label className="text-xs text-gray-500 block mb-1">Fonte da câmera</label>
+            <label className="text-xs text-muted-foreground block mb-1">Fonte da câmera</label>
             <div className="flex gap-2">
               <button
                 onClick={() => updateConfig({ cameraSource: 'webcam' })}
-                className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${config.cameraSource === 'webcam' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${config.cameraSource === 'webcam' ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-foreground border-border hover:bg-muted'}`}
               >
                 <Camera className="w-4 h-4 inline mr-1" /> Webcam
               </button>
               <button
                 onClick={() => updateConfig({ cameraSource: 'ip' })}
-                className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${config.cameraSource === 'ip' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${config.cameraSource === 'ip' ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-foreground border-border hover:bg-muted'}`}
               >
                 IP / URL
               </button>
@@ -252,11 +269,11 @@ export default function Vigilancia() {
 
           {config.cameraSource === 'webcam' && devices.length > 1 && (
             <div>
-              <label className="text-xs text-gray-500 block mb-1">Câmera</label>
+              <label className="text-xs text-muted-foreground block mb-1">Câmera</label>
               <select
                 value={config.selectedDeviceId}
                 onChange={e => updateConfig({ selectedDeviceId: e.target.value })}
-                className="w-full text-sm border border-gray-300 rounded-lg px-3 py-1.5"
+                className="w-full text-sm border border-border rounded-lg px-3 py-1.5 bg-card text-foreground"
               >
                 {devices.map(d => (
                   <option key={d.deviceId} value={d.deviceId}>
@@ -269,25 +286,25 @@ export default function Vigilancia() {
 
           {config.cameraSource === 'ip' && (
             <div>
-              <label className="text-xs text-gray-500 block mb-1">URL do stream</label>
+              <label className="text-xs text-muted-foreground block mb-1">URL do stream</label>
               <input
                 type="text"
                 value={config.ipUrl}
                 onChange={e => updateConfig({ ipUrl: e.target.value })}
                 placeholder="http://192.168.1.100:8080/video"
-                className="w-full text-sm border border-gray-300 rounded-lg px-3 py-1.5"
+                className="w-full text-sm border border-border rounded-lg px-3 py-1.5 bg-card text-foreground"
               />
             </div>
           )}
 
           <div>
-            <label className="text-xs text-gray-500 block mb-1">Cooldown entre alertas</label>
+            <label className="text-xs text-muted-foreground block mb-1">Cooldown entre alertas</label>
             <div className="flex gap-2">
               {COOLDOWN_OPTIONS.map(opt => (
                 <button
                   key={opt.value}
                   onClick={() => updateConfig({ cooldown: opt.value })}
-                  className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${config.cooldown === opt.value ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                  className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${config.cooldown === opt.value ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-foreground border-border hover:bg-muted'}`}
                 >
                   {opt.label}
                 </button>
@@ -295,27 +312,44 @@ export default function Vigilancia() {
             </div>
           </div>
 
-          {/* Mostrar/ocultar área */}
+          {/* Área de detecção */}
           <div className="flex items-center justify-between">
-            <label className="text-xs text-gray-500">Mostrar área de detecção</label>
+            <label className="text-xs text-muted-foreground">Mostrar área de detecção</label>
             <button
               onClick={() => updateConfig({ showDetectionArea: !config.showDetectionArea })}
-              className={`relative w-10 h-5 rounded-full transition-colors ${config.showDetectionArea ? 'bg-blue-600' : 'bg-gray-300'}`}
+              className={`relative w-10 h-5 rounded-full transition-colors ${config.showDetectionArea ? 'bg-primary' : 'bg-muted'}`}
             >
               <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${config.showDetectionArea ? 'translate-x-5' : ''}`} />
             </button>
           </div>
 
-          {/* Agendamento de alertas */}
-          <div className="border-t border-gray-100 pt-3 space-y-2">
+          {/* Botões de área — agora dentro de configurações */}
+          <div className="flex gap-2">
+            <button
+              onClick={startDrawingArea}
+              disabled={isDrawingArea}
+              className="flex items-center gap-1.5 bg-muted hover:bg-accent text-foreground px-3 py-1.5 rounded-lg transition-colors text-xs border border-border"
+            >
+              <Maximize2 className="w-3.5 h-3.5" /> Redesenhar Área
+            </button>
+            <button
+              onClick={resetArea}
+              className="flex items-center gap-1.5 bg-muted hover:bg-accent text-foreground px-3 py-1.5 rounded-lg transition-colors text-xs border border-border"
+            >
+              <RotateCcw className="w-3.5 h-3.5" /> Área Padrão
+            </button>
+          </div>
+
+          {/* Agendamento */}
+          <div className="border-t border-border pt-3 space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
-                <Clock className="w-4 h-4 text-gray-500" />
-                <label className="text-xs text-gray-500">Agendar alertas sonoros</label>
+                <Clock className="w-4 h-4 text-muted-foreground" />
+                <label className="text-xs text-muted-foreground">Agendar alertas sonoros</label>
               </div>
               <button
                 onClick={() => updateConfig({ alertScheduleEnabled: !config.alertScheduleEnabled })}
-                className={`relative w-10 h-5 rounded-full transition-colors ${config.alertScheduleEnabled ? 'bg-blue-600' : 'bg-gray-300'}`}
+                className={`relative w-10 h-5 rounded-full transition-colors ${config.alertScheduleEnabled ? 'bg-primary' : 'bg-muted'}`}
               >
                 <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${config.alertScheduleEnabled ? 'translate-x-5' : ''}`} />
               </button>
@@ -323,27 +357,27 @@ export default function Vigilancia() {
 
             {config.alertScheduleEnabled && (
               <>
-                <p className="text-[10px] text-gray-400">
+                <p className="text-[10px] text-muted-foreground">
                   Alertas sonoros apenas no horário definido. Ideal para porteiros noturnos.
                 </p>
                 <div className="flex items-center gap-2">
                   <div>
-                    <label className="text-[10px] text-gray-400 block">Início</label>
+                    <label className="text-[10px] text-muted-foreground block">Início</label>
                     <input
                       type="time"
                       value={config.alertStartTime}
                       onChange={e => updateConfig({ alertStartTime: e.target.value })}
-                      className="text-sm border border-gray-300 rounded-lg px-2 py-1"
+                      className="text-sm border border-border rounded-lg px-2 py-1 bg-card text-foreground"
                     />
                   </div>
-                  <span className="text-gray-400 mt-3">→</span>
+                  <span className="text-muted-foreground mt-3">→</span>
                   <div>
-                    <label className="text-[10px] text-gray-400 block">Fim</label>
+                    <label className="text-[10px] text-muted-foreground block">Fim</label>
                     <input
                       type="time"
                       value={config.alertEndTime}
                       onChange={e => updateConfig({ alertEndTime: e.target.value })}
-                      className="text-sm border border-gray-300 rounded-lg px-2 py-1"
+                      className="text-sm border border-border rounded-lg px-2 py-1 bg-card text-foreground"
                     />
                   </div>
                 </div>
@@ -353,161 +387,181 @@ export default function Vigilancia() {
         </div>
       )}
 
-      {/* Vídeo + Canvas */}
-      <div
-        ref={containerRef}
-        className="relative bg-black rounded-xl overflow-hidden aspect-video mb-4"
-        onMouseDown={handlePointerDown}
-        onMouseMove={handlePointerMove}
-        onMouseUp={handlePointerUp}
-        onMouseLeave={handlePointerUp}
-      >
-        <video
-          ref={videoRef}
-          playsInline
-          muted
-          className={`w-full h-full object-contain ${isMjpeg ? 'hidden' : ''}`}
-        />
-        <img
-          ref={imgRef}
-          alt="Stream MJPEG"
-          crossOrigin="anonymous"
-          className={`w-full h-full object-contain ${isMjpeg ? '' : 'hidden'}`}
-        />
-        <canvas
-          ref={canvasRef}
-          className="absolute inset-0 w-full h-full"
-          style={{ cursor: isDrawingArea ? 'crosshair' : draggingPoint !== null ? 'grabbing' : 'default' }}
-        />
+      {/* Grid principal: Vídeo + Painel lateral */}
+      <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-3">
+        {/* Coluna esquerda — Vídeo */}
+        <div
+          ref={containerRef}
+          className="relative bg-black rounded-xl overflow-hidden"
+          style={{ height: 'calc(100vh - 200px)', minHeight: '300px' }}
+          onMouseDown={handlePointerDown}
+          onMouseMove={handlePointerMove}
+          onMouseUp={handlePointerUp}
+          onMouseLeave={handlePointerUp}
+        >
+          <video
+            ref={videoRef}
+            playsInline
+            muted
+            className={`w-full h-full object-contain ${isMjpeg ? 'hidden' : ''}`}
+          />
+          <img
+            ref={imgRef}
+            alt="Stream MJPEG"
+            crossOrigin="anonymous"
+            className={`w-full h-full object-contain ${isMjpeg ? '' : 'hidden'}`}
+          />
+          <canvas
+            ref={canvasRef}
+            className="absolute inset-0 w-full h-full"
+            style={{ cursor: isDrawingArea ? 'crosshair' : draggingPoint !== null ? 'grabbing' : 'default' }}
+          />
 
-        {!cameraStarted && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 text-white">
-            <Camera className="w-12 h-12 text-gray-400 mb-3" />
-            <p className="text-gray-400 text-sm mb-4">Inicie a vigilância para começar</p>
-            <button
-              onClick={startVigilancia}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
-            >
-              <Play className="w-4 h-4" />
-              Iniciar Vigilância
-            </button>
-          </div>
-        )}
-
-        {isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-60">
-            <div className="text-center text-white">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-white mx-auto mb-3" />
-              <p className="text-sm">Carregando modelo MediaPipe...</p>
-              <p className="text-xs text-gray-300 mt-1">Primeira vez pode demorar ~10s</p>
-            </div>
-          </div>
-        )}
-
-        {cameraStarted && isDetecting && (
-          <div className="absolute top-3 left-3 flex flex-col gap-1">
-            <span className="bg-black bg-opacity-60 text-white text-xs px-2 py-1 rounded">
-              <User className="w-3 h-3 inline mr-1" />
-              {allPersons.length} pessoa(s) detectada(s)
-            </span>
-            {personsInArea.length > 0 && (
-              <span className="bg-red-600 text-white text-xs px-2 py-1 rounded font-bold animate-pulse">
-                🚨 {personsInArea.length} na área!
-              </span>
-            )}
-          </div>
-        )}
-
-        {isDrawingArea && (
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black bg-opacity-70 text-white text-xs px-3 py-2 rounded-lg">
-            Clique para adicionar pontos. Clique no primeiro ponto para fechar a área ({drawingPoints.length} pontos).
-          </div>
-        )}
-      </div>
-
-      {/* Controles */}
-      <div className="flex flex-wrap gap-2 mb-4">
-        {!cameraStarted ? (
-          <button
-            onClick={startVigilancia}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors text-sm"
-          >
-            <Play className="w-4 h-4" /> Iniciar Vigilância
-          </button>
-        ) : (
-          <>
-            {!isDetecting ? (
+          {!cameraStarted && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 text-white">
+              <Camera className="w-10 h-10 text-gray-400 mb-3" />
+              <p className="text-gray-400 text-sm mb-3">Inicie a vigilância para começar</p>
               <button
                 onClick={startVigilancia}
-                disabled={isLoading}
-                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white px-4 py-2 rounded-lg transition-colors text-sm"
+                className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg transition-colors text-sm"
               >
-                <Shield className="w-4 h-4" />
-                {isLoading ? 'Carregando...' : 'Iniciar Vigilância'}
+                <Play className="w-4 h-4" />
+                Iniciar Vigilância
+              </button>
+            </div>
+          )}
+
+          {isLoading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+              <div className="text-center text-white">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2" />
+                <p className="text-sm">Carregando modelo...</p>
+              </div>
+            </div>
+          )}
+
+          {/* Overlay: contagem no vídeo */}
+          {cameraStarted && isDetecting && (
+            <div className="absolute top-2 left-2 flex flex-col gap-1">
+              <span className="bg-black/60 text-white text-xs px-2 py-1 rounded">
+                <User className="w-3 h-3 inline mr-1" />
+                {allPersons.length} pessoa(s)
+              </span>
+              {personsInArea.length > 0 && (
+                <span className="bg-red-600 text-white text-xs px-2 py-1 rounded font-bold animate-pulse">
+                  🚨 {personsInArea.length} na área!
+                </span>
+              )}
+            </div>
+          )}
+
+          {isDrawingArea && (
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/70 text-white text-xs px-3 py-1.5 rounded-lg">
+              Clique para adicionar pontos. Clique no primeiro para fechar ({drawingPoints.length} pts).
+            </div>
+          )}
+        </div>
+
+        {/* Coluna direita — Painel informativo */}
+        <div className="flex flex-col gap-3">
+          {/* Status do sistema */}
+          <div className={`rounded-xl border p-4 ${statusInfo.bg}`}>
+            <div className="flex items-center gap-2 mb-1">
+              <span className={`w-2.5 h-2.5 rounded-full ${statusInfo.dot} ${isDetecting ? 'animate-pulse' : ''}`} />
+              <span className={`font-semibold text-sm ${statusInfo.color}`}>{statusInfo.label}</span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {isDetecting
+                ? 'O sistema está monitorando a área em tempo real.'
+                : cameraStarted
+                  ? 'A câmera está ligada mas a detecção não está ativa.'
+                  : 'Inicie a vigilância para monitorar a área.'}
+            </p>
+          </div>
+
+          {/* Última movimentação */}
+          <div className="rounded-xl border border-border bg-card p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Eye className="w-4 h-4 text-muted-foreground" />
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Última movimentação</span>
+            </div>
+            <p className="text-lg font-bold text-foreground">
+              {formatTimeSince(lastAlertTime)}
+            </p>
+          </div>
+
+          {/* Horário de alertas */}
+          <div className="rounded-xl border border-border bg-card p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Volume2 className="w-4 h-4 text-muted-foreground" />
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Alertas sonoros</span>
+            </div>
+            {config.alertScheduleEnabled ? (
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  {config.alertStartTime} → {config.alertEndTime}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">Horário agendado</p>
+              </div>
+            ) : (
+              <p className="text-sm text-foreground font-semibold">Sempre ativo</p>
+            )}
+          </div>
+
+          {/* Cooldown */}
+          <div className="rounded-xl border border-border bg-card p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Clock className="w-4 h-4 text-muted-foreground" />
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Cooldown</span>
+            </div>
+            <p className="text-lg font-bold text-foreground">{cooldownLabel}</p>
+            <p className="text-xs text-muted-foreground">Intervalo entre alertas</p>
+          </div>
+
+          {/* Controles */}
+          <div className="flex flex-col gap-2 mt-auto">
+            {!cameraStarted ? (
+              <button
+                onClick={startVigilancia}
+                className="flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2.5 rounded-lg transition-colors text-sm font-medium w-full"
+              >
+                <Play className="w-4 h-4" /> Iniciar Vigilância
               </button>
             ) : (
-              <button
-                onClick={stopVigilancia}
-                className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors text-sm"
-              >
-                <Square className="w-4 h-4" /> Parar
-              </button>
+              <>
+                {!isDetecting ? (
+                  <button
+                    onClick={startVigilancia}
+                    disabled={isLoading}
+                    className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white px-4 py-2.5 rounded-lg transition-colors text-sm font-medium w-full"
+                  >
+                    <Shield className="w-4 h-4" />
+                    {isLoading ? 'Carregando...' : 'Iniciar Detecção'}
+                  </button>
+                ) : (
+                  <button
+                    onClick={stopVigilancia}
+                    className="flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-lg transition-colors text-sm font-medium w-full"
+                  >
+                    <Square className="w-4 h-4" /> Parar Detecção
+                  </button>
+                )}
+                <button
+                  onClick={stopVigilancia}
+                  className="flex items-center justify-center gap-2 bg-muted hover:bg-accent text-foreground px-4 py-2 rounded-lg transition-colors text-sm border border-border w-full"
+                >
+                  <EyeOff className="w-4 h-4" /> Desligar Câmera
+                </button>
+              </>
             )}
-
-            <button
-              onClick={startDrawingArea}
-              disabled={isDrawingArea}
-              className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg transition-colors text-sm border border-gray-300"
-            >
-              <Maximize2 className="w-4 h-4" /> Redesenhar Área
-            </button>
-
-            <button
-              onClick={resetArea}
-              className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg transition-colors text-sm border border-gray-300"
-            >
-              <RotateCcw className="w-4 h-4" /> Área Padrão
-            </button>
-
-            <button
-              onClick={stopVigilancia}
-              className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg transition-colors text-sm border border-gray-300"
-            >
-              <Square className="w-4 h-4" /> Desligar
-            </button>
-          </>
-        )}
+          </div>
+        </div>
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+        <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
           <AlertTriangle className="w-4 h-4 inline mr-2" />
           {error}
-        </div>
-      )}
-
-      {isDetecting && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="bg-white rounded-lg border border-gray-200 p-3 text-center">
-            <p className="text-2xl font-bold text-gray-800">{allPersons.length}</p>
-            <p className="text-xs text-gray-500">Pessoas Detectadas</p>
-          </div>
-          <div className={`rounded-lg border p-3 text-center ${personsInArea.length > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-gray-200'}`}>
-            <p className={`text-2xl font-bold ${personsInArea.length > 0 ? 'text-red-600' : 'text-gray-800'}`}>
-              {personsInArea.length}
-            </p>
-            <p className="text-xs text-gray-500">Na Área Monitorada</p>
-          </div>
-          <div className="bg-white rounded-lg border border-gray-200 p-3 text-center">
-            <p className="text-2xl font-bold text-gray-800">{config.areaPoints.length}</p>
-            <p className="text-xs text-gray-500">Pontos da Área</p>
-          </div>
-          <div className="bg-white rounded-lg border border-gray-200 p-3 text-center">
-            <p className="text-2xl font-bold text-gray-800">
-              {timeSinceAlert !== null ? `${timeSinceAlert}s` : '—'}
-            </p>
-            <p className="text-xs text-gray-500">Último Alerta</p>
-          </div>
         </div>
       )}
     </div>
