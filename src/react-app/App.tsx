@@ -1,9 +1,12 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { MonitoringProvider } from '@/react-app/contexts/MonitoringContext';
+import { VigilanciaProvider } from '@/react-app/contexts/VigilanciaContext';
 import Header from '@/react-app/components/Header';
 import BackgroundVideo from '@/react-app/components/BackgroundVideo';
+import BackgroundVigilancia from '@/react-app/components/BackgroundVigilancia';
 import DetectionToast from '@/react-app/components/DetectionToast';
+import VigilanciaToast from '@/react-app/components/VigilanciaToast';
 import Login from '@/react-app/pages/Login';
 import Dashboard from '@/react-app/pages/Dashboard';
 import Cadastro from '@/react-app/pages/Cadastro';
@@ -31,39 +34,42 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 }
 
 function App() {
-  // OCR ONNX é carregado sob demanda no worker
   return (
     <BrowserRouter>
       <MonitoringProvider>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/instalar" element={<Instalar />} />
-          <Route
-            path="/*"
-            element={
-              <PrivateRoute>
-                <div className="min-h-screen bg-gray-50">
-                  <Header />
-                  <main className="pt-[56px] sm:pt-[60px] lg:pt-[112px] pb-4 sm:pb-6">
-                    <Routes>
-                      <Route path="/" element={<Dashboard />} />
-                      <Route path="/cadastro" element={<Cadastro />} />
-                      <Route path="/relatorios" element={<Relatorios />} />
-                      <Route path="/estatisticas" element={<Estatisticas />} />
-                      <Route path="/monitoramento" element={<Monitoramento />} />
-                      <Route path="/configuracoes" element={<Configuracoes />} />
-                      <Route path="/vigilancia" element={<Vigilancia />} />
-                    </Routes>
-                  </main>
-                  
-                  {/* Componentes globais de monitoramento */}
-                  <BackgroundVideo />
-                  <DetectionToast />
-                </div>
-              </PrivateRoute>
-            }
-          />
-        </Routes>
+        <VigilanciaProvider>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/instalar" element={<Instalar />} />
+            <Route
+              path="/*"
+              element={
+                <PrivateRoute>
+                  <div className="min-h-screen bg-gray-50">
+                    <Header />
+                    <main className="pt-[56px] sm:pt-[60px] lg:pt-[112px] pb-4 sm:pb-6">
+                      <Routes>
+                        <Route path="/" element={<Dashboard />} />
+                        <Route path="/cadastro" element={<Cadastro />} />
+                        <Route path="/relatorios" element={<Relatorios />} />
+                        <Route path="/estatisticas" element={<Estatisticas />} />
+                        <Route path="/monitoramento" element={<Monitoramento />} />
+                        <Route path="/configuracoes" element={<Configuracoes />} />
+                        <Route path="/vigilancia" element={<Vigilancia />} />
+                      </Routes>
+                    </main>
+                    
+                    {/* Componentes globais de monitoramento */}
+                    <BackgroundVideo />
+                    <BackgroundVigilancia />
+                    <DetectionToast />
+                    <VigilanciaToast />
+                  </div>
+                </PrivateRoute>
+              }
+            />
+          </Routes>
+        </VigilanciaProvider>
       </MonitoringProvider>
     </BrowserRouter>
   );

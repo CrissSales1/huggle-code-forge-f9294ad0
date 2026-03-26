@@ -3,7 +3,7 @@
  * v1.6.0 — Background + Persistência + Agendamento
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Shield, Play, Square, Camera, Maximize2, AlertTriangle, User, Settings, RotateCcw, Clock } from 'lucide-react';
 import { useVigilancia } from '@/react-app/contexts/VigilanciaContext';
 import { type Point } from '@/react-app/utils/motionDetection';
