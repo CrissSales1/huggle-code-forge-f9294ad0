@@ -9,7 +9,6 @@ import {
   initObjectDetector,
   detectObjects,
   filterByCategories,
-  disposeObjectDetector,
   PERSON_CATEGORIES,
   type ObjectDetection,
 } from '@/react-app/utils/objectDetector';
