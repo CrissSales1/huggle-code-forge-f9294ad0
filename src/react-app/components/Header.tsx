@@ -3,6 +3,7 @@ import { NavLink } from 'react-router';
 import { useDateTime } from '@/react-app/hooks/useDateTime';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { useMonitoring } from '@/react-app/contexts/MonitoringContext';
+import { useVigilancia } from '@/react-app/contexts/VigilanciaContext';
 import { Clock, Calendar, LogOut, Home, UserPlus, Search, Settings, BarChart3, Video, Menu, X, Shield } from 'lucide-react';
 
 const navigationItems = [
@@ -20,6 +21,7 @@ export default function Header() {
   const { formattedDate, formattedTime } = useDateTime();
   const { logout } = useAuth();
   const { isActive: isMonitoringActive } = useMonitoring();
+  const { isActive: isVigilanciaActive } = useVigilancia();
 
   const fecharMenu = () => setMenuAberto(false);
 
