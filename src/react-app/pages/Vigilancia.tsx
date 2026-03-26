@@ -245,9 +245,12 @@ export default function Vigilancia() {
       }
 
       // Desenhar bounding boxes de pessoas
-      if (video.videoWidth > 0) {
-        const scaleX = w / video.videoWidth;
-        const scaleY = h / video.videoHeight;
+      // Use img dimensions for MJPEG, video dimensions for webcam
+      const sourceW = isMjpeg && imgRef.current ? imgRef.current.naturalWidth : video.videoWidth;
+      const sourceH = isMjpeg && imgRef.current ? imgRef.current.naturalHeight : video.videoHeight;
+      if (sourceW > 0) {
+        const scaleX = w / sourceW;
+        const scaleY = h / sourceH;
 
         allPersons.forEach(person => {
           const inArea = personsInArea.includes(person);
