@@ -19,7 +19,7 @@ export interface ObjectDetection {
 }
 
 // Categorias pré-definidas
-export const VEHICLE_CATEGORIES = ['car', 'truck', 'bus', 'motorcycle'];
+export const VEHICLE_CATEGORIES = ['car', 'truck', 'bus'];
 export const PERSON_CATEGORIES = ['person'];
 
 let detector: ObjectDetector | null = null;

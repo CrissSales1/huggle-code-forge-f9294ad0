@@ -220,6 +220,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   const vehicleDetectionIntervalRef = useRef<number | null>(null);
   const isOcrInProgressRef = useRef(false);
   const lastOcrAttemptTimeRef = useRef(0);
+  const vehicleBBoxRef = useRef<ObjectDetection | null>(null);
   
   // Fast-Track v1.1.29: Buffer de consistência temporal para OCR + Auto-Reset
   const ocrBufferRef = useRef<Array<{ placa: string; confidence: number; timestamp: number }>>([]);

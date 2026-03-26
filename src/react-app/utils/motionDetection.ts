@@ -319,6 +319,42 @@ export function getPolygonPoints(area: VirtualArea): Point[] {
  * Captura a área virtual como canvas separado (standalone, suporta polígono)
  * v1.4.0: Extraído de MotionDetector para uso independente
  */
+/**
+ * Smart Crop: recorta região do veículo com margem de segurança
+ * v1.7.2: Evita capturar overlays (relógio, texto) fora do veículo
+ */
+export function cropVehicleRegion(
+  video: HTMLVideoElement,
+  bbox: { x: number; y: number; width: number; height: number },
+  margin: number = 0.15
+): HTMLCanvasElement {
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+
+  const marginW = bbox.width * margin;
+  const marginH = bbox.height * margin;
+
+  const sx = Math.max(0, Math.floor(bbox.x - marginW));
+  const sy = Math.max(0, Math.floor(bbox.y - marginH));
+  const sx2 = Math.min(vw, Math.ceil(bbox.x + bbox.width + marginW));
+  const sy2 = Math.min(vh, Math.ceil(bbox.y + bbox.height + marginH));
+
+  const sw = sx2 - sx;
+  const sh = sy2 - sy;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, sw);
+  canvas.height = Math.max(1, sh);
+
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (ctx) {
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+  }
+
+  console.log(`🔲 Smart Crop: ${sw}x${sh}px (margin ${Math.round(margin*100)}%) from ${vw}x${vh}`);
+  return canvas;
+}
+
 export function captureAreaFromVideo(
   video: HTMLVideoElement,
   area: VirtualArea
