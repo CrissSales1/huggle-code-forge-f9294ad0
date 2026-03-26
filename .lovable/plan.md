@@ -1,61 +1,38 @@
 
 
-# Plano: Redesign da pagina Vigilancia (v1.7.0)
+# Plano: Vigilancia com cores e agendamento corrigido (v1.7.1)
 
-## Problemas atuais
-1. Conteudo fica atras do menu superior (falta padding-top)
-2. Video ocupa tela inteira, obrigando scroll para ver controles
-3. Botoes "Redesenhar Area" e "Area Padrao" expostos desnecessariamente
-4. Cards de stats (Pessoas Detectadas, Na Area Monitorada, etc.) nao sao uteis para o porteiro
+## Problemas identificados
 
-## Layout proposto
+1. **Sem cores**: Os cards do painel lateral usam `bg-card border-border` (branco/cinza generico). O resto do app usa azul (`from-blue-600 to-blue-800`, `bg-blue-600`). A pagina ficou sem identidade visual.
+2. **Agendamento nao clicavel**: O toggle "Agendar alertas sonoros" esta dentro do painel de configuracoes (`showSettings`), que so aparece ao clicar na engrenagem. Na screenshot, ele aparece como texto estatico no painel de settings, nao como botao interativo separado.
 
-```text
-┌─────────────────────────────────────────────────┐
-│  Header: Vigilancia [Ativo]          [⚙ Config] │
-├──────────────────────────┬──────────────────────┤
-│                          │  Status              │
-│                          │  ● Monitorando...    │
-│    VIDEO / CAMERA        │                      │
-│    (~65% largura)        │  Horario ativo       │
-│                          │  22:00 - 06:00       │
-│                          │                      │
-│                          │  Cooldown: 10s       │
-│                          │                      │
-│                          │  [▶ Iniciar/■ Parar] │
-│                          │  [■ Desligar]        │
-├──────────────────────────┴──────────────────────┤
-│  Alerta vermelho (quando pessoa detectada)      │
-└─────────────────────────────────────────────────┘
-```
+## Solucao
 
-## Mudancas
+### 1. Adicionar cores do sistema ao painel lateral
 
-### 1. Layout 2 colunas (`Vigilancia.tsx`)
-- Container com `pt-2` para evitar sobreposicao do menu
-- Grid: `grid-cols-1 lg:grid-cols-[2fr_1fr]` — video 2/3, painel lateral 1/3
-- Video perde `aspect-video` e ganha altura fixa `h-[calc(100vh-180px)]` para caber na tela sem scroll
-- Painel lateral direito com informacoes contextuais uteis para o porteiro
+- **Card de Status**: Usar gradiente azul quando ativo (`bg-gradient-to-r from-blue-600 to-blue-700 text-white`), manter verde/amarelo/cinza para estados
+- **Cards informativos**: Adicionar borda azul sutil (`border-blue-200`), icones em azul (`text-blue-600`) em vez de `text-muted-foreground`
+- **Botao Iniciar**: Ja usa `bg-primary`, mas reforcar com gradiente azul (`bg-gradient-to-r from-blue-600 to-blue-700`)
+- **Header da pagina**: Adicionar um mini-banner azul ou manter o icone Shield em azul forte
 
-### 2. Painel lateral — informacoes uteis para porteiro
-Em vez dos 4 cards tecnicos, mostrar:
-- **Status do sistema** — indicador grande (Monitorando / Pausado / Desligado) com cor
-- **Ultima movimentacao** — quanto tempo faz desde a ultima detecao de pessoa
-- **Horario de alertas** — se agendamento esta ativo, mostrar a faixa
-- **Cooldown atual** — intervalo entre alertas
-- **Botoes de controle** — Iniciar/Parar/Desligar empilhados verticalmente no painel
+### 2. Tornar "Agendar alertas sonoros" acessivel fora das configuracoes
 
-### 3. Mover botoes para configuracoes
-- "Redesenhar Area" e "Area Padrao" vao para dentro do painel de Settings (engrenagem)
-- Remover a barra de controles inferior, controles ficam no painel lateral
+- Mover o toggle de agendamento para o card "Alertas Sonoros" no painel lateral direito
+- Clicar no card ou no toggle alterna `alertScheduleEnabled`
+- Quando ativado, mostrar os inputs de horario inline no card
+- Manter uma copia simplificada nas configuracoes tambem
 
-### 4. Alerta visual
-- Manter o banner vermelho de alerta, mas posiciona-lo acima do grid ou como overlay no video
+### 3. Melhorar visual geral
 
-## Arquivos modificados
+- Cards com `hover:shadow-md` para dar mais vida
+- Icones coloridos (azul, verde, laranja) em vez de todos cinza
+- Status "Monitorando" com fundo azul gradiente + texto branco (mais impactante)
+
+## Arquivo modificado
 
 | Arquivo | Mudanca |
 |---------|---------|
-| `src/react-app/pages/Vigilancia.tsx` | Redesign completo do layout |
-| `src/react-app/pages/Configuracoes.tsx` | Versao 1.7.0 |
+| `src/react-app/pages/Vigilancia.tsx` | Cores azuis nos cards, agendamento interativo no painel lateral |
+| `src/react-app/pages/Configuracoes.tsx` | Versao 1.7.1 |
 
