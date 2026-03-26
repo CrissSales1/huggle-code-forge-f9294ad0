@@ -441,18 +441,12 @@ export default function Vigilancia() {
           muted
           className={`w-full h-full object-contain ${isMjpeg ? 'hidden' : ''}`}
         />
-        {/* MJPEG: show img directly for visual, video is hidden but feeds detection */}
-        {isMjpeg && (
-          <img
-            ref={imgRef}
-            alt="Stream MJPEG"
-            className="w-full h-full object-contain"
-          />
-        )}
-        {/* Hidden img for non-mjpeg (ref always mounted) */}
-        {!isMjpeg && (
-          <img ref={imgRef} alt="" className="hidden" />
-        )}
+        {/* Single stable img element — visibility toggled via CSS to keep ref stable */}
+        <img
+          ref={imgRef}
+          alt="Stream MJPEG"
+          className={`w-full h-full object-contain ${isMjpeg ? '' : 'hidden'}`}
+        />
         {/* Overlay canvas */}
         <canvas
           ref={canvasRef}
