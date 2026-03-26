@@ -76,6 +76,18 @@ export default function Vigilancia() {
     setArea(areaPoints);
   }, [areaPoints, setArea]);
 
+  // Helpers para limpar bridge MJPEG
+  const cleanupMjpegBridge = useCallback(() => {
+    if (mjpegIntervalRef.current) {
+      clearInterval(mjpegIntervalRef.current);
+      mjpegIntervalRef.current = null;
+    }
+    if (imgRef.current) {
+      imgRef.current.src = '';
+    }
+    setIsMjpeg(false);
+  }, []);
+
   // Iniciar câmera
   const startCamera = useCallback(async () => {
     const video = videoRef.current;
@@ -94,18 +106,58 @@ export default function Vigilancia() {
         streamRef.current = stream;
         video.srcObject = stream;
         await video.play();
+        setIsMjpeg(false);
       } else if (ipUrl) {
-        video.src = ipUrl;
+        // MJPEG stream: use <img> + canvas bridge → video.srcObject
+        setIsMjpeg(true);
+        const img = imgRef.current;
+        const bridgeCanvas = mjpegCanvasRef.current;
+        if (!img || !bridgeCanvas) return;
+
+        img.crossOrigin = 'anonymous';
+        img.src = ipUrl;
+
+        // Wait for first frame to load
+        await new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error('Timeout ao conectar ao stream MJPEG')), 15000);
+          img.onload = () => { clearTimeout(timeout); resolve(); };
+          img.onerror = () => { clearTimeout(timeout); reject(new Error('Erro ao conectar ao stream MJPEG')); };
+        });
+
+        // Setup canvas bridge: draw img → canvas → captureStream → video
+        const ctx = bridgeCanvas.getContext('2d');
+        if (!ctx) return;
+
+        bridgeCanvas.width = img.naturalWidth || 640;
+        bridgeCanvas.height = img.naturalHeight || 480;
+
+        // Draw first frame and start captureStream
+        ctx.drawImage(img, 0, 0, bridgeCanvas.width, bridgeCanvas.height);
+        const capturedStream = (bridgeCanvas as any).captureStream(15) as MediaStream;
+        video.srcObject = capturedStream;
         await video.play();
+
+        // Continuously draw img to canvas at ~15fps
+        mjpegIntervalRef.current = window.setInterval(() => {
+          if (img.complete && img.naturalWidth > 0) {
+            // Update canvas size if img dimensions change
+            if (bridgeCanvas.width !== img.naturalWidth || bridgeCanvas.height !== img.naturalHeight) {
+              bridgeCanvas.width = img.naturalWidth;
+              bridgeCanvas.height = img.naturalHeight;
+            }
+            ctx.drawImage(img, 0, 0, bridgeCanvas.width, bridgeCanvas.height);
+          }
+        }, 66); // ~15fps
       }
 
       setCameraStarted(true);
       setVideo(video);
     } catch (err) {
       console.error('Erro ao iniciar câmera:', err);
-      alert('Erro ao acessar a câmera. Verifique as permissões.');
+      cleanupMjpegBridge();
+      alert('Erro ao acessar a câmera. Verifique as permissões e a URL.');
     }
-  }, [cameraSource, selectedDeviceId, ipUrl, setVideo]);
+  }, [cameraSource, selectedDeviceId, ipUrl, setVideo, cleanupMjpegBridge]);
 
   // Parar câmera
   const stopCamera = useCallback(() => {
