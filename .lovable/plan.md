@@ -1,53 +1,45 @@
 
 
-# Fix: BackgroundVigilancia Reconnect Spam + Detection Silent Failures
+# Plano: Adicionar `crossOrigin="anonymous"` + Throttle de Erros (v1.6.2)
 
-## Problems Identified
+## Problema
 
-### 1. Infinite Reconnect Loop (Critical)
-`BackgroundVigilancia` useEffect fires → calls `reconnectSource()` → which calls `connectSource()` → which calls `setIsMjpeg()`/`setCameraStarted()` → state change → `reconnectSource` reference changes → useEffect fires again → **infinite loop**.
+O canvas continua "tainted" porque o `<img>` que carrega o MJPEG de `https://localhost:8443/stream` nunca recebe o atributo `crossOrigin="anonymous"`. O servidor Flask ja tem `CORS(app)`, entao so falta o frontend pedir CORS.
 
-The BackgroundVideo.tsx counterpart works because it uses `setTimeout` with cleanup, but the real issue is that `reconnectSource` in VigilanciaContext recreates on every render due to `connectSource` in its dependency chain (which depends on `detection` object that changes every render).
+## Mudancas
 
-### 2. Detection Silent Failures
-`detectObjectsFromImage` uses `detector.detectForVideo(img as unknown as HTMLVideoElement, timestampMs)` which may silently fail for cross-origin MJPEG images. The `catch {}` block swallows all errors with no logging.
+### 1. `src/react-app/contexts/VigilanciaContext.tsx` (linha ~252-254)
+Antes de setar `img.src`, adicionar `img.crossOrigin = 'anonymous'`:
+```typescript
+img.crossOrigin = 'anonymous';
+img.src = cfg.ipUrl;
+```
 
----
+### 2. `src/react-app/pages/Vigilancia.tsx` (linha ~371-375)
+Adicionar `crossOrigin="anonymous"` no `<img>`:
+```tsx
+<img ref={imgRef} alt="Stream MJPEG" crossOrigin="anonymous" ... />
+```
 
-## Changes
+### 3. `src/react-app/components/BackgroundVigilancia.tsx` (linha ~51)
+Adicionar `crossOrigin="anonymous"` no `<img>`:
+```tsx
+<img ref={imgRef} alt="" crossOrigin="anonymous" ... />
+```
 
-### 1. `src/react-app/components/BackgroundVigilancia.tsx`
-- Add a **guard ref** (`hasReconnectedRef`) to ensure reconnect only fires **once** per navigation away, not on every render
-- Add `setTimeout` with cleanup (matching BackgroundVideo pattern)
-- Reset the guard when returning to the page
+### 4. `src/react-app/utils/objectDetector.ts` (linhas ~139-156)
+Throttle do log de `SecurityError` para evitar spam no console — logar apenas 1x a cada 10s:
+```typescript
+let lastSecurityErrorLog = 0;
+// no catch: if SecurityError && Date.now() - lastSecurityErrorLog > 10000 → log, else skip
+```
 
-### 2. `src/react-app/contexts/VigilanciaContext.tsx`
-- Stabilize `reconnectSource` by using a ref for `connectSource` instead of a dependency
-- Add a `reconnectingRef` guard to prevent concurrent reconnect attempts
-- In `connectSource` for MJPEG: after loading the image, draw it onto a hidden canvas and pass the **canvas** to the detector (avoids cross-origin WebGL issues)
+### 5. `src/react-app/pages/Configuracoes.tsx` (linha ~1333)
+Atualizar versao para `1.6.2 (CORS MJPEG Fix)`.
 
-### 3. `src/react-app/utils/objectDetector.ts`
-- Add `console.warn` logging inside `catch` blocks of `detectObjects` and `detectObjectsFromImage` so errors are no longer silent
-- Add a new `detectObjectsFromCanvas()` function that accepts `HTMLCanvasElement` as input
+## Resultado
 
-### 4. `src/react-app/hooks/usePersonDetection.ts`
-- Support `HTMLCanvasElement` as a detection source type
-- Add periodic heartbeat log (every 30 frames) to confirm detection loop is running
-- For `HTMLImageElement` sources: use an intermediate canvas to draw the frame before detection
-
-### 5. `src/react-app/pages/Configuracoes.tsx`
-- Update version to `1.6.1 (Stable Background + MJPEG Fix)`
-
-## Flow After Fix
-
-```text
-BackgroundVigilancia mounts (once per navigation)
-  → reconnectSource (guarded, fires once)
-    → connectSource
-      → MJPEG: img.src = url → img.onload → canvas.drawImage(img) → detection.setVideo(canvas)
-      → Webcam: getUserMedia → video.play → detection.setVideo(video)
-
-processFrame (every 300ms)
-  → detectObjects(canvas/video, timestamp) → filter persons → check area → alert if scheduled
+```
+img (crossOrigin=anonymous) + Flask CORS → canvas limpo → WebGL funciona → MediaPipe detecta pessoas
 ```
 
