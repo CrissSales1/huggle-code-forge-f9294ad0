@@ -3,6 +3,7 @@ import { NavLink } from 'react-router';
 import { useDateTime } from '@/react-app/hooks/useDateTime';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { useMonitoring } from '@/react-app/contexts/MonitoringContext';
+import { useVigilancia } from '@/react-app/contexts/VigilanciaContext';
 import { Clock, Calendar, LogOut, Home, UserPlus, Search, Settings, BarChart3, Video, Menu, X, Shield } from 'lucide-react';
 
 const navigationItems = [
@@ -20,6 +21,7 @@ export default function Header() {
   const { formattedDate, formattedTime } = useDateTime();
   const { logout } = useAuth();
   const { isActive: isMonitoringActive } = useMonitoring();
+  const { isActive: isVigilanciaActive } = useVigilancia();
 
   const fecharMenu = () => setMenuAberto(false);
 
@@ -114,7 +116,12 @@ export default function Header() {
                   }`
                 }
               >
-                <Icon className="w-4 h-4" />
+                <div className="relative">
+                  <Icon className="w-4 h-4" />
+                  {path === '/vigilancia' && isVigilanciaActive && (
+                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+                  )}
+                </div>
                 <span>{label}</span>
               </NavLink>
             ))}
@@ -165,7 +172,12 @@ export default function Header() {
                       }`
                     }
                   >
-                    <Icon className="w-5 h-5" />
+                    <div className="relative">
+                      <Icon className="w-5 h-5" />
+                      {path === '/vigilancia' && isVigilanciaActive && (
+                        <span className="absolute -top-1 -right-1 w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+                      )}
+                    </div>
                     <span className="font-medium">{label}</span>
                   </NavLink>
                 ))}
