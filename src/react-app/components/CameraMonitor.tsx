@@ -75,12 +75,10 @@ export default function CameraMonitor({ onDetection, compact = false, onPipeline
     availableCameras,
     selectedCamera,
     setSelectedCamera,
-    motionPercent,
+    vehicleDetected,
     processingInfo,
     selectedResolution,
     setSelectedResolution,
-    hasReference,
-    recaptureReference,
     reconnectStream,
     // HLS
     sourceMode,
@@ -107,6 +105,9 @@ export default function CameraMonitor({ onDetection, compact = false, onPipeline
     modelLoaded,
     modelLoading,
     yoloBackend,
+    // MediaPipe
+    mediapipeLoading,
+    mediapipeReady,
   } = useMonitoring();
   
   const [showSettings, setShowSettings] = useState(false);

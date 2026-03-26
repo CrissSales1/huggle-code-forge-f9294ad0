@@ -28,7 +28,6 @@ import {
   initObjectDetector,
   detectObjects,
   filterByCategories,
-  disposeObjectDetector,
   VEHICLE_CATEGORIES,
   type ObjectDetection,
 } from '@/react-app/utils/objectDetector';
