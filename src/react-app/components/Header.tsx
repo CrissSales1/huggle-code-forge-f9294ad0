@@ -3,7 +3,7 @@ import { NavLink } from 'react-router';
 import { useDateTime } from '@/react-app/hooks/useDateTime';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { useMonitoring } from '@/react-app/contexts/MonitoringContext';
-import { Clock, Calendar, LogOut, Home, UserPlus, Search, Settings, BarChart3, Video, Menu, X } from 'lucide-react';
+import { Clock, Calendar, LogOut, Home, UserPlus, Search, Settings, BarChart3, Video, Menu, X, Shield } from 'lucide-react';
 
 const navigationItems = [
   { path: '/', label: 'Dashboard', icon: Home },
@@ -11,6 +11,7 @@ const navigationItems = [
   { path: '/relatorios', label: 'Busca', icon: Search },
   { path: '/estatisticas', label: 'Estatísticas', icon: BarChart3 },
   { path: '/monitoramento', label: 'Monitoramento', icon: Video },
+  { path: '/vigilancia', label: 'Vigilância', icon: Shield },
   { path: '/configuracoes', label: 'Configurações', icon: Settings },
 ];
 
