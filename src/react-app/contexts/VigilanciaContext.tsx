@@ -251,6 +251,7 @@ export function VigilanciaProvider({ children }: { children: React.ReactNode }) 
       det.setVideo(video);
     } else if (cfg.ipUrl && img) {
       setIsMjpeg(true);
+      img.crossOrigin = 'anonymous';
       img.src = cfg.ipUrl;
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => reject(new Error('Timeout MJPEG')), 15000);
