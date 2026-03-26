@@ -30,8 +30,6 @@ export default function Vigilancia() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
-  const mjpegCanvasRef = useRef<HTMLCanvasElement>(null);
-  const mjpegIntervalRef = useRef<number | null>(null);
 
   const [cameraSource, setCameraSource] = useState<CameraSource>('webcam');
   const [ipUrl, setIpUrl] = useState('');
@@ -77,11 +75,7 @@ export default function Vigilancia() {
   }, [areaPoints, setArea]);
 
   // Helpers para limpar bridge MJPEG
-  const cleanupMjpegBridge = useCallback(() => {
-    if (mjpegIntervalRef.current) {
-      clearInterval(mjpegIntervalRef.current);
-      mjpegIntervalRef.current = null;
-    }
+  const cleanupMjpeg = useCallback(() => {
     if (imgRef.current) {
       imgRef.current.src = '';
     }
@@ -108,13 +102,11 @@ export default function Vigilancia() {
         await video.play();
         setIsMjpeg(false);
       } else if (ipUrl) {
-        // MJPEG stream: use <img> + canvas bridge → video.srcObject
+        // MJPEG: pass <img> directly to detection hook (no canvas bridge, no CORS issues)
         setIsMjpeg(true);
         const img = imgRef.current;
-        const bridgeCanvas = mjpegCanvasRef.current;
-        if (!img || !bridgeCanvas) return;
+        if (!img) return;
 
-        img.crossOrigin = 'anonymous';
         img.src = ipUrl;
 
         // Wait for first frame to load
@@ -124,45 +116,24 @@ export default function Vigilancia() {
           img.onerror = () => { clearTimeout(timeout); reject(new Error('Erro ao conectar ao stream MJPEG')); };
         });
 
-        // Setup canvas bridge: draw img → canvas → captureStream → video
-        const ctx = bridgeCanvas.getContext('2d');
-        if (!ctx) return;
-
-        bridgeCanvas.width = img.naturalWidth || 640;
-        bridgeCanvas.height = img.naturalHeight || 480;
-
-        // Draw first frame and start captureStream
-        ctx.drawImage(img, 0, 0, bridgeCanvas.width, bridgeCanvas.height);
-        const capturedStream = (bridgeCanvas as any).captureStream(15) as MediaStream;
-        video.srcObject = capturedStream;
-        await video.play();
-
-        // Continuously draw img to canvas at ~15fps
-        mjpegIntervalRef.current = window.setInterval(() => {
-          if (img.complete && img.naturalWidth > 0) {
-            // Update canvas size if img dimensions change
-            if (bridgeCanvas.width !== img.naturalWidth || bridgeCanvas.height !== img.naturalHeight) {
-              bridgeCanvas.width = img.naturalWidth;
-              bridgeCanvas.height = img.naturalHeight;
-            }
-            ctx.drawImage(img, 0, 0, bridgeCanvas.width, bridgeCanvas.height);
-          }
-        }, 66); // ~15fps
+        setCameraStarted(true);
+        setVideo(img); // Pass img directly — hook accepts HTMLImageElement
+        return;
       }
 
       setCameraStarted(true);
       setVideo(video);
     } catch (err) {
       console.error('Erro ao iniciar câmera:', err);
-      cleanupMjpegBridge();
+      cleanupMjpeg();
       alert('Erro ao acessar a câmera. Verifique as permissões e a URL.');
     }
-  }, [cameraSource, selectedDeviceId, ipUrl, setVideo, cleanupMjpegBridge]);
+  }, [cameraSource, selectedDeviceId, ipUrl, setVideo, cleanupMjpeg]);
 
   // Parar câmera
   const stopCamera = useCallback(() => {
     stopDetection();
-    cleanupMjpegBridge();
+    cleanupMjpeg();
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
@@ -172,17 +143,17 @@ export default function Vigilancia() {
       videoRef.current.src = '';
     }
     setCameraStarted(false);
-  }, [stopDetection, cleanupMjpegBridge]);
+  }, [stopDetection, cleanupMjpeg]);
 
   // Cleanup
   useEffect(() => {
     return () => {
-      cleanupMjpegBridge();
+      cleanupMjpeg();
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(t => t.stop());
       }
     };
-  }, [cleanupMjpegBridge]);
+  }, [cleanupMjpeg]);
 
   // Desenhar overlay no canvas
   useEffect(() => {
