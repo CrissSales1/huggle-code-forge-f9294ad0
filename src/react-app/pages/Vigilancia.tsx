@@ -7,6 +7,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Shield, Play, Square, Camera, Maximize2, AlertTriangle, User, Settings, RotateCcw } from 'lucide-react';
 import { usePersonDetection } from '@/react-app/hooks/usePersonDetection';
 import { type Point } from '@/react-app/utils/motionDetection';
+// v1.4.0: Uses objectDetector.ts under the hood via usePersonDetection
 
 type CameraSource = 'webcam' | 'ip';
 
