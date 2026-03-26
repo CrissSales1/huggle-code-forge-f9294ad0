@@ -93,11 +93,10 @@ export function usePersonDetection(options: UsePersonDetectionOptions = {}) {
       allDetections = detectObjectsFromImage(source as HTMLImageElement, timestampMs);
     }
 
-    // Heartbeat log every 30 frames
-    frameCountRef.current++;
-    if (frameCountRef.current % 30 === 0) {
+    // Log only when persons are detected
+    if (allDetections.length > 0) {
       const sourceType = source instanceof HTMLVideoElement ? 'video' : source instanceof HTMLCanvasElement ? 'canvas' : 'img';
-      console.log(`💓 Vigilância heartbeat: frame #${frameCountRef.current}, source=${sourceType}, detections=${allDetections.length}`);
+      console.log(`👁️ Detecções: ${allDetections.length} objeto(s), source=${sourceType}`);
     }
 
     const allPersons = filterByCategories(allDetections, PERSON_CATEGORIES);
