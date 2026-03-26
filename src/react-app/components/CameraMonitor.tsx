@@ -571,15 +571,7 @@ export default function CameraMonitor({ onDetection, compact = false, onPipeline
                 >
                   Ajustar Pontos
                 </button>
-                <button
-                  onClick={recaptureReference}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200"
-                  disabled={!isActive}
-                  title="Recaptura a imagem de referência da área vazia"
-                >
-                  <Camera className="w-4 h-4" />
-                  Recapturar Referência
-                </button>
+              
               </>
             ) : (
               <>
@@ -605,9 +597,11 @@ export default function CameraMonitor({ onDetection, compact = false, onPipeline
                 ? `Clique para adicionar pontos. ${tempPoints.length >= 3 ? 'Clique no primeiro ponto para fechar.' : `Mínimo 3 pontos (${tempPoints.length}/3)`}`
                 : editMode === 'adjusting'
                   ? 'Arraste os pontos para ajustar a área'
-                  : hasReference 
-                    ? 'Referência capturada. Pronto para detectar veículos.'
-                    : 'Aguardando captura da referência...'
+                  : mediapipeReady
+                    ? 'MediaPipe ativo. Detectando veículos automaticamente.'
+                    : mediapipeLoading
+                      ? 'Carregando detector de veículos...'
+                      : 'Aguardando inicialização...'
               }
             </span>
           </div>
@@ -804,32 +798,30 @@ export default function CameraMonitor({ onDetection, compact = false, onPipeline
           </div>
         )}
         
-        {/* Motion/Reference Indicator */}
+        {/* Vehicle Detection Indicator */}
         {isActive && editMode === 'none' && (
           <div className="absolute bottom-2 left-2 flex items-center gap-2">
-            {/* Status da referência */}
+            {/* MediaPipe status */}
             <div className={`text-xs px-2 py-1 rounded ${
-              hasReference 
+              mediapipeReady 
                 ? 'bg-green-600/80 text-white' 
-                : 'bg-orange-500/80 text-white'
+                : mediapipeLoading
+                  ? 'bg-orange-500/80 text-white'
+                  : 'bg-gray-600/80 text-white'
             }`}>
-              {hasReference ? '📸 Ref. OK' : '⏳ Capturando...'}
+              {mediapipeReady ? '🧠 MediaPipe OK' : mediapipeLoading ? '⏳ Carregando...' : '⏳ Aguardando...'}
             </div>
             
-            {/* Indicador de detecção */}
-            {hasReference && (
+            {/* Vehicle detection indicator */}
+            {mediapipeReady && (
               <div className={`text-xs px-2 py-1 rounded ${
-                motionPercent >= 0.10 
+                vehicleDetected
                   ? 'bg-yellow-500 text-black font-medium' 
-                  : motionPercent >= 0.05 
-                    ? 'bg-blue-500/80 text-white'
-                    : 'bg-black/70 text-gray-300'
+                  : 'bg-black/70 text-gray-300'
               }`}>
-                {motionPercent >= 0.10 
-                  ? `🚗 Veículo: ${Math.round(motionPercent * 100)}%`
-                  : motionPercent >= 0.05 
-                    ? `⚠️ Mudança: ${Math.round(motionPercent * 100)}%`
-                    : '✓ Área limpa'
+                {vehicleDetected 
+                  ? '🚗 Veículo detectado!'
+                  : '✓ Área limpa'
                 }
               </div>
             )}
@@ -941,9 +933,9 @@ export default function CameraMonitor({ onDetection, compact = false, onPipeline
                     setIsCapturing(false);
                   }
                 }}
-                disabled={isCapturing || !hasReference}
+                disabled={isCapturing}
                 className={`flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors ${
-                  isCapturing || !hasReference ? 'opacity-50 cursor-not-allowed' : ''
+                  isCapturing ? 'opacity-50 cursor-not-allowed' : ''
                 }`}
                 title="Forçar leitura imediata da placa"
               >
