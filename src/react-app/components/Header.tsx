@@ -172,7 +172,12 @@ export default function Header() {
                       }`
                     }
                   >
-                    <Icon className="w-5 h-5" />
+                    <div className="relative">
+                      <Icon className="w-5 h-5" />
+                      {path === '/vigilancia' && isVigilanciaActive && (
+                        <span className="absolute -top-1 -right-1 w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+                      )}
+                    </div>
                     <span className="font-medium">{label}</span>
                   </NavLink>
                 ))}
