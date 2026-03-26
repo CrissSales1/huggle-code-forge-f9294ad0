@@ -13,12 +13,20 @@ export default function BackgroundVigilancia() {
   const isOnPage = location.pathname === '/vigilancia';
   const hasReconnectedRef = useRef(false);
 
-  // Reset guard when returning to the page
+  // When returning to the page, reconnect stream to newly mounted DOM elements
   useEffect(() => {
+    if (isOnPage && isActive) {
+      hasReconnectedRef.current = false;
+      const timer = setTimeout(() => {
+        console.log('🔄 BackgroundVigilancia: reconectando stream ao retornar para /vigilancia');
+        reconnectSource();
+      }, 200);
+      return () => clearTimeout(timer);
+    }
     if (isOnPage) {
       hasReconnectedRef.current = false;
     }
-  }, [isOnPage]);
+  }, [isOnPage, isActive, reconnectSource]);
 
   useEffect(() => {
     if (!isOnPage && isActive && !hasReconnectedRef.current) {
