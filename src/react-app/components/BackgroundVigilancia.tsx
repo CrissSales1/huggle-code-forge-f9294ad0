@@ -48,7 +48,7 @@ export default function BackgroundVigilancia() {
       aria-hidden="true"
     >
       <video ref={videoRef} playsInline muted />
-      <img ref={imgRef} alt="" className={isMjpeg ? '' : 'hidden'} />
+      <img ref={imgRef} alt="" crossOrigin="anonymous" className={isMjpeg ? '' : 'hidden'} />
       <canvas ref={canvasRef} className="hidden" />
     </div>
   );

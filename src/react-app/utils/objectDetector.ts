@@ -132,6 +132,21 @@ export function detectObjectsFromImage(
   }
 }
 
+/** Throttle para erros de SecurityError — logar apenas 1x a cada 10s */
+let lastSecurityErrorLog = 0;
+
+function logThrottled(msg: string, err: unknown) {
+  const now = Date.now();
+  if (err instanceof DOMException && err.name === 'SecurityError') {
+    if (now - lastSecurityErrorLog > 10000) {
+      lastSecurityErrorLog = now;
+      console.warn(msg, err.message);
+    }
+    return;
+  }
+  console.warn(msg, err);
+}
+
 /**
  * Detecta objetos em um HTMLCanvasElement (para MJPEG via canvas intermediário)
  * Evita problemas de cross-origin WebGL com imagens tainted
@@ -150,7 +165,7 @@ export function detectObjectsFromCanvas(
     const results = detector.detectForVideo(canvas as unknown as HTMLVideoElement, timestampMs);
     return mapDetections(results, vw, vh);
   } catch (err) {
-    console.warn('⚠️ detectObjectsFromCanvas error:', err);
+    logThrottled('⚠️ detectObjectsFromCanvas error:', err);
     return [];
   }
 }

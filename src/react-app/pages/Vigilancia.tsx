@@ -371,6 +371,7 @@ export default function Vigilancia() {
         <img
           ref={imgRef}
           alt="Stream MJPEG"
+          crossOrigin="anonymous"
           className={`w-full h-full object-contain ${isMjpeg ? '' : 'hidden'}`}
         />
         <canvas
