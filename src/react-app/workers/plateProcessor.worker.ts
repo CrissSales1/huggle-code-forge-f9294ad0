@@ -88,6 +88,19 @@ let onnxSession: ort.InferenceSession | null = null;
 let onnxReady = false;
 let onnxLoading = false;
 let charset: string[] = [];
+let validIndices: Set<number> = new Set(); // v1.4.2: Charset filter - apenas A-Z, 0-9 + blank
+
+const PLATE_CHARS = new Set('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'.split(''));
+
+function buildValidIndices() {
+  validIndices = new Set([0]); // blank token (CTC) sempre válido
+  for (let i = 1; i < charset.length; i++) {
+    if (PLATE_CHARS.has(charset[i].toUpperCase())) {
+      validIndices.add(i);
+    }
+  }
+  console.log(`🔤 Charset filter: ${validIndices.size} índices válidos de ${charset.length} total`);
+}
 
 // Constantes PaddleOCR
 const OCR_INPUT_HEIGHT = 48; // PaddleOCR PP-OCRv3/v4 usa altura 48px
@@ -224,6 +237,7 @@ async function initONNX(): Promise<void> {
     
     onnxReady = true;
     onnxLoading = false;
+    buildValidIndices(); // v1.4.2: Construir mapa de índices válidos
     
     console.log('✅ ONNX OCR pronto (PaddleOCR)');
     console.log(`📊 Input names: ${onnxSession.inputNames.join(', ')}`);
@@ -364,9 +378,10 @@ function decodeCTC(output: Float32Array, outputShape: readonly number[]): {
   
   for (let t = 0; t < seqLen; t++) {
     // Extrair logits para esta posição
+    // v1.4.2: Mascarar logits de caracteres inválidos
     const logits: number[] = [];
     for (let c = 0; c < numClasses; c++) {
-      logits.push(output[t * numClasses + c]);
+      logits.push(validIndices.has(c) ? output[t * numClasses + c] : -Infinity);
     }
     
     // Encontrar índice com maior valor
@@ -447,9 +462,10 @@ function decodeCTCBeam(output: Float32Array, outputShape: readonly number[], bea
   let lastIdx = 0;
   
   for (let t = 0; t < seqLen; t++) {
+    // v1.4.2: Mascarar logits de caracteres inválidos
     const logits: number[] = [];
     for (let c = 0; c < numClasses; c++) {
-      logits.push(output[t * numClasses + c]);
+      logits.push(validIndices.has(c) ? output[t * numClasses + c] : -Infinity);
     }
     
     // Encontrar melhor índice
@@ -466,10 +482,10 @@ function decodeCTCBeam(output: Float32Array, outputShape: readonly number[], bea
     if (maxIdx !== 0 && maxIdx !== lastIdx) {
       const probs = softmaxWithTemperature(logits, TEMPERATURE);
       
-      // Coletar top-K alternativas (excluindo blank idx=0)
+      // v1.4.2: Coletar top-K apenas de índices válidos (excluindo blank idx=0)
       const candidates: Array<{ idx: number; prob: number; char: string }> = [];
       for (let c = 1; c < numClasses; c++) {
-        if (c < charset.length && charset[c] !== '') {
+        if (validIndices.has(c) && c < charset.length && charset[c] !== '') {
           candidates.push({ idx: c, prob: probs[c], char: charset[c] });
         }
       }
