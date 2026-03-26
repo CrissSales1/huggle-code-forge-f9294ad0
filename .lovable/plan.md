@@ -1,104 +1,46 @@
 
 
-# Plano v1.4.0: MediaPipe como trigger de veículos para LPR
+# Plano: Filtragem de Charset no Decoder CTC (v1.4.2)
 
-## O que muda
+## Objetivo
 
-Hoje o monitoramento LPR usa um sistema de **comparação de frames** (MotionDetector) para detectar "algo mudou na área" e então disparar OCR. Isso tem limitações: iluminação muda e gera falsos positivos, precisa de referência, tem zona morta.
-
-A proposta é substituir essa detecção de movimento por **MediaPipe ObjectDetector** detectando veículos (`car`, `truck`, `bus`, `motorcycle`) continuamente no vídeo. Quando um veículo é detectado **dentro da área virtual**, o fluxo OCR é disparado.
-
-## Vantagens
-- Sem falsos positivos por iluminação (o modelo sabe o que é um veículo)
-- Não precisa de frame de referência (elimina toda a lógica de referência/EMA)
-- Detecção semântica: sabe que é um carro, não apenas "algo mudou"
-- O vídeo continua rodando em fluxo contínuo, sem snapshot frame-a-frame
-
-## Arquitetura
-
-```text
-Vídeo contínuo (HTMLVideoElement)
-        ↓ (a cada 300ms)
-MediaPipe ObjectDetector
-(detectForVideo - classes: car,truck,bus,motorcycle)
-        ↓
-Veículo na área virtual? (isPointInPolygon)
-        ↓ SIM
-Disparar pipeline OCR existente
-(YOLO placa + PaddleOCR no Worker)
-        ↓
-Validação + Banco (sem mudança)
-```
+Mascarar logits de caracteres irrelevantes (467 de 504) no decoder CTC, forçando 100% da probabilidade para os ~37 caracteres válidos de placas brasileiras (A-Z, 0-9 + blank).
 
 ## Mudanças
 
-### 1. `src/react-app/utils/personDetector.ts` → renomear para `objectDetector.ts`
-- Renomear para nome genérico (detecta pessoas E veículos)
-- Adicionar função `initVehicleDetector()` com `categoryAllowlist: ['car', 'truck', 'bus', 'motorcycle']`
-- Manter `initPersonDetector()` para Vigilância (com `['person']`)
-- Ou: criar um `initObjectDetector(categories: string[])` genérico com instâncias separadas
+### 1. `src/react-app/workers/plateProcessor.worker.ts`
 
-**Problema**: MediaPipe ObjectDetector é singleton por design (uma instância por vez). Precisamos de **duas instâncias** (Vigilância=person, Monitoramento=vehicle) ou um detector genérico que filtra depois.
+**Adicionar variável global** (após linha 90, junto aos estados ONNX):
+```typescript
+let validIndices: Set<number> = new Set();
+```
 
-**Solução**: Usar um único detector sem `categoryAllowlist` (detecta tudo) e filtrar no código. Assim a mesma instância serve para ambas as páginas. O modelo já é o mesmo (EfficientDet-Lite0).
+**Criar função `buildValidIndices`** (após `loadCharset`):
+- Itera o `charset` e marca como válidos apenas índices cujo caractere está em `A-Z`, `0-9`, ou é o blank token (índice 0).
 
-### 2. `src/react-app/hooks/useVehicleDetection.ts` (novo)
-- Similar ao `usePersonDetection.ts` mas filtrado para veículos
-- Em vez de alertar, retorna `{ vehicleInArea: boolean, vehicleBBox: {...} }`
-- Loop contínuo a cada 300ms usando `detectForVideo()`
+**Chamar `buildValidIndices()`** ao final de `initONNX()` (após linha 225, depois de `onnxReady = true`).
 
-### 3. `src/react-app/contexts/MonitoringContext.tsx` (refatoração grande)
-**Remover**:
-- Import e uso de `MotionDetector` (classe inteira)
-- `motionDetectorRef`, `captureReference`, `hasReference`
-- Toda a lógica de `processFrame` baseada em comparação de frames
-- Estados: `hasReference`, `motionPercent` (substituir por `vehicleDetected`)
+**Modificar `decodeCTC`** (linhas 367-370):
+- Ao construir o array de logits, setar `-Infinity` para índices fora de `validIndices`:
+```typescript
+logits.push(validIndices.has(c) ? output[t * numClasses + c] : -Infinity);
+```
 
-**Adicionar**:
-- Import do `useVehicleDetection` ou inicialização do MediaPipe detector
-- Loop de detecção: a cada 300ms, rodar `detectForVideo()` no vídeo
-- Quando veículo detectado na área → disparar `processFrameForOCR()` (já existe, sem mudança)
-- Novo estado `vehicleInArea` no lugar de `hasMotion`
-- Manter cooldown e consistência temporal (buffer OCR) como estão
+**Modificar `decodeCTCBeam`** (linhas 450-453 e 470-475):
+- Mesma máscara de logits na construção do array.
+- No loop de candidatos, filtrar apenas `validIndices`:
+```typescript
+if (validIndices.has(c) && c < charset.length && charset[c] !== '') {
+```
 
-**Manter intacto**:
-- `processFrameForOCR()` - não muda nada
-- `processPlateWorker()` - Web Worker YOLO+OCR intacto
-- Validação, fuzzy match, banco - tudo igual
-- Sons, detecções, deduplicação - sem mudança
+### 2. `src/react-app/pages/Configuracoes.tsx`
 
-### 4. `src/react-app/components/CameraMonitor.tsx`
-- Remover botão "Recapturar Referência" (não existe mais referência)
-- Remover indicador de `motionPercent` (barra de %)
-- Adicionar overlay de bounding box do veículo detectado pelo MediaPipe
-- Status simplificado: "Monitorando..." → "Veículo detectado!" → "Lendo placa..."
+- Linha 1333: Atualizar versão para `1.4.2` com nota `(Charset Filter)`.
 
-### 5. `src/react-app/utils/motionDetection.ts`
-- Manter as funções de área virtual (polygon, persistência, resolução, câmera)
-- Remover ou depreciar a classe `MotionDetector` e `compareFrames`
-- Manter: `loadVirtualArea`, `saveVirtualArea`, `getDefaultVirtualArea`, `isPointInPolygon`, etc.
+## Impacto
 
-### 6. Versão
-`1.4.0 (MediaPipe Vehicle Detection)`
-
-## Riscos e Mitigações
-
-| Risco | Mitigação |
-|-------|-----------|
-| MediaPipe + YOLO+OCR Worker concorrendo por GPU | MediaPipe usa WebGL, Worker usa WebGL separado. Testar performance. Se necessário, pausar MediaPipe durante OCR |
-| Modelo EfficientDet-Lite não detectar carros a distância | Threshold ajustável (0.3-0.5). Modelo COCO detecta carros bem em ângulos comuns |
-| Duas instâncias (Vigilância + Monitoramento) | Detector único sem allowlist, filtrar no código por categoria |
-
-## Arquivos
-
-| Arquivo | Ação |
-|---------|------|
-| `src/react-app/utils/personDetector.ts` | Renomear → `objectDetector.ts`, generalizar para multi-classe |
-| `src/react-app/hooks/useVehicleDetection.ts` | Novo hook para detecção de veículos na área |
-| `src/react-app/hooks/usePersonDetection.ts` | Atualizar import do detector generalizado |
-| `src/react-app/contexts/MonitoringContext.tsx` | Substituir MotionDetector por MediaPipe vehicle detection |
-| `src/react-app/components/CameraMonitor.tsx` | Remover referência, adicionar overlay veículo |
-| `src/react-app/utils/motionDetection.ts` | Manter utilidades de área, remover classe MotionDetector |
-| `src/react-app/pages/Vigilancia.tsx` | Atualizar import do detector |
-| `src/react-app/pages/Configuracoes.tsx` | Versão 1.4.0 |
+- Beam Search opera em ~37 candidatos em vez de ~504 por timestep
+- Elimina alucinações com caracteres exóticos (ñ, €, ψ, etc.)
+- Confiança calibrada sobe 20-40% por concentração de probabilidade
+- Nenhuma mudança no modelo ou dict.txt
 
