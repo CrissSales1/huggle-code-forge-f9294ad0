@@ -1374,6 +1374,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     
     setVehicleDetected(false);
     setVehicleBBox(null);
+    vehicleBBoxRef.current = null;
     setIsActive(false);
     setStatus('idle');
     setStatusMessage('Parado');
