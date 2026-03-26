@@ -29,10 +29,14 @@ export default function Vigilancia() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const mjpegCanvasRef = useRef<HTMLCanvasElement>(null);
+  const mjpegIntervalRef = useRef<number | null>(null);
 
   const [cameraSource, setCameraSource] = useState<CameraSource>('webcam');
   const [ipUrl, setIpUrl] = useState('');
   const [cameraStarted, setCameraStarted] = useState(false);
+  const [isMjpeg, setIsMjpeg] = useState(false);
   const [areaPoints, setAreaPoints] = useState<Point[]>(DEFAULT_AREA);
   const [isDrawingArea, setIsDrawingArea] = useState(false);
   const [drawingPoints, setDrawingPoints] = useState<Point[]>([]);
@@ -72,6 +76,18 @@ export default function Vigilancia() {
     setArea(areaPoints);
   }, [areaPoints, setArea]);
 
+  // Helpers para limpar bridge MJPEG
+  const cleanupMjpegBridge = useCallback(() => {
+    if (mjpegIntervalRef.current) {
+      clearInterval(mjpegIntervalRef.current);
+      mjpegIntervalRef.current = null;
+    }
+    if (imgRef.current) {
+      imgRef.current.src = '';
+    }
+    setIsMjpeg(false);
+  }, []);
+
   // Iniciar câmera
   const startCamera = useCallback(async () => {
     const video = videoRef.current;
@@ -90,22 +106,63 @@ export default function Vigilancia() {
         streamRef.current = stream;
         video.srcObject = stream;
         await video.play();
+        setIsMjpeg(false);
       } else if (ipUrl) {
-        video.src = ipUrl;
+        // MJPEG stream: use <img> + canvas bridge → video.srcObject
+        setIsMjpeg(true);
+        const img = imgRef.current;
+        const bridgeCanvas = mjpegCanvasRef.current;
+        if (!img || !bridgeCanvas) return;
+
+        img.crossOrigin = 'anonymous';
+        img.src = ipUrl;
+
+        // Wait for first frame to load
+        await new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error('Timeout ao conectar ao stream MJPEG')), 15000);
+          img.onload = () => { clearTimeout(timeout); resolve(); };
+          img.onerror = () => { clearTimeout(timeout); reject(new Error('Erro ao conectar ao stream MJPEG')); };
+        });
+
+        // Setup canvas bridge: draw img → canvas → captureStream → video
+        const ctx = bridgeCanvas.getContext('2d');
+        if (!ctx) return;
+
+        bridgeCanvas.width = img.naturalWidth || 640;
+        bridgeCanvas.height = img.naturalHeight || 480;
+
+        // Draw first frame and start captureStream
+        ctx.drawImage(img, 0, 0, bridgeCanvas.width, bridgeCanvas.height);
+        const capturedStream = (bridgeCanvas as any).captureStream(15) as MediaStream;
+        video.srcObject = capturedStream;
         await video.play();
+
+        // Continuously draw img to canvas at ~15fps
+        mjpegIntervalRef.current = window.setInterval(() => {
+          if (img.complete && img.naturalWidth > 0) {
+            // Update canvas size if img dimensions change
+            if (bridgeCanvas.width !== img.naturalWidth || bridgeCanvas.height !== img.naturalHeight) {
+              bridgeCanvas.width = img.naturalWidth;
+              bridgeCanvas.height = img.naturalHeight;
+            }
+            ctx.drawImage(img, 0, 0, bridgeCanvas.width, bridgeCanvas.height);
+          }
+        }, 66); // ~15fps
       }
 
       setCameraStarted(true);
       setVideo(video);
     } catch (err) {
       console.error('Erro ao iniciar câmera:', err);
-      alert('Erro ao acessar a câmera. Verifique as permissões.');
+      cleanupMjpegBridge();
+      alert('Erro ao acessar a câmera. Verifique as permissões e a URL.');
     }
-  }, [cameraSource, selectedDeviceId, ipUrl, setVideo]);
+  }, [cameraSource, selectedDeviceId, ipUrl, setVideo, cleanupMjpegBridge]);
 
   // Parar câmera
   const stopCamera = useCallback(() => {
     stopDetection();
+    cleanupMjpegBridge();
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
@@ -115,16 +172,17 @@ export default function Vigilancia() {
       videoRef.current.src = '';
     }
     setCameraStarted(false);
-  }, [stopDetection]);
+  }, [stopDetection, cleanupMjpegBridge]);
 
   // Cleanup
   useEffect(() => {
     return () => {
+      cleanupMjpegBridge();
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(t => t.stop());
       }
     };
-  }, []);
+  }, [cleanupMjpegBridge]);
 
   // Desenhar overlay no canvas
   useEffect(() => {
@@ -187,9 +245,12 @@ export default function Vigilancia() {
       }
 
       // Desenhar bounding boxes de pessoas
-      if (video.videoWidth > 0) {
-        const scaleX = w / video.videoWidth;
-        const scaleY = h / video.videoHeight;
+      // Use img dimensions for MJPEG, video dimensions for webcam
+      const sourceW = isMjpeg && imgRef.current ? imgRef.current.naturalWidth : video.videoWidth;
+      const sourceH = isMjpeg && imgRef.current ? imgRef.current.naturalHeight : video.videoHeight;
+      if (sourceW > 0) {
+        const scaleX = w / sourceW;
+        const scaleY = h / sourceH;
 
         allPersons.forEach(person => {
           const inArea = personsInArea.includes(person);
@@ -218,7 +279,7 @@ export default function Vigilancia() {
 
     animId = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(animId);
-  }, [areaPoints, drawingPoints, isDrawingArea, personsInArea, allPersons, draggingPoint]);
+  }, [areaPoints, drawingPoints, isDrawingArea, personsInArea, allPersons, draggingPoint, isMjpeg]);
 
   // Handlers para desenhar/arrastar área
   const getRelativePos = (e: React.MouseEvent | React.TouchEvent): Point | null => {
@@ -407,8 +468,22 @@ export default function Vigilancia() {
           ref={videoRef}
           playsInline
           muted
-          className="w-full h-full object-contain"
+          className={`w-full h-full object-contain ${isMjpeg ? 'hidden' : ''}`}
         />
+        {/* MJPEG: show img directly for visual, video is hidden but feeds detection */}
+        {isMjpeg && (
+          <img
+            ref={imgRef}
+            alt="Stream MJPEG"
+            className="w-full h-full object-contain"
+          />
+        )}
+        {/* Hidden img for non-mjpeg (ref always mounted) */}
+        {!isMjpeg && (
+          <img ref={imgRef} alt="" className="hidden" />
+        )}
+        {/* Hidden canvas for MJPEG → video bridge */}
+        <canvas ref={mjpegCanvasRef} className="hidden" />
         <canvas
           ref={canvasRef}
           className="absolute inset-0 w-full h-full"
