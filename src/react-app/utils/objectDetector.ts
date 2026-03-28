@@ -1,8 +1,8 @@
 /**
  * Detector de objetos genérico usando MediaPipe Vision ObjectDetector
- * Modelo EfficientDet-Lite baixado do CDN oficial (~4MB)
+ * Modelo EfficientDet-Lite2 baixado do CDN oficial (~7MB)
  * Detecta todas as 80 classes COCO - filtro por categoria no código
- * v1.6.1 — Added logging + canvas support
+ * v1.7.5 — EfficientDet-Lite2 + threshold 0.25
  */
 
 import { ObjectDetector, FilesetResolver } from '@mediapipe/tasks-vision';
@@ -25,7 +25,7 @@ export const PERSON_CATEGORIES = ['person'];
 let detector: ObjectDetector | null = null;
 let isInitializing = false;
 
-const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.tflite';
+const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite2/float16/1/efficientdet_lite2.tflite';
 const WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm';
 
 /**
@@ -52,7 +52,7 @@ export async function initObjectDetector(): Promise<ObjectDetector> {
       },
       runningMode: 'VIDEO',
       maxResults: 20,
-      scoreThreshold: 0.35,
+      scoreThreshold: 0.25,
     });
     console.log('✅ MediaPipe ObjectDetector pronto');
     return detector;
