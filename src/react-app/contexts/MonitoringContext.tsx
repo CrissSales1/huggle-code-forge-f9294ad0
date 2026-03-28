@@ -227,6 +227,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   const ocrBufferRef = useRef<Array<{ placa: string; confidence: number; timestamp: number }>>([]);
   const fastTrackValidatedRef = useRef<boolean>(false);
   const noMotionCounterRef = useRef<number>(0);
+  const ocrLockUntilRef = useRef<number>(0);
   const lastValidationTimeRef = useRef<number>(0);
   const lastValidatedPlateRef = useRef<string>('');
   const VALIDATION_TIMEOUT_MS = 8000;
@@ -617,6 +618,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     ocrBufferRef.current = [];
     fastTrackValidatedRef.current = false;
     noMotionCounterRef.current = 0;
+    ocrLockUntilRef.current = 0;
   }, []);
   
   // Verificar se é morador
@@ -1205,8 +1207,12 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     setVehicleBBox(bestVehicle);
     vehicleBBoxRef.current = bestVehicle;
     
+    const OCR_LOCK_DURATION_MS = 8000;
+    
     if (hasVehicle) {
       noMotionCounterRef.current = 0;
+      // Renew persistence lock on every frame with vehicle
+      ocrLockUntilRef.current = Date.now() + OCR_LOCK_DURATION_MS;
       
       const currentStatus = statusRef.current;
       if (currentStatus === 'monitoring') {
@@ -1232,6 +1238,11 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
           recordOcrTime(performance.now() - ocrStart);
           isOcrInProgressRef.current = false;
           
+          if (success) {
+            // Plate validated — clear lock
+            ocrLockUntilRef.current = 0;
+          }
+          
           setTimeout(() => {
             if (isActiveRef.current) {
               setStatus('monitoring');
@@ -1245,8 +1256,39 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     } else {
       noMotionCounterRef.current++;
       
-      // After 3 ticks (~1s) without vehicle, reset OCR buffer
-      if (noMotionCounterRef.current >= 3 && statusRef.current === 'motion_detected') {
+      const now = Date.now();
+      const lockActive = now < ocrLockUntilRef.current;
+      
+      if (lockActive && statusRef.current === 'motion_detected') {
+        // Lock active — keep trying OCR with last saved bbox
+        logger.log(`🔒 OCR Lock ativo — ${Math.round((ocrLockUntilRef.current - now) / 1000)}s restantes`);
+        
+        const timeSinceLastOcr = now - lastOcrAttemptTimeRef.current;
+        if (!isOcrInProgressRef.current && timeSinceLastOcr >= OCR_RETRY_DELAY_MS && workerReady && vehicleBBoxRef.current) {
+          isOcrInProgressRef.current = true;
+          lastOcrAttemptTimeRef.current = now;
+          
+          const ocrStart = performance.now();
+          processFrameForOCR().then((success) => {
+            recordOcrTime(performance.now() - ocrStart);
+            isOcrInProgressRef.current = false;
+            
+            if (success) {
+              ocrLockUntilRef.current = 0;
+            }
+            
+            setTimeout(() => {
+              if (isActiveRef.current) {
+                setStatus('monitoring');
+                setStatusMessage(success ? '🟢 Monitorando...' : '🟡 Aguardando re-tentativa...');
+              }
+            }, 2000);
+          }).catch(() => {
+            isOcrInProgressRef.current = false;
+          });
+        }
+      } else if (noMotionCounterRef.current >= 10 && statusRef.current === 'motion_detected') {
+        // No vehicle for ~3s after lock expired — reset
         resetOcrBuffer();
         setStatus('monitoring');
         setStatusMessage('🟢 Monitorando...');
