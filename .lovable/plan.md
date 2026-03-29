@@ -1,50 +1,25 @@
 
 
-# Plano: Persistência do Pipeline OCR no Histórico (v1.7.6)
+# Plano: Corrigir Pipeline Não Exibido no Histórico (v1.7.6 fix)
 
 ## Problema
 
-O `pipelineByPlate` é armazenado em `useState` — um Map em memória que é perdido ao recarregar a página ou fechar o app. Quando o usuário clica em uma placa do histórico, o pipeline só aparece se foi capturado na sessão atual.
+Ao clicar em uma placa no histórico, as imagens do pipeline (Placa Processada / Resultado OCR) não aparecem. Isso acontece por dois motivos:
+
+1. **Cópia rasa (shallow copy)**: O `{ ...pipelineData }` não faz deep-copy do objeto `debugImages`. Se o `processingInfo` mudar depois (ex: pipeline resetado para próximo veículo), as referências internas são perdidas.
+2. **Salvamento prematuro**: O efeito salva no momento em que `rawText` aparece, mas o `debugImages` pode ainda não estar completo nesse ponto. Depois, quando as imagens chegam, o efeito dispara de novo mas pode estar em estado transitório.
 
 ## Solução
 
-Persistir os dados de pipeline (imagens debug base64 + metadados) no **IndexedDB** (mais adequado que localStorage por suportar dados maiores — cada pipeline com 2 imagens base64 pode ter ~200KB+).
+### 1. `src/react-app/pages/Monitoramento.tsx`
+- **Deep-copy ao salvar**: Trocar `{ ...pipelineData }` por uma cópia profunda que clona `debugImages` separadamente
+- **Salvar apenas com imagens**: Condicionar o salvamento a `pipelineData.debugImages?.preprocessed || pipelineData.debugImages?.final` existirem — evita salvar snapshots sem imagens
+- **Deep-copy no IndexedDB load**: Garantir que os dados carregados do IndexedDB são objetos independentes (já são, pois vêm de serialização)
 
-### Mudanças
-
-#### 1. Novo utilitário: `src/react-app/utils/pipelineStorage.ts`
-- Wrapper simples sobre IndexedDB usando a API nativa
-- Store `pipeline_cache` com chave = placa limpa (ex: `ABC1D23`)
-- Valor = `PipelineData` completo (incluindo `debugImages`)
-- Limite de 20 registros (FIFO — remove os mais antigos)
-- Funções: `savePipeline(placa, data)`, `loadPipeline(placa)`, `loadAllPipelines()`
-
-#### 2. Modificar `src/react-app/pages/Monitoramento.tsx`
-- Ao salvar no `pipelineByPlate` (linha ~195), também persistir no IndexedDB via `savePipeline()`
-- Ao montar o componente, carregar pipelines salvos do IndexedDB para inicializar o `pipelineByPlate`
-- No `displayedPipeline` memo, se não encontrou no Map em memória, tentar buscar do IndexedDB (com cache)
-
-#### 3. Versão
-- `1.7.6 (Pipeline Persistente)`
-
-### Detalhes técnicos
-
-```text
-IndexedDB "portacerta_db" v1
-  └── object store: "pipeline_cache"
-       ├── key: placa limpa (ex: "ABC1D23")
-       ├── value: { ...PipelineData, savedAt: timestamp }
-       └── max 20 entries (FIFO cleanup)
-
-Fluxo:
-  Nova detecção → salva em useState Map + IndexedDB
-  App reinicia → carrega IndexedDB → popula Map
-  Clique histórico → busca no Map (já populado do IndexedDB)
-```
+### 2. `src/react-app/utils/pipelineStorage.ts`
+- Sem alterações necessárias — IndexedDB serializa/deserializa corretamente
 
 | Arquivo | Mudança |
 |---------|---------|
-| `src/react-app/utils/pipelineStorage.ts` | **Novo** — wrapper IndexedDB |
-| `src/react-app/pages/Monitoramento.tsx` | Persistir e carregar pipelines |
-| `src/react-app/pages/Configuracoes.tsx` | Versão 1.7.6 |
+| `src/react-app/pages/Monitoramento.tsx` | Deep-copy + salvar só quando imagens existem |
 
