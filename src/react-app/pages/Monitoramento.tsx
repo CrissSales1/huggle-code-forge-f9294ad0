@@ -215,7 +215,7 @@ export default function Monitoramento() {
           ...pipelineData,
           debugImages: pipelineData.debugImages
             ? { ...pipelineData.debugImages }
-            : undefined,
+            : null,
         };
         
         setPipelineByPlate(prev => {
