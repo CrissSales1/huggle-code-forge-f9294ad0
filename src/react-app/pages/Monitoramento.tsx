@@ -139,6 +139,21 @@ export default function Monitoramento() {
     carregarVeiculos();
   }, []);
 
+  // v1.7.6: Carregar pipelines persistidos do IndexedDB ao montar
+  useEffect(() => {
+    loadAllPipelines().then(stored => {
+      if (stored.size > 0) {
+        setPipelineByPlate(prev => {
+          const merged = new Map(stored);
+          // Sobrescrever com dados em memória (mais recentes)
+          prev.forEach((v, k) => merged.set(k, v));
+          return merged;
+        });
+        console.log(`📦 ${stored.size} pipelines carregados do IndexedDB`);
+      }
+    });
+  }, []);
+
   // Desbloquear AudioContext na primeira interação do usuário
   useEffect(() => {
     const handleUserInteraction = () => {
@@ -188,23 +203,28 @@ export default function Monitoramento() {
     }
   }, [latestDetection?.id]);
 
-  // v1.1.80: Salvar pipeline por placa (mais confiável que por ID)
+  // v1.7.6: Salvar pipeline por placa (memória + IndexedDB)
   useEffect(() => {
     if (pipelineData?.rawText) {
       const placa = pipelineData.rawText.replace(/[^A-Z0-9]/g, '').toUpperCase();
       if (placa.length >= 7) {
+        const snapshot = { ...pipelineData };
+        
         setPipelineByPlate(prev => {
           const updated = new Map(prev);
-          updated.set(placa, { ...pipelineData });
+          updated.set(placa, snapshot);
           
-          // Manter apenas as 15 mais recentes
-          if (updated.size > 15) {
+          // Manter apenas as 20 mais recentes em memória
+          if (updated.size > 20) {
             const oldest = updated.keys().next().value;
             if (oldest) updated.delete(oldest);
           }
           
           return updated;
         });
+        
+        // Persistir no IndexedDB
+        savePipeline(placa, snapshot);
       }
     }
   }, [pipelineData]);
