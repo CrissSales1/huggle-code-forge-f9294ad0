@@ -204,11 +204,19 @@ export default function Monitoramento() {
   }, [latestDetection?.id]);
 
   // v1.7.6: Salvar pipeline por placa (memória + IndexedDB)
+  // Fix: deep-copy debugImages + salvar apenas quando imagens existem
   useEffect(() => {
     if (pipelineData?.rawText) {
       const placa = pipelineData.rawText.replace(/[^A-Z0-9]/g, '').toUpperCase();
-      if (placa.length >= 7) {
-        const snapshot = { ...pipelineData };
+      const hasImages = !!(pipelineData.debugImages?.preprocessed || pipelineData.debugImages?.final);
+      if (placa.length >= 7 && hasImages) {
+        // Deep-copy para evitar perda de referências quando pipeline reseta
+        const snapshot = {
+          ...pipelineData,
+          debugImages: pipelineData.debugImages
+            ? { ...pipelineData.debugImages }
+            : null,
+        };
         
         setPipelineByPlate(prev => {
           const updated = new Map(prev);
