@@ -8,6 +8,7 @@ import MonitoramentoHelp from '@/react-app/pages/MonitoramentoHelp';
 import PlacaVeiculo from '@/react-app/components/PlacaVeiculo';
 import CameraMonitor, { PipelineData } from '@/react-app/components/CameraMonitor';
 import { playNotificationSound, loadSoundEnabled, unlockAudioContext } from '@/react-app/utils/notificationSounds';
+import { savePipeline, loadAllPipelines } from '@/react-app/utils/pipelineStorage';
 
 interface VeiculoMorador {
   id: number;
