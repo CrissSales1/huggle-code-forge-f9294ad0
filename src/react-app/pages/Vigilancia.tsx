@@ -4,7 +4,7 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
-import { Shield, Play, Square, Camera, Maximize2, AlertTriangle, User, Settings, RotateCcw, Clock, Eye, EyeOff, Volume2 } from 'lucide-react';
+import { Shield, Play, Square, Camera, Maximize2, AlertTriangle, User, Settings, RotateCcw, Clock, Eye, EyeOff, Volume2, Scan } from 'lucide-react';
 import { useVigilancia } from '@/react-app/contexts/VigilanciaContext';
 import { type Point } from '@/react-app/utils/motionDetection';
 
@@ -327,6 +327,23 @@ export default function Vigilancia() {
               className="flex items-center gap-1.5 bg-muted hover:bg-accent text-foreground px-3 py-1.5 rounded-lg transition-colors text-xs border border-border"
             >
               <RotateCcw className="w-3.5 h-3.5" /> Área Padrão
+            </button>
+          </div>
+
+          {/* Detecção Aprimorada */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <Scan className="w-4 h-4 text-muted-foreground" />
+              <div>
+                <label className="text-xs text-muted-foreground">Detecção Aprimorada</label>
+                <p className="text-[10px] text-muted-foreground/70">Melhor detecção de pessoas distantes (mais processamento)</p>
+              </div>
+            </div>
+            <button
+              onClick={() => updateConfig({ enhancedDetection: !config.enhancedDetection })}
+              className={`relative w-10 h-5 rounded-full transition-colors ${config.enhancedDetection ? 'bg-primary' : 'bg-muted'}`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${config.enhancedDetection ? 'translate-x-5' : ''}`} />
             </button>
           </div>
 

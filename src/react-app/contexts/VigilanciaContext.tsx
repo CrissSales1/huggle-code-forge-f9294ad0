@@ -21,6 +21,7 @@ const LS = {
   ALERT_SCHEDULE: 'portacerta_vig_alert_schedule',
   ALERT_START: 'portacerta_vig_alert_start',
   ALERT_END: 'portacerta_vig_alert_end',
+  ENHANCED_DETECTION: 'portacerta_vig_enhanced_detection',
 } as const;
 
 const DEFAULT_AREA: Point[] = [
@@ -73,6 +74,7 @@ export interface VigilanciaConfig {
   alertScheduleEnabled: boolean;
   alertStartTime: string;
   alertEndTime: string;
+  enhancedDetection: boolean;
 }
 
 interface VigilanciaContextType {
@@ -125,6 +127,7 @@ export function VigilanciaProvider({ children }: { children: React.ReactNode }) 
     alertScheduleEnabled: lsGetBool(LS.ALERT_SCHEDULE, false),
     alertStartTime: lsGet(LS.ALERT_START, '22:00'),
     alertEndTime: lsGet(LS.ALERT_END, '06:00'),
+    enhancedDetection: lsGetBool(LS.ENHANCED_DETECTION, false),
   }));
 
   const [status, setStatus] = useState<VigilanciaStatus>('idle');
@@ -150,6 +153,7 @@ export function VigilanciaProvider({ children }: { children: React.ReactNode }) 
   const detection = usePersonDetection({
     cooldownMs: config.cooldown,
     soundEnabled: false,
+    enhancedDetection: config.enhancedDetection,
   });
   const detectionRef = useRef(detection);
   detectionRef.current = detection;
@@ -183,6 +187,7 @@ export function VigilanciaProvider({ children }: { children: React.ReactNode }) 
       if (partial.alertScheduleEnabled !== undefined) lsSet(LS.ALERT_SCHEDULE, String(next.alertScheduleEnabled));
       if (partial.alertStartTime !== undefined) lsSet(LS.ALERT_START, next.alertStartTime);
       if (partial.alertEndTime !== undefined) lsSet(LS.ALERT_END, next.alertEndTime);
+      if (partial.enhancedDetection !== undefined) lsSet(LS.ENHANCED_DETECTION, String(next.enhancedDetection));
       return next;
     });
   }, []);

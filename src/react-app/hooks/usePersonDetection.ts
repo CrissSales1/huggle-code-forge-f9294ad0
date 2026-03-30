@@ -11,6 +11,7 @@ import {
   detectObjects,
   detectObjectsFromImage,
   detectObjectsFromCanvas,
+  detectObjectsMultiScale,
   filterByCategories,
   PERSON_CATEGORIES,
   type ObjectDetection,
@@ -36,6 +37,7 @@ interface UsePersonDetectionOptions {
   cooldownMs?: number;
   intervalMs?: number;
   soundEnabled?: boolean;
+  enhancedDetection?: boolean;
 }
 
 export function usePersonDetection(options: UsePersonDetectionOptions = {}) {
@@ -43,7 +45,10 @@ export function usePersonDetection(options: UsePersonDetectionOptions = {}) {
     cooldownMs = 10000,
     intervalMs = 300,
     soundEnabled = true,
+    enhancedDetection = false,
   } = options;
+  const enhancedRef = useRef(enhancedDetection);
+  enhancedRef.current = enhancedDetection;
 
   const [state, setState] = useState<PersonDetectionState>({
     isLoading: false,
@@ -84,16 +89,22 @@ export function usePersonDetection(options: UsePersonDetectionOptions = {}) {
 
     const timestampMs = performance.now();
 
-    let allDetections: ObjectDetection[];
-    if (source instanceof HTMLVideoElement) {
-      allDetections = detectObjects(source, timestampMs);
-    } else if (source instanceof HTMLCanvasElement) {
-      allDetections = detectObjectsFromCanvas(source, timestampMs);
-    } else {
-      allDetections = detectObjectsFromImage(source as HTMLImageElement, timestampMs);
-    }
+    let allPersons: ObjectDetection[];
 
-    const allPersons = filterByCategories(allDetections, PERSON_CATEGORIES);
+    // Enhanced mode: multi-scale detection for distant/small persons
+    if (enhancedRef.current && (source instanceof HTMLVideoElement || source instanceof HTMLCanvasElement)) {
+      allPersons = detectObjectsMultiScale(source, timestampMs, PERSON_CATEGORIES);
+    } else {
+      let allDetections: ObjectDetection[];
+      if (source instanceof HTMLVideoElement) {
+        allDetections = detectObjects(source, timestampMs);
+      } else if (source instanceof HTMLCanvasElement) {
+        allDetections = detectObjectsFromCanvas(source, timestampMs);
+      } else {
+        allDetections = detectObjectsFromImage(source as HTMLImageElement, timestampMs);
+      }
+      allPersons = filterByCategories(allDetections, PERSON_CATEGORIES);
+    }
 
     if (allPersons.length > 0) {
       const sourceType = source instanceof HTMLVideoElement ? 'video' : source instanceof HTMLCanvasElement ? 'canvas' : 'img';
