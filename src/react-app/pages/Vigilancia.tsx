@@ -1,6 +1,6 @@
 /**
  * Página de Vigilância - Layout 2 colunas para porteiro
- * v1.7.0 — Redesign elegante com painel lateral
+ * v1.7.7 — Toggle Detecção Aprimorada (Multi-Scale)
  */
 
 import { useState, useRef, useEffect } from 'react';

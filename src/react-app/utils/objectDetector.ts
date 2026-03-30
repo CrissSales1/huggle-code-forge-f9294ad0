@@ -2,7 +2,7 @@
  * Detector de objetos genérico usando MediaPipe Vision ObjectDetector
  * Modelo EfficientDet-Lite2 baixado do CDN oficial (~7MB)
  * Detecta todas as 80 classes COCO - filtro por categoria no código
- * v1.7.5 — EfficientDet-Lite2 + threshold 0.25
+ * v1.7.7 — Multi-Scale Detection + EfficientDet-Lite2 + threshold 0.25
  */
 
 import { ObjectDetector, FilesetResolver } from '@mediapipe/tasks-vision';
