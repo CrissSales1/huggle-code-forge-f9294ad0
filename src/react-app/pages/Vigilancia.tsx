@@ -341,7 +341,7 @@ export default function Vigilancia() {
             </div>
             <button
               onClick={() => updateConfig({ enhancedDetection: !config.enhancedDetection })}
-              className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${config.enhancedDetection ? 'bg-primary' : 'bg-muted'}`}
+              className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 border ${config.enhancedDetection ? 'bg-primary border-primary' : 'bg-gray-300 border-gray-300'}`}
             >
               <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${config.enhancedDetection ? 'translate-x-5' : ''}`} />
             </button>
