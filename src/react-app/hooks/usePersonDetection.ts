@@ -2,7 +2,7 @@
  * Hook para detecção contínua de pessoas em área virtual
  * Usa MediaPipe ObjectDetector + isPointInPolygon
  * Aceita HTMLVideoElement, HTMLImageElement, ou HTMLCanvasElement
- * v1.6.1 — Canvas support + heartbeat logging
+ * v1.7.7 — Multi-Scale Detection + Canvas support + heartbeat logging
  */
 
 import { useRef, useState, useCallback, useEffect } from 'react';

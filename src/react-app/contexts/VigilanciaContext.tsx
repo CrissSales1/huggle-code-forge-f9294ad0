@@ -1,6 +1,6 @@
 /**
  * Contexto global de Vigilância — mantém detecção ativa ao navegar entre páginas
- * v1.6.1 — Stable reconnect + MJPEG canvas fallback
+ * v1.7.7 — enhancedDetection config + Multi-Scale support
  */
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import { usePersonDetection } from '@/react-app/hooks/usePersonDetection';
