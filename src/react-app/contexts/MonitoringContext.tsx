@@ -1280,9 +1280,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
           recordOcrTime(performance.now() - ocrStart);
           isOcrInProgressRef.current = false;
           
-          if (success) {
-            ocrLockUntilRef.current = 0;
-          }
+          // v1.7.8: Não zerar lock — expira naturalmente ou por Vehicle Swap
           
           // Reset status immediately — no 2s delay
           if (isActiveRef.current && statusRef.current !== 'monitoring') {
