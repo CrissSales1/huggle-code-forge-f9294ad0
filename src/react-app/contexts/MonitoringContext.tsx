@@ -230,7 +230,10 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   const ocrLockUntilRef = useRef<number>(0);
   const lastValidationTimeRef = useRef<number>(0);
   const lastValidatedPlateRef = useRef<string>('');
-  const VALIDATION_TIMEOUT_MS = 8000;
+  const VALIDATION_TIMEOUT_MS = 5000;
+  
+  // Vehicle Swap Detection: último bbox validado
+  const lastValidatedBBoxRef = useRef<ObjectDetection | null>(null);
   
   // Hooks para processamento em background e métricas de performance
   const { 
