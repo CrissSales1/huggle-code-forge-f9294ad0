@@ -1328,9 +1328,9 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     }
   }, [virtualArea, workerReady, processFrameForOCR, recordFrameStart, recordFrameEnd, recordOcrTime, resetOcrBuffer, calcVehicleIoU]);
   
-  // Start/stop vehicle detection loop when monitoring is active
+  // Start/stop vehicle detection loop — runs continuously while active (no status dependency)
   useEffect(() => {
-    if (isActive && mediapipeReady && (status === 'monitoring' || status === 'motion_detected')) {
+    if (isActive && mediapipeReady) {
       vehicleDetectionIntervalRef.current = window.setInterval(vehicleDetectionTick, VEHICLE_DETECTION_INTERVAL_MS);
     }
     
@@ -1340,7 +1340,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         vehicleDetectionIntervalRef.current = null;
       }
     };
-  }, [isActive, mediapipeReady, status, vehicleDetectionTick]);
+  }, [isActive, mediapipeReady, vehicleDetectionTick]);
   
   // Initialize MediaPipe when monitoring starts
   const initMediaPipe = useCallback(async () => {
