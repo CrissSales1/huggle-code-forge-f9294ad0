@@ -1229,11 +1229,20 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     
     const OCR_LOCK_DURATION_MS = 5000;
     
-    // Vehicle Swap Detection: if validated lock is active and new vehicle bbox differs significantly
+    // v1.7.8: Vehicle Swap Detection — IoU + center distance
     if (hasVehicle && bestVehicle && fastTrackValidatedRef.current && lastValidatedBBoxRef.current) {
       const iou = calcVehicleIoU(bestVehicle, lastValidatedBBoxRef.current);
-      if (iou < 0.6) {
-        console.log(`🔄 Vehicle Swap: IoU=${iou.toFixed(2)} < 0.6 — novo veículo detectado, resetando pipeline`);
+      
+      // Center distance check: detect swap even when bbox size is similar
+      const prev = lastValidatedBBoxRef.current;
+      const centerDx = Math.abs((bestVehicle.x + bestVehicle.width / 2) - (prev.x + prev.width / 2));
+      const centerDy = Math.abs((bestVehicle.y + bestVehicle.height / 2) - (prev.y + prev.height / 2));
+      const frameW = videoRef.current?.videoWidth || 640;
+      const frameH = videoRef.current?.videoHeight || 480;
+      const centerShift = Math.max(centerDx / frameW, centerDy / frameH);
+      
+      if (iou < 0.45 || centerShift > 0.25) {
+        console.log(`🔄 Vehicle Swap: IoU=${iou.toFixed(2)} centerShift=${(centerShift*100).toFixed(0)}% — novo veículo, resetando pipeline`);
         ocrBufferRef.current = [];
         fastTrackValidatedRef.current = false;
         ocrLockUntilRef.current = 0;
