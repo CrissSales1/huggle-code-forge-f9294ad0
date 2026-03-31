@@ -874,6 +874,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         fastTrackValidatedRef.current = true;
         lastValidationTimeRef.current = Date.now();
         lastValidatedPlateRef.current = placaConfirmada;
+        lastValidatedBBoxRef.current = vehicleBBoxRef.current;
         
         const wasAlreadyDetected = checkAndMarkPlate(placaConfirmada);
         if (wasAlreadyDetected) {
