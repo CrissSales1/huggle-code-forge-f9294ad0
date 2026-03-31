@@ -782,7 +782,8 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         logger.log(`⏱️ Fast-Track: Timeout ${VALIDATION_TIMEOUT_MS/1000}s - permitindo novo veículo`);
         resetOcrBuffer();
       } else {
-        return true;
+        // v1.7.8: Retornar false para manter lock ativo — caller continua tentando
+        return false;
       }
     }
     
