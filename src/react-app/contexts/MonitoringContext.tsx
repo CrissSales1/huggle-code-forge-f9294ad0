@@ -622,6 +622,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     fastTrackValidatedRef.current = false;
     noMotionCounterRef.current = 0;
     ocrLockUntilRef.current = 0;
+    lastValidatedBBoxRef.current = null;
   }, []);
   
   // Verificar se é morador
