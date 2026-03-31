@@ -771,7 +771,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   }, []);
   
   const processFrameForOCR = useCallback(async (): Promise<boolean> => {
-    if (!videoRef.current || statusRef.current !== 'monitoring' && statusRef.current !== 'motion_detected') return false;
+    if (!videoRef.current || (statusRef.current !== 'monitoring' && statusRef.current !== 'motion_detected')) return false;
     if (!workerReady) return false;
     
     // Fast-Track: Se já validou, verificar timeout
@@ -787,6 +787,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       }
     }
     
+    statusRef.current = 'processing';
     setStatus('processing');
     setStatusMessage('🔍 Reconhecendo placa...');
     
@@ -1228,6 +1229,17 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     vehicleBBoxRef.current = bestVehicle;
     
     const OCR_LOCK_DURATION_MS = 5000;
+
+    // Auto-recovery: evita pipeline preso em "processing" sem OCR ativo
+    if (statusRef.current === 'processing' && !isOcrInProgressRef.current) {
+      const staleMs = Date.now() - lastOcrAttemptTimeRef.current;
+      if (staleMs > 1800) {
+        logger.warn(`⚠️ Pipeline: status processing preso há ${Math.round(staleMs)}ms, forçando retomada`);
+        statusRef.current = 'monitoring';
+        setStatus('monitoring');
+        setStatusMessage('🔄 Retomando pipeline automático...');
+      }
+    }
     
     // v1.7.8: Vehicle Swap Detection — IoU + center distance
     if (hasVehicle && bestVehicle && fastTrackValidatedRef.current && lastValidatedBBoxRef.current) {
@@ -1283,12 +1295,21 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
           // v1.7.8: Não zerar lock — expira naturalmente ou por Vehicle Swap
           
           // Reset status immediately — no 2s delay
-          if (isActiveRef.current && statusRef.current !== 'monitoring') {
+          if (isActiveRef.current) {
+            statusRef.current = 'monitoring';
             setStatus('monitoring');
-            setStatusMessage(success ? '🟢 Monitorando...' : '🟡 Aguardando re-tentativa...');
+            if (!success) {
+              setStatusMessage('🟡 Aguardando re-tentativa...');
+            }
           }
-        }).catch(() => {
+        }).catch((err) => {
+          logger.error('Erro no trigger OCR automático (hasVehicle):', err);
           isOcrInProgressRef.current = false;
+          if (isActiveRef.current) {
+            statusRef.current = 'monitoring';
+            setStatus('monitoring');
+            setStatusMessage('🟡 Reagendando tentativa...');
+          }
         });
       }
     } else {
@@ -1312,12 +1333,21 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
             // v1.7.8: Não zerar lock — expira naturalmente ou por Vehicle Swap
             
             // Reset status immediately
-            if (isActiveRef.current && statusRef.current !== 'monitoring') {
+            if (isActiveRef.current) {
+              statusRef.current = 'monitoring';
               setStatus('monitoring');
-              setStatusMessage(success ? '🟢 Monitorando...' : '🟡 Aguardando re-tentativa...');
+              if (!success) {
+                setStatusMessage('🟡 Aguardando re-tentativa...');
+              }
             }
-          }).catch(() => {
+          }).catch((err) => {
+            logger.error('Erro no trigger OCR automático (lockActive):', err);
             isOcrInProgressRef.current = false;
+            if (isActiveRef.current) {
+              statusRef.current = 'monitoring';
+              setStatus('monitoring');
+              setStatusMessage('🟡 Reagendando tentativa...');
+            }
           });
         }
       } else if (noMotionCounterRef.current >= 10 && statusRef.current !== 'monitoring') {
