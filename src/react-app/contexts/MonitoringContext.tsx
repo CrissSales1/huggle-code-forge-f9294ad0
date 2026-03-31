@@ -230,7 +230,10 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
   const ocrLockUntilRef = useRef<number>(0);
   const lastValidationTimeRef = useRef<number>(0);
   const lastValidatedPlateRef = useRef<string>('');
-  const VALIDATION_TIMEOUT_MS = 8000;
+  const VALIDATION_TIMEOUT_MS = 5000;
+  
+  // Vehicle Swap Detection: último bbox validado
+  const lastValidatedBBoxRef = useRef<ObjectDetection | null>(null);
   
   // Hooks para processamento em background e métricas de performance
   const { 
@@ -619,6 +622,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     fastTrackValidatedRef.current = false;
     noMotionCounterRef.current = 0;
     ocrLockUntilRef.current = 0;
+    lastValidatedBBoxRef.current = null;
   }, []);
   
   // Verificar se é morador
@@ -870,6 +874,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         fastTrackValidatedRef.current = true;
         lastValidationTimeRef.current = Date.now();
         lastValidatedPlateRef.current = placaConfirmada;
+        lastValidatedBBoxRef.current = vehicleBBoxRef.current;
         
         const wasAlreadyDetected = checkAndMarkPlate(placaConfirmada);
         if (wasAlreadyDetected) {
@@ -1180,7 +1185,21 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     forceNightMode,
   ]);
   
-  // ========== v1.4.0: Vehicle Detection Loop (replaces MotionDetector) ==========
+  // ========== v1.8.0: Vehicle Detection Loop with Swap Detection ==========
+  
+  /** Calculate IoU between two bounding boxes */
+  const calcVehicleIoU = useCallback((a: ObjectDetection, b: ObjectDetection): number => {
+    const x1 = Math.max(a.x, b.x);
+    const y1 = Math.max(a.y, b.y);
+    const x2 = Math.min(a.x + a.width, b.x + b.width);
+    const y2 = Math.min(a.y + a.height, b.y + b.height);
+    const intersection = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+    if (intersection === 0) return 0;
+    const areaA = a.width * a.height;
+    const areaB = b.width * b.height;
+    return intersection / (areaA + areaB - intersection);
+  }, []);
+  
   const vehicleDetectionTick = useCallback(() => {
     const video = videoRef.current;
     if (!video || video.readyState < 2) return;
@@ -1207,7 +1226,20 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     setVehicleBBox(bestVehicle);
     vehicleBBoxRef.current = bestVehicle;
     
-    const OCR_LOCK_DURATION_MS = 8000;
+    const OCR_LOCK_DURATION_MS = 5000;
+    
+    // Vehicle Swap Detection: if validated lock is active and new vehicle bbox differs significantly
+    if (hasVehicle && bestVehicle && fastTrackValidatedRef.current && lastValidatedBBoxRef.current) {
+      const iou = calcVehicleIoU(bestVehicle, lastValidatedBBoxRef.current);
+      if (iou < 0.6) {
+        console.log(`🔄 Vehicle Swap: IoU=${iou.toFixed(2)} < 0.6 — novo veículo detectado, resetando pipeline`);
+        ocrBufferRef.current = [];
+        fastTrackValidatedRef.current = false;
+        ocrLockUntilRef.current = 0;
+        lastValidatedBBoxRef.current = null;
+        isOcrInProgressRef.current = false;
+      }
+    }
     
     if (hasVehicle) {
       noMotionCounterRef.current = 0;
@@ -1239,16 +1271,14 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
           isOcrInProgressRef.current = false;
           
           if (success) {
-            // Plate validated — clear lock
             ocrLockUntilRef.current = 0;
           }
           
-          setTimeout(() => {
-            if (isActiveRef.current) {
-              setStatus('monitoring');
-              setStatusMessage(success ? '🟢 Monitorando...' : '🟡 Aguardando re-tentativa...');
-            }
-          }, 2000);
+          // Reset status immediately — no 2s delay
+          if (isActiveRef.current && statusRef.current !== 'monitoring') {
+            setStatus('monitoring');
+            setStatusMessage(success ? '🟢 Monitorando...' : '🟡 Aguardando re-tentativa...');
+          }
         }).catch(() => {
           isOcrInProgressRef.current = false;
         });
@@ -1259,10 +1289,8 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       const now = Date.now();
       const lockActive = now < ocrLockUntilRef.current;
       
-      if (lockActive && statusRef.current === 'motion_detected') {
+      if (lockActive && (statusRef.current === 'motion_detected' || statusRef.current === 'monitoring')) {
         // Lock active — keep trying OCR with last saved bbox
-        logger.log(`🔒 OCR Lock ativo — ${Math.round((ocrLockUntilRef.current - now) / 1000)}s restantes`);
-        
         const timeSinceLastOcr = now - lastOcrAttemptTimeRef.current;
         if (!isOcrInProgressRef.current && timeSinceLastOcr >= OCR_RETRY_DELAY_MS && workerReady && vehicleBBoxRef.current) {
           isOcrInProgressRef.current = true;
@@ -1277,17 +1305,16 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
               ocrLockUntilRef.current = 0;
             }
             
-            setTimeout(() => {
-              if (isActiveRef.current) {
-                setStatus('monitoring');
-                setStatusMessage(success ? '🟢 Monitorando...' : '🟡 Aguardando re-tentativa...');
-              }
-            }, 2000);
+            // Reset status immediately
+            if (isActiveRef.current && statusRef.current !== 'monitoring') {
+              setStatus('monitoring');
+              setStatusMessage(success ? '🟢 Monitorando...' : '🟡 Aguardando re-tentativa...');
+            }
           }).catch(() => {
             isOcrInProgressRef.current = false;
           });
         }
-      } else if (noMotionCounterRef.current >= 10 && statusRef.current === 'motion_detected') {
+      } else if (noMotionCounterRef.current >= 10 && statusRef.current !== 'monitoring') {
         // No vehicle for ~3s after lock expired — reset
         resetOcrBuffer();
         setStatus('monitoring');
@@ -1299,11 +1326,11 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         }));
       }
     }
-  }, [virtualArea, workerReady, processFrameForOCR, recordFrameStart, recordFrameEnd, recordOcrTime, resetOcrBuffer]);
+  }, [virtualArea, workerReady, processFrameForOCR, recordFrameStart, recordFrameEnd, recordOcrTime, resetOcrBuffer, calcVehicleIoU]);
   
-  // Start/stop vehicle detection loop when monitoring is active
+  // Start/stop vehicle detection loop — runs continuously while active (no status dependency)
   useEffect(() => {
-    if (isActive && mediapipeReady && (status === 'monitoring' || status === 'motion_detected')) {
+    if (isActive && mediapipeReady) {
       vehicleDetectionIntervalRef.current = window.setInterval(vehicleDetectionTick, VEHICLE_DETECTION_INTERVAL_MS);
     }
     
@@ -1313,7 +1340,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         vehicleDetectionIntervalRef.current = null;
       }
     };
-  }, [isActive, mediapipeReady, status, vehicleDetectionTick]);
+  }, [isActive, mediapipeReady, vehicleDetectionTick]);
   
   // Initialize MediaPipe when monitoring starts
   const initMediaPipe = useCallback(async () => {
