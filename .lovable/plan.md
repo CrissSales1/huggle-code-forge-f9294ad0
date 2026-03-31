@@ -1,46 +1,56 @@
 
 
-# Plano: Melhorar Detecção de Pessoas Distantes na Vigilância
+# Plano: Corrigir Gargalos no Pipeline de Detecção e Leitura de Placas
 
-## Diagnóstico
+## Problemas Identificados
 
-A câmera da screenshot mostra uma vista ampla da entrada de veículos. Pessoas distantes aparecem muito pequenas no frame (ocupando talvez 20-40px de altura em uma imagem 1280x720). O EfficientDet-Lite2 redimensiona internamente para 448x448, fazendo com que pessoas pequenas fiquem com apenas ~10-15px — abaixo do limiar prático de detecção do modelo.
+### 1. Status bloqueia OCR por 2 segundos após cada tentativa
+Após o OCR (sucesso ou falha), um `setTimeout` de 2s muda o status de volta para `monitoring`. Durante esses 2s, o status pode estar em um estado intermediário que impede novas tentativas de OCR para o próximo veículo.
 
-A outra câmera provavelmente tem um ângulo mais fechado, onde as pessoas ocupam mais pixels, por isso funciona bem.
+### 2. Lock de validação bloqueia próximo veículo por 8 segundos
+`fastTrackValidatedRef` fica `true` por 8s após uma placa ser validada. Se um segundo carro entra nesse período, o `processFrameForOCR` retorna imediatamente sem processar.
 
-## Limitações reais
+### 3. Intervalo de detecção recriado a cada mudança de status
+O `useEffect` na linha 1305 depende de `status`, então toda mudança (`monitoring` → `motion_detected` → `processing` → `monitoring`) destrói e recria o `setInterval`, causando gaps de até 300ms a cada transição.
 
-A distância **é** um empecilho real para qualquer modelo leve rodando no navegador. Não há como resolver 100%, mas podemos melhorar significativamente.
+### 4. YOLO Swap Detection ausente
+O sistema não detecta quando um veículo diferente entra na área — se a placa anterior foi validada, o buffer e lock persistem mesmo que seja um carro completamente diferente.
 
-## Solução: Detecção em Duas Escalas (Multi-Scale)
-
-Processar o frame em **duas passadas**: uma com o frame completo (pega pessoas próximas) e outra com crops ampliados de regiões de interesse (pega pessoas distantes).
-
-### Mudanças
+## Mudanças
 
 | Arquivo | O que muda |
 |---------|-----------|
-| `src/react-app/hooks/usePersonDetection.ts` | Adicionar lógica multi-scale: dividir frame em 4 quadrantes com overlap, rodar detecção em cada crop, e mesclar resultados com deduplicação por IoU |
-| `src/react-app/utils/objectDetector.ts` | Adicionar função `detectObjectsFromCanvas` (se não existir) para processar crops via canvas |
-| `src/react-app/contexts/VigilanciaContext.tsx` | Adicionar config `enhancedDetection` (boolean) para ativar/desativar modo multi-scale |
-| `src/react-app/pages/Vigilancia.tsx` | Adicionar toggle "Detecção Aprimorada" no painel lateral |
+| `MonitoringContext.tsx` | 4 correções no fluxo de detecção |
 
-### Como funciona
+### Correção 1: Remover `status` da dependência do useEffect do intervalo
+O intervalo de detecção deve rodar continuamente enquanto `isActive && mediapipeReady`, sem depender do `status`. O status é gerenciado internamente pelo tick.
 
-1. **Passada 1** — Frame completo (como hoje): detecta pessoas próximas/médias
-2. **Passada 2** — 4 crops com 20% de overlap cobrindo o frame inteiro, cada um escalado para o tamanho de input do modelo: detecta pessoas pequenas/distantes
-3. **Deduplicação** — Remove detecções duplicadas usando IoU (Intersection over Union) > 0.4
-4. **Coordenadas** — Converte bounding boxes dos crops de volta para coordenadas do frame original
+### Correção 2: Resetar status imediatamente após OCR
+Remover os `setTimeout` de 2s que atrasam o retorno ao status `monitoring`. O status de resultado (`✅ Casa X`) pode ficar na mensagem sem bloquear o fluxo.
 
-### Performance
+### Correção 3: Detectar troca de veículo (Vehicle Swap)
+Comparar o bounding box do veículo atual com o anterior. Se a posição/tamanho mudar >40% (IoU < 0.6), resetar `fastTrackValidatedRef`, `ocrBufferRef` e `ocrLockUntilRef` para permitir pipeline imediato do novo veículo.
 
-- Passada multi-scale adiciona ~4 inferências extras a cada ciclo (300ms)
-- Cada inferência do EfficientDet-Lite2 leva ~15-30ms em WebGL
-- Total: ~60-120ms extra por ciclo — aceitável para o intervalo de 300ms
-- Se necessário, o intervalo pode ser aumentado para 500ms quando multi-scale está ativo
-- Toggle permite desativar quando a câmera é próxima (sem custo extra)
+### Correção 4: Reduzir VALIDATION_TIMEOUT de 8s para 5s
+8 segundos é muito conservador. 5s é suficiente para a maioria dos cenários e permite que carros consecutivos sejam processados mais rapidamente.
 
-### Alternativa mais simples (se multi-scale for muito pesado)
+## Detalhes Técnicos
 
-Reduzir o `scoreThreshold` de 0.25 para **0.15** e aumentar `maxResults` para 30. Isso pode gerar mais falsos positivos, mas detectaria pessoas com menor confiança. Pode ser feito como primeiro passo antes do multi-scale.
+```text
+ANTES (fluxo problemático):
+Carro A entra → detectado → OCR → validado → lock 8s
+                                              ↓
+Carro B entra (2s depois) → detectado → OCR bloqueado por lock
+                                        → espera 6s → timeout → OCR começa
+
+DEPOIS (fluxo corrigido):
+Carro A entra → detectado → OCR → validado → lock 5s
+                                              ↓
+Carro B entra (2s depois) → bbox diferente → Vehicle Swap detectado
+                           → lock resetado → OCR inicia imediatamente
+```
+
+### Implementação do Vehicle Swap
+
+Armazenar o bounding box do último veículo validado em um ref. A cada tick, se há veículo na área e `fastTrackValidatedRef` está ativo, calcular IoU entre o bbox atual e o salvo. Se IoU < 0.6, é um veículo diferente — resetar tudo e permitir OCR.
 
