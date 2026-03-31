@@ -1,56 +1,50 @@
 
 
-# Plano: Corrigir Gargalos no Pipeline de Detecção e Leitura de Placas
+# Plano: Corrigir Pipeline Não Iniciando para Veículo Atual (v1.7.8)
 
-## Problemas Identificados
+## Problema Raiz
 
-### 1. Status bloqueia OCR por 2 segundos após cada tentativa
-Após o OCR (sucesso ou falha), um `setTimeout` de 2s muda o status de volta para `monitoring`. Durante esses 2s, o status pode estar em um estado intermediário que impede novas tentativas de OCR para o próximo veículo.
+Identifiquei **3 bugs** que explicam por que o pipeline não inicia para o carro atual mesmo com "Veículo detectado!":
 
-### 2. Lock de validação bloqueia próximo veículo por 8 segundos
-`fastTrackValidatedRef` fica `true` por 8s após uma placa ser validada. Se um segundo carro entra nesse período, o `processFrameForOCR` retorna imediatamente sem processar.
+### Bug 1: `processFrameForOCR` retorna `true` ao pular por fastTrack
+Na linha 785, quando o fastTrack bloqueia o OCR (placa anterior ainda válida), a função retorna `true`. O caller na linha 1273 interpreta `success=true` como "parar de tentar" e zera `ocrLockUntilRef = 0`. Resultado: o sistema para de tentar OCR mesmo com veículo presente.
 
-### 3. Intervalo de detecção recriado a cada mudança de status
-O `useEffect` na linha 1305 depende de `status`, então toda mudança (`monitoring` → `motion_detected` → `processing` → `monitoring`) destrói e recria o `setInterval`, causando gaps de até 300ms a cada transição.
+### Bug 2: Vehicle Swap falha para carros na mesma posição
+Carros que passam pelo mesmo ponto (mesma faixa/vaga) têm bounding boxes similares → IoU > 0.6 → swap não detectado → fastTrack do carro anterior bloqueia o novo.
 
-### 4. YOLO Swap Detection ausente
-O sistema não detecta quando um veículo diferente entra na área — se a placa anterior foi validada, o buffer e lock persistem mesmo que seja um carro completamente diferente.
+### Bug 3: Lock é zerado prematuramente no sucesso
+Quando OCR valida com sucesso, `ocrLockUntilRef = 0` é definido imediatamente. Se o veículo seguinte já está no quadro, o lock está morto e o sistema depende apenas do próximo tick para reativar — criando um gap.
 
 ## Mudanças
 
-| Arquivo | O que muda |
-|---------|-----------|
-| `MonitoringContext.tsx` | 4 correções no fluxo de detecção |
+| Arquivo | Correção |
+|---------|----------|
+| `MonitoringContext.tsx` | 4 correções no fluxo |
 
-### Correção 1: Remover `status` da dependência do useEffect do intervalo
-O intervalo de detecção deve rodar continuamente enquanto `isActive && mediapipeReady`, sem depender do `status`. O status é gerenciado internamente pelo tick.
+### Correção 1: Retornar `false` no skip de fastTrack
+Mudar linha 785 de `return true` para `return false`. Isso mantém o lock ativo e o caller continua tentando OCR nos próximos ticks até o timeout expirar ou Vehicle Swap ser detectado.
 
-### Correção 2: Resetar status imediatamente após OCR
-Remover os `setTimeout` de 2s que atrasam o retorno ao status `monitoring`. O status de resultado (`✅ Casa X`) pode ficar na mensagem sem bloquear o fluxo.
+### Correção 2: Adicionar detecção de swap por distância do centro
+Além do IoU, calcular a distância do centro do bbox. Se o centro se moveu mais de 25% do frame (horizontalmente ou verticalmente), considerar como novo veículo — mesmo que o tamanho do bbox seja similar.
 
-### Correção 3: Detectar troca de veículo (Vehicle Swap)
-Comparar o bounding box do veículo atual com o anterior. Se a posição/tamanho mudar >40% (IoU < 0.6), resetar `fastTrackValidatedRef`, `ocrBufferRef` e `ocrLockUntilRef` para permitir pipeline imediato do novo veículo.
+### Correção 3: Não zerar lock no sucesso quando veículo está presente
+Remover `ocrLockUntilRef.current = 0` após sucesso. O lock deve expirar naturalmente (5s) ou ser resetado por Vehicle Swap. Isso garante que o sistema continue monitorando mesmo após um OCR bem-sucedido.
 
-### Correção 4: Reduzir VALIDATION_TIMEOUT de 8s para 5s
-8 segundos é muito conservador. 5s é suficiente para a maioria dos cenários e permite que carros consecutivos sejam processados mais rapidamente.
+### Correção 4: Reduzir IoU threshold de 0.6 para 0.45
+Para capturar trocas de veículos que ocupam posições similares.
 
-## Detalhes Técnicos
+## Versão
+Atualizar para **v1.7.8 (Pipeline Flow Fix)** em `Configuracoes.tsx` e arquivos relevantes.
 
 ```text
-ANTES (fluxo problemático):
-Carro A entra → detectado → OCR → validado → lock 8s
-                                              ↓
-Carro B entra (2s depois) → detectado → OCR bloqueado por lock
-                                        → espera 6s → timeout → OCR começa
+ANTES:
+Carro A valida → fastTrack=true → processFrameForOCR retorna true
+  → caller: success! zera lock → pipeline morto
+  → Carro B chega → "Veículo detectado!" mas nada acontece
 
-DEPOIS (fluxo corrigido):
-Carro A entra → detectado → OCR → validado → lock 5s
-                                              ↓
-Carro B entra (2s depois) → bbox diferente → Vehicle Swap detectado
-                           → lock resetado → OCR inicia imediatamente
+DEPOIS:
+Carro A valida → fastTrack=true → processFrameForOCR retorna false
+  → caller: mantém lock, continua tentando
+  → Carro B chega → centro mudou 30% → Vehicle Swap → pipeline inicia
 ```
-
-### Implementação do Vehicle Swap
-
-Armazenar o bounding box do último veículo validado em um ref. A cada tick, se há veículo na área e `fastTrackValidatedRef` está ativo, calcular IoU entre o bbox atual e o salvo. Se IoU < 0.6, é um veículo diferente — resetar tudo e permitir OCR.
 
