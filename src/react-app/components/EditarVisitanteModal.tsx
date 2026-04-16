@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import Modal from './Modal';
-import { useVisitanteActions } from '@/react-app/hooks/useApi';
+import { usePrismasDisponiveis, useVisitanteActions } from '@/react-app/hooks/useApi';
 import { normalizarNumeroCasa } from '@/react-app/utils/formatters';
 import type { VisitanteAtivo } from '@/shared/types';
 
