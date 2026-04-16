@@ -18,8 +18,10 @@ export default function EditarVisitanteModal({ isOpen, onClose, visitante, onSuc
   const [observacoes, setObservacoes] = useState('');
   const [liberadoPor, setLiberadoPor] = useState('');
   const [estacionarVagaMorador, setEstacionarVagaMorador] = useState(false);
+  const [numeroPrisma, setNumeroPrisma] = useState<number | null>(null);
   
   const { editarVisitante, loading, error } = useVisitanteActions();
+  const { prismas: prismasDisponiveis } = usePrismasDisponiveis();
 
   useEffect(() => {
     if (visitante) {
@@ -29,8 +31,16 @@ export default function EditarVisitanteModal({ isOpen, onClose, visitante, onSuc
       setObservacoes(visitante.observacoes || '');
       setLiberadoPor(visitante.liberado_por || '');
       setEstacionarVagaMorador(visitante.estacionar_vaga_morador ?? false);
+      setNumeroPrisma(visitante.numero_prisma ?? null);
     }
   }, [visitante]);
+
+  // Lista de prismas para o select: disponíveis + o atual do visitante (se houver)
+  const opcoesPrismas = (() => {
+    const numeros = new Set<number>(prismasDisponiveis.map((p) => p.numero));
+    if (numeroPrisma) numeros.add(numeroPrisma);
+    return Array.from(numeros).sort((a, b) => a - b);
+  })();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,6 +52,7 @@ export default function EditarVisitanteModal({ isOpen, onClose, visitante, onSuc
       nome: nome.trim(),
       casa_visitada: normalizarNumeroCasa(casaVisitada.trim()),
       placa_veiculo: placaVeiculo.trim().toUpperCase(),
+      numero_prisma: numeroPrisma,
       estacionar_vaga_morador: estacionarVagaMorador,
       observacoes: observacoes.trim() || undefined,
       liberado_por: liberadoPor.trim() || undefined,
