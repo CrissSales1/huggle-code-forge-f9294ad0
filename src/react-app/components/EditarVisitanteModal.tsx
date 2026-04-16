@@ -122,6 +122,25 @@ export default function EditarVisitanteModal({ isOpen, onClose, visitante, onSuc
         </div>
 
         <div>
+          <label htmlFor="prisma" className="block text-sm font-medium text-gray-700 mb-2">
+            Prisma Magnético
+          </label>
+          <select
+            id="prisma"
+            value={numeroPrisma ?? ''}
+            onChange={(e) => setNumeroPrisma(e.target.value ? Number(e.target.value) : null)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+          >
+            <option value="">Sem prisma</option>
+            {opcoesPrismas.map((numero) => (
+              <option key={numero} value={numero}>
+                Prisma {numero}{numero === visitante?.numero_prisma ? ' (atual)' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
           <label className="block text-sm font-medium text-gray-700 mb-3">
             Tipo de Vaga
           </label>
