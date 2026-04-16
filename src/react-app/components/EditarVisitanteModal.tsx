@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import Modal from './Modal';
-import { useVisitanteActions } from '@/react-app/hooks/useApi';
+import { usePrismasDisponiveis, useVisitanteActions } from '@/react-app/hooks/useApi';
 import { normalizarNumeroCasa } from '@/react-app/utils/formatters';
 import type { VisitanteAtivo } from '@/shared/types';
 
@@ -18,8 +18,10 @@ export default function EditarVisitanteModal({ isOpen, onClose, visitante, onSuc
   const [observacoes, setObservacoes] = useState('');
   const [liberadoPor, setLiberadoPor] = useState('');
   const [estacionarVagaMorador, setEstacionarVagaMorador] = useState(false);
+  const [numeroPrisma, setNumeroPrisma] = useState<number | null>(null);
   
   const { editarVisitante, loading, error } = useVisitanteActions();
+  const { prismas: prismasDisponiveis } = usePrismasDisponiveis();
 
   useEffect(() => {
     if (visitante) {
@@ -29,8 +31,16 @@ export default function EditarVisitanteModal({ isOpen, onClose, visitante, onSuc
       setObservacoes(visitante.observacoes || '');
       setLiberadoPor(visitante.liberado_por || '');
       setEstacionarVagaMorador(visitante.estacionar_vaga_morador ?? false);
+      setNumeroPrisma(visitante.numero_prisma ?? null);
     }
   }, [visitante]);
+
+  // Lista de prismas para o select: disponíveis + o atual do visitante (se houver)
+  const opcoesPrismas = (() => {
+    const numeros = new Set<number>(prismasDisponiveis.map((p) => p.numero));
+    if (numeroPrisma) numeros.add(numeroPrisma);
+    return Array.from(numeros).sort((a, b) => a - b);
+  })();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,6 +52,7 @@ export default function EditarVisitanteModal({ isOpen, onClose, visitante, onSuc
       nome: nome.trim(),
       casa_visitada: normalizarNumeroCasa(casaVisitada.trim()),
       placa_veiculo: placaVeiculo.trim().toUpperCase(),
+      numero_prisma: numeroPrisma,
       estacionar_vaga_morador: estacionarVagaMorador,
       observacoes: observacoes.trim() || undefined,
       liberado_por: liberadoPor.trim() || undefined,
@@ -108,6 +119,25 @@ export default function EditarVisitanteModal({ isOpen, onClose, visitante, onSuc
             maxLength={7}
             required
           />
+        </div>
+
+        <div>
+          <label htmlFor="prisma" className="block text-sm font-medium text-gray-700 mb-2">
+            Prisma Magnético
+          </label>
+          <select
+            id="prisma"
+            value={numeroPrisma ?? ''}
+            onChange={(e) => setNumeroPrisma(e.target.value ? Number(e.target.value) : null)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+          >
+            <option value="">Sem prisma</option>
+            {opcoesPrismas.map((numero) => (
+              <option key={numero} value={numero}>
+                Prisma {numero}{numero === visitante?.numero_prisma ? ' (atual)' : ''}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div>
