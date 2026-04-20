@@ -21,10 +21,10 @@ export default function EditarVisitanteModal({ isOpen, onClose, visitante, onSuc
   const [numeroPrisma, setNumeroPrisma] = useState<number | null>(null);
   
   const { editarVisitante, loading, error } = useVisitanteActions();
-  const { prismas: prismasDisponiveis } = usePrismasDisponiveis();
+  const { prismas: prismasDisponiveis, refetch: refetchPrismas } = usePrismasDisponiveis();
 
   useEffect(() => {
-    if (visitante) {
+    if (isOpen && visitante) {
       setNome(visitante.nome);
       setCasaVisitada(visitante.casa_visitada);
       setPlacaVeiculo(visitante.placa_veiculo);
@@ -32,8 +32,9 @@ export default function EditarVisitanteModal({ isOpen, onClose, visitante, onSuc
       setLiberadoPor(visitante.liberado_por || '');
       setEstacionarVagaMorador(visitante.estacionar_vaga_morador ?? false);
       setNumeroPrisma(visitante.numero_prisma ?? null);
+      refetchPrismas();
     }
-  }, [visitante]);
+  }, [isOpen, visitante, refetchPrismas]);
 
   // Lista de prismas para o select: disponíveis + o atual do visitante (se houver)
   const opcoesPrismas = (() => {
