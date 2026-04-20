@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import Modal from './Modal';
-import { usePrismasDisponiveis, useVisitanteActions } from '@/react-app/hooks/useApi';
+import { useVisitanteActions } from '@/react-app/hooks/useApi';
+import { supabase } from '@/integrations/supabase/client';
 import { normalizarNumeroCasa } from '@/react-app/utils/formatters';
 import type { VisitanteAtivo } from '@/shared/types';
 
@@ -19,26 +20,51 @@ export default function EditarVisitanteModal({ isOpen, onClose, visitante, onSuc
   const [liberadoPor, setLiberadoPor] = useState('');
   const [estacionarVagaMorador, setEstacionarVagaMorador] = useState(false);
   const [numeroPrisma, setNumeroPrisma] = useState<number | null>(null);
-  
+  const [prismasDisponiveis, setPrismasDisponiveis] = useState<number[]>([]);
+
   const { editarVisitante, loading, error } = useVisitanteActions();
-  const { prismas: prismasDisponiveis, refetch: refetchPrismas } = usePrismasDisponiveis();
 
   useEffect(() => {
-    if (isOpen && visitante) {
-      setNome(visitante.nome);
-      setCasaVisitada(visitante.casa_visitada);
-      setPlacaVeiculo(visitante.placa_veiculo);
-      setObservacoes(visitante.observacoes || '');
-      setLiberadoPor(visitante.liberado_por || '');
-      setEstacionarVagaMorador(visitante.estacionar_vaga_morador ?? false);
-      setNumeroPrisma(visitante.numero_prisma ?? null);
-      refetchPrismas();
-    }
-  }, [isOpen, visitante, refetchPrismas]);
+    if (!isOpen || !visitante) return;
 
-  // Lista de prismas para o select: disponíveis + o atual do visitante (se houver)
+    setNome(visitante.nome);
+    setCasaVisitada(visitante.casa_visitada);
+    setPlacaVeiculo(visitante.placa_veiculo);
+    setObservacoes(visitante.observacoes || '');
+    setLiberadoPor(visitante.liberado_por || '');
+    setEstacionarVagaMorador(visitante.estacionar_vaga_morador ?? false);
+    setNumeroPrisma(visitante.numero_prisma ?? null);
+
+    // Buscar prismas livres no momento exato da abertura (sempre fresco)
+    (async () => {
+      const { data: visitantesAtivos } = await supabase
+        .from('visitantes')
+        .select('numero_prisma, id')
+        .eq('is_ativo', true)
+        .not('numero_prisma', 'is', null);
+
+      const ocupadosPorOutros = new Set(
+        (visitantesAtivos || [])
+          .filter((v) => v.id !== visitante.id && v.numero_prisma != null)
+          .map((v) => v.numero_prisma as number)
+      );
+
+      const { data: todosPrismas } = await supabase
+        .from('prismas_magneticos')
+        .select('numero')
+        .order('numero', { ascending: true });
+
+      const livres = (todosPrismas || [])
+        .map((p) => p.numero)
+        .filter((n) => !ocupadosPorOutros.has(n));
+
+      setPrismasDisponiveis(livres);
+    })();
+  }, [isOpen, visitante]);
+
+  // Lista final: prismas livres + o atual do visitante (garantido)
   const opcoesPrismas = (() => {
-    const numeros = new Set<number>(prismasDisponiveis.map((p) => p.numero));
+    const numeros = new Set<number>(prismasDisponiveis);
     if (numeroPrisma) numeros.add(numeroPrisma);
     return Array.from(numeros).sort((a, b) => a - b);
   })();
