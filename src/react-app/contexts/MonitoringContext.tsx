@@ -1231,12 +1231,14 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     const OCR_LOCK_DURATION_MS = 5000;
 
     // Auto-recovery: evita pipeline preso em "processing" sem OCR ativo
+    // v1.8.2: Guard contra setState repetitivo — só atualiza se realmente está em 'processing'
     if (statusRef.current === 'processing' && !isOcrInProgressRef.current) {
       const staleMs = Date.now() - lastOcrAttemptTimeRef.current;
       if (staleMs > 1800) {
         logger.warn(`⚠️ Pipeline: status processing preso há ${Math.round(staleMs)}ms, forçando retomada`);
         statusRef.current = 'monitoring';
-        setStatus('monitoring');
+        lastOcrAttemptTimeRef.current = Date.now(); // impede re-disparo no próximo tick
+        setStatus(prev => prev === 'processing' ? 'monitoring' : prev);
         setStatusMessage('🔄 Retomando pipeline automático...');
       }
     }

@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => ({
     react(),
     mode === 'development' && componentTagger(),
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       includeAssets: ['favicon.svg', 'pwa-icons/*.svg', 'pwa-icons/*.png'],
       manifest: {
         name: 'Estacionamento - Aguas da Fonte',
