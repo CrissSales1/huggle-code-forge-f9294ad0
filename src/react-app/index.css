@@ -16,6 +16,8 @@
 body {
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
+  background-color: #F8F9FA;
+  color: #191b23;
 }
 
 /* Touch feedback melhorado */
