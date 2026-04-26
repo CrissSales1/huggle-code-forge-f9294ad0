@@ -5,46 +5,50 @@ interface StatsCardProps {
   value: number | string;
   icon: LucideIcon;
   color?: 'blue' | 'green' | 'purple' | 'orange' | 'red';
+  subtitle?: string;
   loading?: boolean;
 }
 
-export default function StatsCard({ title, value, icon: Icon, color = 'blue', loading }: StatsCardProps) {
-  const colorClasses = {
-    blue: 'from-blue-50 to-blue-100 border-blue-200 text-blue-700',
-    green: 'from-green-50 to-green-100 border-green-200 text-green-700',
-    purple: 'from-purple-50 to-purple-100 border-purple-200 text-purple-700',
-    orange: 'from-orange-50 to-orange-100 border-orange-200 text-orange-700',
-    red: 'from-red-50 to-red-100 border-red-200 text-red-700',
-  };
+// Mapeia cor lógica para classes do design M3 (mantém a API anterior).
+const palettes: Record<string, { iconBg: string; iconText: string }> = {
+  green:  { iconBg: 'bg-[#E8F5E9]', iconText: 'text-[#2E7D32]' },
+  blue:   { iconBg: 'bg-[#E3F2FD]', iconText: 'text-[#1565C0]' },
+  purple: { iconBg: 'bg-[#F3E5F5]', iconText: 'text-[#7B1FA2]' },
+  orange: { iconBg: 'bg-[#FFF3E0]', iconText: 'text-[#E65100]' },
+  red:    { iconBg: 'bg-[#FFEBEE]', iconText: 'text-[#C62828]' },
+};
 
-  const iconColorClasses = {
-    blue: 'bg-blue-100 text-blue-600',
-    green: 'bg-green-100 text-green-600',
-    purple: 'bg-purple-100 text-purple-600',
-    orange: 'bg-orange-100 text-orange-600',
-    red: 'bg-red-100 text-red-600',
-  };
+export default function StatsCard({
+  title,
+  value,
+  icon: Icon,
+  color = 'blue',
+  subtitle,
+  loading,
+}: StatsCardProps) {
+  const palette = palettes[color] ?? palettes.blue;
 
   return (
-    <div className={`relative bg-gradient-to-br ${colorClasses[color]} border rounded-lg sm:rounded-xl p-3 sm:p-4 lg:p-6 shadow-sm overflow-hidden`}>
-      <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <p className={`text-[10px] sm:text-xs lg:text-sm font-medium opacity-75 leading-tight ${color === 'blue' ? 'text-blue-700' : color === 'green' ? 'text-green-700' : color === 'purple' ? 'text-purple-700' : color === 'orange' ? 'text-orange-700' : 'text-red-700'}`}>
-            {title}
-          </p>
-          {loading ? (
-            <div className="flex items-center mt-1 sm:mt-1.5 lg:mt-2">
-              <div className="animate-spin rounded-full h-5 w-5 sm:h-6 sm:w-6 border-b-2 border-current"></div>
-            </div>
-          ) : (
-            <p className={`text-xl sm:text-2xl lg:text-3xl font-bold mt-1 sm:mt-1.5 lg:mt-2 ${color === 'blue' ? 'text-blue-900' : color === 'green' ? 'text-green-900' : color === 'purple' ? 'text-purple-900' : color === 'orange' ? 'text-orange-900' : 'text-red-900'}`}>
-              {value}
-            </p>
-          )}
+    <div className="bg-surface-container-lowest rounded-card p-lg shadow-ambient-1 border border-transparent hover:shadow-ambient-2 transition-shadow duration-300">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-body-sm text-on-surface-variant font-medium leading-tight">
+          {title}
+        </h3>
+        <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${palette.iconBg} ${palette.iconText}`}>
+          <Icon className="w-5 h-5" />
         </div>
-        <div className={`p-2 sm:p-2.5 lg:p-3 rounded-lg flex-shrink-0 ${iconColorClasses[color]}`}>
-          <Icon className="w-5 h-5 sm:w-5 sm:h-5 lg:w-6 lg:h-6" />
-        </div>
+      </div>
+      <div className="flex items-end gap-2">
+        {loading ? (
+          <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-primary" />
+        ) : (
+          <>
+            <span className="text-h1 font-bold text-on-surface leading-none">{value}</span>
+            {subtitle && (
+              <span className="text-body-sm text-outline mb-1">{subtitle}</span>
+            )}
+          </>
+        )}
       </div>
     </div>
   );

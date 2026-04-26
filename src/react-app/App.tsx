@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { MonitoringProvider } from '@/react-app/contexts/MonitoringContext';
 import { VigilanciaProvider } from '@/react-app/contexts/VigilanciaContext';
-import Header from '@/react-app/components/Header';
+import SideNavBar from '@/react-app/components/SideNavBar';
 import BackgroundVideo from '@/react-app/components/BackgroundVideo';
 import BackgroundVigilancia from '@/react-app/components/BackgroundVigilancia';
 import DetectionToast from '@/react-app/components/DetectionToast';
@@ -21,10 +21,10 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Carregando...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-on-surface-variant">Carregando...</p>
         </div>
       </div>
     );
@@ -45,9 +45,9 @@ function App() {
               path="/*"
               element={
                 <PrivateRoute>
-                  <div className="min-h-screen bg-gray-50">
-                    <Header />
-                    <main className="pt-[56px] sm:pt-[60px] lg:pt-[112px] pb-4 sm:pb-6">
+                  <div className="min-h-screen bg-background">
+                    <SideNavBar />
+                    <main className="lg:ml-64 pt-[60px] lg:pt-0 pb-6">
                       <Routes>
                         <Route path="/" element={<Dashboard />} />
                         <Route path="/cadastro" element={<Cadastro />} />
@@ -58,7 +58,7 @@ function App() {
                         <Route path="/vigilancia" element={<Vigilancia />} />
                       </Routes>
                     </main>
-                    
+
                     {/* Componentes globais de monitoramento */}
                     <BackgroundVideo />
                     <BackgroundVigilancia />
