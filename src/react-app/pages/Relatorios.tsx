@@ -599,39 +599,47 @@ export default function Relatorios() {
 
       {/* Estatísticas */}
       {estatisticas && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 lg:gap-4 mb-4 sm:mb-6">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 sm:p-3 lg:p-4">
-            <div className="flex items-center space-x-1 sm:space-x-2 mb-1 sm:mb-2">
-              <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
-              <span className="text-[10px] sm:text-xs lg:text-sm font-medium text-blue-900">Total</span>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-gutter mb-lg">
+          <div className="bg-surface-container-lowest rounded-xl shadow-ambient-1 p-lg border border-outline-variant/20 flex items-center gap-md">
+            <div className="w-12 h-12 rounded-full bg-primary-fixed flex items-center justify-center text-primary shrink-0">
+              <FileText className="w-6 h-6" />
             </div>
-            <p className="text-lg sm:text-xl lg:text-2xl font-bold text-blue-900">{estatisticas.totalVisitas}</p>
+            <div className="min-w-0">
+              <p className="text-body-sm text-on-surface-variant mb-1">Total</p>
+              <p className="text-h2 text-on-surface">{estatisticas.totalVisitas}</p>
+            </div>
           </div>
-          
-          <div className="bg-green-50 border border-green-200 rounded-lg p-2 sm:p-3 lg:p-4">
-            <div className="flex items-center space-x-1 sm:space-x-2 mb-1 sm:mb-2">
-              <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
-              <span className="text-[10px] sm:text-xs lg:text-sm font-medium text-green-900">Finalizadas</span>
+
+          <div className="bg-surface-container-lowest rounded-xl shadow-ambient-1 p-lg border border-outline-variant/20 flex items-center gap-md">
+            <div className="w-12 h-12 rounded-full bg-secondary-fixed flex items-center justify-center text-secondary shrink-0">
+              <TrendingUp className="w-6 h-6" />
             </div>
-            <p className="text-lg sm:text-xl lg:text-2xl font-bold text-green-900">{estatisticas.visitasFinalizadas}</p>
+            <div className="min-w-0">
+              <p className="text-body-sm text-on-surface-variant mb-1">Finalizadas</p>
+              <p className="text-h2 text-on-surface">{estatisticas.visitasFinalizadas}</p>
+            </div>
           </div>
-          
-          <div className="bg-orange-50 border border-orange-200 rounded-lg p-2 sm:p-3 lg:p-4">
-            <div className="flex items-center space-x-1 sm:space-x-2 mb-1 sm:mb-2">
-              <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-orange-600" />
-              <span className="text-[10px] sm:text-xs lg:text-sm font-medium text-orange-900">Ativas</span>
+
+          <div className="bg-surface-container-lowest rounded-xl shadow-ambient-1 p-lg border border-outline-variant/20 flex items-center gap-md">
+            <div className="w-12 h-12 rounded-full bg-tertiary-fixed flex items-center justify-center text-tertiary shrink-0">
+              <Clock className="w-6 h-6" />
             </div>
-            <p className="text-lg sm:text-xl lg:text-2xl font-bold text-orange-900">{estatisticas.visitasAtivas}</p>
+            <div className="min-w-0">
+              <p className="text-body-sm text-on-surface-variant mb-1">Ativas</p>
+              <p className="text-h2 text-on-surface">{estatisticas.visitasAtivas}</p>
+            </div>
           </div>
-          
-          <div className="bg-purple-50 border border-purple-200 rounded-lg p-2 sm:p-3 lg:p-4">
-            <div className="flex items-center space-x-1 sm:space-x-2 mb-1 sm:mb-2">
-              <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-purple-600" />
-              <span className="text-[10px] sm:text-xs lg:text-sm font-medium text-purple-900">Tempo Médio</span>
+
+          <div className="bg-surface-container-lowest rounded-xl shadow-ambient-1 p-lg border border-outline-variant/20 flex items-center gap-md">
+            <div className="w-12 h-12 rounded-full bg-surface-variant flex items-center justify-center text-on-surface-variant shrink-0">
+              <Clock className="w-6 h-6" />
             </div>
-            <p className="text-lg sm:text-xl lg:text-2xl font-bold text-purple-900">
-              {Math.floor(estatisticas.tempoMedioPermanencia)}h{Math.floor((estatisticas.tempoMedioPermanencia % 1) * 60)}m
-            </p>
+            <div className="min-w-0">
+              <p className="text-body-sm text-on-surface-variant mb-1">Tempo Médio</p>
+              <p className="text-h2 text-on-surface">
+                {Math.floor(estatisticas.tempoMedioPermanencia)}h{Math.floor((estatisticas.tempoMedioPermanencia % 1) * 60)}m
+              </p>
+            </div>
           </div>
         </div>
       )}
