@@ -278,11 +278,11 @@ export default function Monitoramento() {
   }, [selectedDetectionId, pipelineData, detectionHistory, pipelineByPlate]);
 
   return (
-    <div className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 lg:py-4 max-w-7xl mx-auto">
-      <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
+    <div className="px-4 sm:px-6 lg:px-8 mt-lg max-w-[1440px] w-full mx-auto">
+      <div className="mb-lg flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
         <div className="min-w-0 flex-1">
-          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mb-1 truncate">Monitoramento de Moradores</h1>
-          <p className="text-gray-600 text-xs sm:text-sm lg:text-base">
+          <h1 className="text-h2 font-semibold text-on-surface tracking-tight mb-1 truncate">Monitoramento de Moradores</h1>
+          <p className="text-on-surface-variant text-body-sm">
             Reconhecimento via câmera local com OCR
           </p>
         </div>
