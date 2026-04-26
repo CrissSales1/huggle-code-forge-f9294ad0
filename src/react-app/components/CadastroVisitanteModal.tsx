@@ -435,12 +435,12 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
                   required
                 />
                 {searchingNome && (
-                  <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
-                    <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                  <div className="absolute right-2.5 top-1/2 transform -translate-y-1/2">
+                    <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
                   </div>
                 )}
                 {nomeOptions.length > 0 && !searchingNome && (
-                  <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <ChevronDown className="absolute right-2.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-on-surface-variant" />
                 )}
               </div>
               
@@ -448,32 +448,26 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
               {showNomeDropdown && nomeOptions.length > 0 && (
                 <div 
                   ref={dropdownRef}
-                  className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-y-auto"
+                  className="absolute z-10 w-full mt-1 bg-surface-container-lowest border border-outline-variant rounded-card shadow-ambient-2 max-h-64 overflow-y-auto"
                 >
                   {nomeOptions.map((visitante, index) => (
                     <button
                       key={index}
                       type="button"
                       onClick={() => handleSelectVisitante(visitante)}
-                      className="w-full px-4 py-3 text-left hover:bg-blue-50 focus:bg-blue-50 focus:outline-none border-b border-gray-100 last:border-b-0"
+                      className="w-full px-4 py-3 text-left hover:bg-primary-container/30 focus:bg-primary-container/30 focus:outline-none border-b border-outline-variant/30 last:border-b-0 transition-colors"
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="font-medium text-gray-900 uppercase">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-body-md font-semibold text-on-surface uppercase truncate">
                             {visitante.nome}
                           </div>
-                          <div className="text-sm text-gray-600 flex items-center space-x-4 mt-1">
-                            <span className="flex items-center">
-                              <span className="font-medium">Casa:</span>
-                              <span className="ml-1 font-bold">{visitante.casa_visitada}</span>
-                            </span>
-                            <span className="flex items-center">
-                              <span className="font-medium">Placa:</span>
-                              <span className="ml-1 font-mono font-bold">{visitante.placa_veiculo}</span>
-                            </span>
+                          <div className="text-body-sm text-on-surface-variant flex items-center gap-4 mt-0.5">
+                            <span>Casa: <strong className="text-on-surface">{visitante.casa_visitada}</strong></span>
+                            <span>Placa: <strong className="font-mono text-on-surface">{visitante.placa_veiculo}</strong></span>
                           </div>
                         </div>
-                        <ChevronDown className="w-4 h-4 text-gray-400 transform rotate-[-90deg]" />
+                        <ChevronDown className="w-4 h-4 text-on-surface-variant transform rotate-[-90deg] flex-shrink-0" />
                       </div>
                     </button>
                   ))}
@@ -481,14 +475,14 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
               )}
             </div>
 
-            {/* v1.1.64: Alerta de visitante similar encontrado */}
+            {/* v1.1.64: Alerta de visitante similar encontrado — M3 */}
             {visitantesSimilares.length > 0 && !showNomeDropdown && (
-              <div className="bg-amber-50 border-2 border-amber-400 rounded-lg p-4 space-y-3">
-                <div className="flex items-center space-x-2 text-amber-800">
+              <div className="bg-tertiary-fixed/40 border border-tertiary-fixed-dim rounded-card p-md space-y-3">
+                <div className="flex items-center gap-2 text-on-tertiary-fixed-variant">
                   <AlertTriangle className="w-5 h-5 flex-shrink-0" />
-                  <span className="font-bold text-sm">Visitante similar encontrado!</span>
+                  <span className="text-body-md font-semibold">Visitante similar encontrado</span>
                   {buscandoSimilares && (
-                    <div className="w-4 h-4 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></div>
+                    <div className="w-4 h-4 border-2 border-tertiary border-t-transparent rounded-full animate-spin ml-auto"></div>
                   )}
                 </div>
                 
@@ -496,28 +490,28 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
                   {visitantesSimilares.slice(0, 3).map((similar, index) => (
                     <div 
                       key={index}
-                      className="bg-white rounded-lg p-3 border border-amber-200 flex items-center justify-between"
+                      className="bg-surface-container-lowest rounded-btn p-3 border border-outline-variant flex items-center justify-between gap-3"
                     >
-                      <div className="flex-1">
-                        <div className="font-bold text-gray-900 uppercase flex items-center space-x-2">
-                          <UserCheck className="w-4 h-4 text-green-600" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-body-md font-semibold text-on-surface uppercase flex items-center gap-2 flex-wrap">
+                          <UserCheck className="w-4 h-4 text-secondary flex-shrink-0" />
                           <span>{similar.visitante.nome}</span>
                           {similar.similaridade < 100 && (
-                            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                            <span className="text-label-caps uppercase bg-tertiary-fixed text-on-tertiary-fixed-variant px-2 py-0.5 rounded-full">
                               {similar.similaridade}% similar
                             </span>
                           )}
                         </div>
-                        <div className="text-sm text-gray-600 mt-1 flex items-center space-x-4">
-                          <span>Casa: <strong>{similar.visitante.casa_visitada}</strong></span>
-                          <span>Placa: <strong className="font-mono">{similar.visitante.placa_veiculo}</strong></span>
-                          <span className="text-green-600 font-medium">{similar.totalVisitas} visita{similar.totalVisitas !== 1 ? 's' : ''}</span>
+                        <div className="text-body-sm text-on-surface-variant mt-1 flex items-center gap-4 flex-wrap">
+                          <span>Casa: <strong className="text-on-surface">{similar.visitante.casa_visitada}</strong></span>
+                          <span>Placa: <strong className="font-mono text-on-surface">{similar.visitante.placa_veiculo}</strong></span>
+                          <span className="text-secondary font-semibold">{similar.totalVisitas} visita{similar.totalVisitas !== 1 ? 's' : ''}</span>
                         </div>
                       </div>
                       <button
                         type="button"
                         onClick={() => handleUsarSimilar(similar)}
-                        className="px-3 py-1.5 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 transition-colors"
+                        className="px-3 py-1.5 bg-secondary text-on-secondary text-button font-semibold rounded-btn hover:bg-on-secondary-fixed-variant transition-colors flex-shrink-0"
                       >
                         Usar este
                       </button>
@@ -528,7 +522,7 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
                 <button
                   type="button"
                   onClick={handleDescartarSimilar}
-                  className="w-full text-center text-sm text-amber-700 hover:text-amber-900 font-medium py-1"
+                  className="w-full text-center text-button font-medium text-on-tertiary-fixed-variant hover:bg-tertiary-fixed/60 py-1.5 rounded-btn transition-colors"
                 >
                   Ignorar e criar novo cadastro
                 </button>
