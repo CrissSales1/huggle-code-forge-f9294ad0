@@ -677,22 +677,22 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
               </div>
             </div>
 
-            <div className="flex justify-between pt-4">
+            <div className="flex items-center justify-between pt-md border-t border-outline-variant/30">
               <button
                 type="button"
                 onClick={handleVoltar}
-                className="px-4 py-2 text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors flex items-center space-x-2 border border-blue-200"
+                className="inline-flex items-center gap-2 px-3 py-2 text-button font-semibold text-primary hover:bg-primary-container/40 rounded-btn transition-colors"
                 disabled={loading}
               >
                 <ArrowLeft className="w-4 h-4" />
                 <span>Trocar Prisma</span>
               </button>
-              
-              <div className="space-x-3">
+
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={handleClose}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                  className="px-4 py-2 text-button font-semibold text-on-surface-variant hover:bg-surface-container-high rounded-btn transition-colors"
                   disabled={loading}
                 >
                   Cancelar
@@ -700,9 +700,19 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-on-primary text-button font-semibold rounded-btn shadow-ambient-1 hover:bg-primary-container hover:shadow-ambient-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {loading ? 'Cadastrando...' : 'Finalizar Cadastro'}
+                  {loading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-on-primary border-t-transparent rounded-full animate-spin" />
+                      <span>Cadastrando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <UserCheck className="w-4 h-4" />
+                      <span>Finalizar Cadastro</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
