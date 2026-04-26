@@ -413,8 +413,9 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-                {error}
+              <div className="flex items-start gap-2 bg-error-container/40 border border-error/30 text-on-error-container px-4 py-3 rounded-btn">
+                <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0 text-error" />
+                <span className="text-body-sm">{error}</span>
               </div>
             )}
 
