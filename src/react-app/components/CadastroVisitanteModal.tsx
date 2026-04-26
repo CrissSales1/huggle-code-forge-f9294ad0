@@ -331,54 +331,63 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
     setShowSelecionarVisitante(false);
   };
 
+  // Stepper M3
+  const Stepper = () => (
+    <div className="flex items-center gap-sm mb-lg px-1">
+      <div className={`flex items-center gap-sm ${etapa === 'prisma' ? 'text-primary' : 'text-on-surface-variant'}`}>
+        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-button font-semibold ${
+          etapa === 'prisma' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant'
+        }`}>1</div>
+        <span className="text-body-sm font-medium hidden sm:inline">Identificação do Prisma</span>
+        <span className="text-body-sm font-medium sm:hidden">Prisma</span>
+      </div>
+      <div className="flex-1 h-px bg-outline-variant" />
+      <div className={`flex items-center gap-sm ${etapa === 'dados' ? 'text-primary' : 'text-on-surface-variant'}`}>
+        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-button font-semibold ${
+          etapa === 'dados' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant'
+        }`}>2</div>
+        <span className="text-body-sm font-medium hidden sm:inline">Dados do Visitante</span>
+        <span className="text-body-sm font-medium sm:hidden">Dados</span>
+      </div>
+    </div>
+  );
+
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Novo Cadastro de Visitante" size="lg">
+      <Stepper />
+
       {etapa === 'prisma' && (
         <div>
-          <h3 className="text-lg font-medium text-gray-900 mb-4">
-            1. Selecionar Prisma Magnético
-          </h3>
-          
+          <div className="mb-md">
+            <h3 className="text-h3 text-on-surface">Selecione um prisma magnético</h3>
+            <p className="text-body-sm text-on-surface-variant mt-1">
+              Escolha um prisma livre para identificar o visitante.
+            </p>
+          </div>
+
           {loadingPrismas ? (
-            <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="mt-2 text-gray-500">Carregando prismas...</p>
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary border-t-transparent mx-auto"></div>
+              <p className="mt-3 text-body-sm text-on-surface-variant">Carregando prismas...</p>
             </div>
           ) : prismas.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-red-600">Nenhum prisma disponível no momento.</p>
+            <div className="text-center py-12 bg-error-container/40 rounded-card">
+              <AlertTriangle className="w-8 h-8 text-error mx-auto mb-2" />
+              <p className="text-body-md text-on-error-container font-medium">Nenhum prisma disponível</p>
+              <p className="text-body-sm text-on-surface-variant mt-1">Libere um prisma em uso para cadastrar novo visitante.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2 lg:gap-3">
+            <div className="grid grid-cols-4 sm:grid-cols-5 lg:grid-cols-6 gap-sm">
               {prismas.map((prisma) => (
                 <button
                   key={prisma.id}
                   onClick={() => handleSelecionarPrisma(prisma.numero)}
-                  className="p-3 lg:p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all duration-300 text-center transform hover:scale-105"
+                  className="group aspect-square flex flex-col items-center justify-center gap-1 rounded-card border border-outline-variant bg-surface-container-low hover:bg-primary-container/30 hover:border-primary hover:shadow-ambient-2 transition-all"
                 >
-                  {/* Prisma 3D estilizado */}
-                  <div className="flex justify-center mb-2">
-                    <div className="relative w-10 h-10 lg:w-12 lg:h-12">
-                      {/* Face frontal do prisma */}
-                      <div className="absolute inset-0 bg-gradient-to-br from-orange-400 to-orange-600 rounded-lg transform perspective-1000 shadow-lg border border-orange-500">
-                        {/* Face lateral direita (efeito 3D) */}
-                        <div className="absolute top-0 right-0 w-2 h-full bg-gradient-to-b from-orange-500 to-orange-700 transform skew-y-12 origin-top-right rounded-r-lg"></div>
-                        {/* Face superior (efeito 3D) */}
-                        <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-orange-300 to-orange-500 transform skew-x-12 origin-top-left rounded-t-lg"></div>
-                        
-                        {/* Número do prisma centralizado */}
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <span className="font-black text-white text-lg lg:text-xl drop-shadow-lg tracking-tight" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-                            {prisma.numero}
-                          </span>
-                        </div>
-                        
-                        {/* Brilho/highlight no prisma */}
-                        <div className="absolute top-1 left-1 w-3 h-3 bg-white opacity-30 rounded-full blur-sm"></div>
-                      </div>
-                    </div>
-                  </div>
-                  <span className="text-xs lg:text-sm text-gray-600 font-medium">Prisma {prisma.numero}</span>
+                  <span className="text-h2 font-bold text-on-surface group-hover:text-primary transition-colors leading-none">
+                    {prisma.numero}
+                  </span>
+                  <span className="text-label-caps text-on-surface-variant uppercase">Prisma</span>
                 </button>
               ))}
             </div>
@@ -388,53 +397,31 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
 
       {etapa === 'dados' && (
         <div>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-gray-900">
-              2. Dados do Visitante
-            </h3>
-            {/* Prisma clicável para trocar */}
+          <div className="flex items-center justify-between mb-md">
+            <h3 className="text-h3 text-on-surface">Dados do visitante</h3>
+            {/* Chip M3 do prisma selecionado */}
             <button
               type="button"
               onClick={handleVoltar}
-              className="group flex items-center space-x-2 text-sm text-gray-600 hover:bg-blue-50 rounded-lg px-3 py-1.5 transition-all border border-transparent hover:border-blue-200"
+              className="group inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed border border-tertiary-fixed-dim hover:bg-tertiary-fixed-dim hover:shadow-ambient-1 transition-all"
               title="Clique para trocar o prisma"
             >
-              <span>Prisma:</span>
-              {/* Prisma 3D em laranja */}
-              <div className="relative w-8 h-8 group-hover:scale-110 transition-transform">
-                {/* Face frontal do prisma */}
-                <div className="absolute inset-0 bg-gradient-to-br from-orange-400 to-orange-600 rounded-lg transform perspective-1000 shadow-lg border border-orange-500">
-                  {/* Face lateral direita (efeito 3D) */}
-                  <div className="absolute top-0 right-0 w-1.5 h-full bg-gradient-to-b from-orange-500 to-orange-700 transform skew-y-12 origin-top-right rounded-r-lg"></div>
-                  {/* Face superior (efeito 3D) */}
-                  <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-orange-300 to-orange-500 transform skew-x-12 origin-top-left rounded-t-lg"></div>
-                  
-                  {/* Número do prisma centralizado */}
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="font-black text-white text-sm drop-shadow-lg tracking-tight" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-                      {prismaSelecionado}
-                    </span>
-                  </div>
-                  
-                  {/* Brilho/highlight no prisma */}
-                  <div className="absolute top-0.5 left-0.5 w-2 h-2 bg-white opacity-30 rounded-full blur-sm"></div>
-                </div>
-              </div>
-              {/* Ícone de editar */}
-              <Pencil className="w-3.5 h-3.5 text-gray-400 group-hover:text-blue-500 transition-colors" />
+              <span className="text-button font-semibold">Prisma {prismaSelecionado}</span>
+              <Pencil className="w-3.5 h-3.5 opacity-70 group-hover:opacity-100 transition-opacity" />
             </button>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-                {error}
+              <div className="flex items-start gap-2 bg-error-container/40 border border-error/30 text-on-error-container px-4 py-3 rounded-btn">
+                <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0 text-error" />
+                <span className="text-body-sm">{error}</span>
               </div>
             )}
 
             <div className="relative">
-              <label htmlFor="nome" className="block text-sm font-medium text-gray-700 mb-2">
-                Nome do Visitante *
+              <label htmlFor="nome" className="block text-label-caps uppercase text-on-surface-variant mb-1.5">
+                Nome do visitante *
               </label>
               <div className="relative">
                 <input
@@ -443,17 +430,17 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
                   id="nome"
                   value={nome}
                   onChange={(e) => handleNomeChange(e.target.value)}
-                  className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase"
-                  placeholder="Digite o nome (mostra opções se já cadastrado)"
+                  className="w-full px-3 py-2.5 pr-9 border border-outline-variant rounded-btn bg-surface-container-lowest text-on-surface uppercase placeholder:normal-case placeholder:text-on-surface-variant/60 focus:border-primary"
+                  placeholder="Digite o nome para buscar ou cadastrar..."
                   required
                 />
                 {searchingNome && (
-                  <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
-                    <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                  <div className="absolute right-2.5 top-1/2 transform -translate-y-1/2">
+                    <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
                   </div>
                 )}
                 {nomeOptions.length > 0 && !searchingNome && (
-                  <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <ChevronDown className="absolute right-2.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-on-surface-variant" />
                 )}
               </div>
               
@@ -461,32 +448,26 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
               {showNomeDropdown && nomeOptions.length > 0 && (
                 <div 
                   ref={dropdownRef}
-                  className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-y-auto"
+                  className="absolute z-10 w-full mt-1 bg-surface-container-lowest border border-outline-variant rounded-card shadow-ambient-2 max-h-64 overflow-y-auto"
                 >
                   {nomeOptions.map((visitante, index) => (
                     <button
                       key={index}
                       type="button"
                       onClick={() => handleSelectVisitante(visitante)}
-                      className="w-full px-4 py-3 text-left hover:bg-blue-50 focus:bg-blue-50 focus:outline-none border-b border-gray-100 last:border-b-0"
+                      className="w-full px-4 py-3 text-left hover:bg-primary-container/30 focus:bg-primary-container/30 focus:outline-none border-b border-outline-variant/30 last:border-b-0 transition-colors"
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="font-medium text-gray-900 uppercase">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-body-md font-semibold text-on-surface uppercase truncate">
                             {visitante.nome}
                           </div>
-                          <div className="text-sm text-gray-600 flex items-center space-x-4 mt-1">
-                            <span className="flex items-center">
-                              <span className="font-medium">Casa:</span>
-                              <span className="ml-1 font-bold">{visitante.casa_visitada}</span>
-                            </span>
-                            <span className="flex items-center">
-                              <span className="font-medium">Placa:</span>
-                              <span className="ml-1 font-mono font-bold">{visitante.placa_veiculo}</span>
-                            </span>
+                          <div className="text-body-sm text-on-surface-variant flex items-center gap-4 mt-0.5">
+                            <span>Casa: <strong className="text-on-surface">{visitante.casa_visitada}</strong></span>
+                            <span>Placa: <strong className="font-mono text-on-surface">{visitante.placa_veiculo}</strong></span>
                           </div>
                         </div>
-                        <ChevronDown className="w-4 h-4 text-gray-400 transform rotate-[-90deg]" />
+                        <ChevronDown className="w-4 h-4 text-on-surface-variant transform rotate-[-90deg] flex-shrink-0" />
                       </div>
                     </button>
                   ))}
@@ -494,14 +475,14 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
               )}
             </div>
 
-            {/* v1.1.64: Alerta de visitante similar encontrado */}
+            {/* v1.1.64: Alerta de visitante similar encontrado — M3 */}
             {visitantesSimilares.length > 0 && !showNomeDropdown && (
-              <div className="bg-amber-50 border-2 border-amber-400 rounded-lg p-4 space-y-3">
-                <div className="flex items-center space-x-2 text-amber-800">
+              <div className="bg-tertiary-fixed/40 border border-tertiary-fixed-dim rounded-card p-md space-y-3">
+                <div className="flex items-center gap-2 text-on-tertiary-fixed-variant">
                   <AlertTriangle className="w-5 h-5 flex-shrink-0" />
-                  <span className="font-bold text-sm">Visitante similar encontrado!</span>
+                  <span className="text-body-md font-semibold">Visitante similar encontrado</span>
                   {buscandoSimilares && (
-                    <div className="w-4 h-4 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></div>
+                    <div className="w-4 h-4 border-2 border-tertiary border-t-transparent rounded-full animate-spin ml-auto"></div>
                   )}
                 </div>
                 
@@ -509,28 +490,28 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
                   {visitantesSimilares.slice(0, 3).map((similar, index) => (
                     <div 
                       key={index}
-                      className="bg-white rounded-lg p-3 border border-amber-200 flex items-center justify-between"
+                      className="bg-surface-container-lowest rounded-btn p-3 border border-outline-variant flex items-center justify-between gap-3"
                     >
-                      <div className="flex-1">
-                        <div className="font-bold text-gray-900 uppercase flex items-center space-x-2">
-                          <UserCheck className="w-4 h-4 text-green-600" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-body-md font-semibold text-on-surface uppercase flex items-center gap-2 flex-wrap">
+                          <UserCheck className="w-4 h-4 text-secondary flex-shrink-0" />
                           <span>{similar.visitante.nome}</span>
                           {similar.similaridade < 100 && (
-                            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                            <span className="text-label-caps uppercase bg-tertiary-fixed text-on-tertiary-fixed-variant px-2 py-0.5 rounded-full">
                               {similar.similaridade}% similar
                             </span>
                           )}
                         </div>
-                        <div className="text-sm text-gray-600 mt-1 flex items-center space-x-4">
-                          <span>Casa: <strong>{similar.visitante.casa_visitada}</strong></span>
-                          <span>Placa: <strong className="font-mono">{similar.visitante.placa_veiculo}</strong></span>
-                          <span className="text-green-600 font-medium">{similar.totalVisitas} visita{similar.totalVisitas !== 1 ? 's' : ''}</span>
+                        <div className="text-body-sm text-on-surface-variant mt-1 flex items-center gap-4 flex-wrap">
+                          <span>Casa: <strong className="text-on-surface">{similar.visitante.casa_visitada}</strong></span>
+                          <span>Placa: <strong className="font-mono text-on-surface">{similar.visitante.placa_veiculo}</strong></span>
+                          <span className="text-secondary font-semibold">{similar.totalVisitas} visita{similar.totalVisitas !== 1 ? 's' : ''}</span>
                         </div>
                       </div>
                       <button
                         type="button"
                         onClick={() => handleUsarSimilar(similar)}
-                        className="px-3 py-1.5 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 transition-colors"
+                        className="px-3 py-1.5 bg-secondary text-on-secondary text-button font-semibold rounded-btn hover:bg-on-secondary-fixed-variant transition-colors flex-shrink-0"
                       >
                         Usar este
                       </button>
@@ -541,7 +522,7 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
                 <button
                   type="button"
                   onClick={handleDescartarSimilar}
-                  className="w-full text-center text-sm text-amber-700 hover:text-amber-900 font-medium py-1"
+                  className="w-full text-center text-button font-medium text-on-tertiary-fixed-variant hover:bg-tertiary-fixed/60 py-1.5 rounded-btn transition-colors"
                 >
                   Ignorar e criar novo cadastro
                 </button>
@@ -551,39 +532,39 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
             {/* Casa Visitada e Placa do Veículo lado a lado */}
             <div className="grid grid-cols-12 gap-4">
               <div className="col-span-3">
-                <label htmlFor="casa" className="block text-sm font-medium text-gray-700 mb-2">
-                  Casa *
+                <label htmlFor="casa" className="block text-label-caps uppercase text-on-surface-variant mb-1.5">
+                  Casa/Apto *
                 </label>
                 <input
                   type="text"
                   id="casa"
                   value={casaVisitada}
                   onChange={(e) => setCasaVisitada(e.target.value.toUpperCase())}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase text-center font-bold"
-                  placeholder="123"
-                  maxLength={3}
+                  className="w-full px-3 py-2.5 border border-outline-variant rounded-btn bg-surface-container-lowest text-on-surface uppercase text-center font-bold tracking-wide focus:border-primary"
+                  placeholder="Ex: 102A"
+                  maxLength={5}
                   required
                 />
               </div>
               
               <div className="col-span-9">
-                <label htmlFor="placa" className="block text-sm font-medium text-gray-700 mb-2">
-                  Placa do Veículo *
+                <label htmlFor="placa" className="block text-label-caps uppercase text-on-surface-variant mb-1.5">
+                  Placa do veículo *
                 </label>
-                <div className="flex space-x-2">
+                <div className="flex gap-2">
                   <div className="flex-1 relative">
                     <input
                       type="text"
                       id="placa"
                       value={placaVeiculo}
                       onChange={(e) => handlePlacaChange(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase tracking-wider font-mono"
-                      placeholder="ABC1234 ou ABC1A23"
+                      className="w-full px-3 py-2.5 border border-outline-variant rounded-btn bg-surface-container-lowest text-on-surface uppercase tracking-[0.15em] font-mono font-semibold focus:border-primary"
+                      placeholder="ABC-1234"
                       maxLength={7}
                       required
                     />
                     {placaVeiculo && !isValidPlaca(placaVeiculo) && (
-                      <div className="absolute top-full left-0 mt-1 text-xs text-red-600">
+                      <div className="absolute top-full left-0 mt-1 text-xs text-error font-medium">
                         Formato inválido. Use ABC1234 ou ABC1A23
                       </div>
                     )}
@@ -591,41 +572,41 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
                   <button
                     type="button"
                     onClick={() => setShowCameraModal(true)}
-                    className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-1 whitespace-nowrap"
+                    className="px-4 py-2.5 bg-secondary text-on-secondary rounded-btn hover:bg-on-secondary-fixed-variant hover:shadow-ambient-2 transition-all flex items-center gap-2 whitespace-nowrap text-button font-semibold"
                     title="Ler placa com câmera"
                   >
                     <Camera className="w-4 h-4" />
-                    <span className="hidden sm:inline">Ler Placa</span>
+                    <span className="hidden sm:inline">Ler Placa (OCR)</span>
                   </button>
                 </div>
               </div>
             </div>
 
             <div>
-              <label htmlFor="observacoes" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="observacoes" className="block text-label-caps uppercase text-on-surface-variant mb-1.5">
                 Observações
               </label>
               <textarea
                 id="observacoes"
                 value={observacoes}
                 onChange={(e) => setObservacoes(e.target.value.toUpperCase())}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase"
-                placeholder="Ex: Entregador, Uber, motorista particular, etc."
+                className="w-full px-3 py-2.5 border border-outline-variant rounded-btn bg-surface-container-lowest text-on-surface uppercase placeholder:normal-case placeholder:text-on-surface-variant/60 focus:border-primary resize-none"
+                placeholder="Informações adicionais relevantes..."
                 rows={3}
               />
             </div>
 
             <div>
-              <label htmlFor="liberadoPor" className="block text-sm font-medium text-gray-700 mb-2">
-                Liberado Por
+              <label htmlFor="liberadoPor" className="block text-label-caps uppercase text-on-surface-variant mb-1.5">
+                Liberado por
               </label>
               <input
                 type="text"
                 id="liberadoPor"
                 value={liberadoPor}
                 onChange={(e) => setLiberadoPor(e.target.value.toUpperCase())}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase"
-                placeholder="Nome de quem autorizou a entrada"
+                className="w-full px-3 py-2.5 border border-outline-variant rounded-btn bg-surface-container-lowest text-on-surface uppercase placeholder:normal-case placeholder:text-on-surface-variant/60 focus:border-primary"
+                placeholder="Nome do morador responsável pela liberação"
               />
             </div>
 
@@ -691,22 +672,22 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
               </div>
             </div>
 
-            <div className="flex justify-between pt-4">
+            <div className="flex items-center justify-between pt-md border-t border-outline-variant/30">
               <button
                 type="button"
                 onClick={handleVoltar}
-                className="px-4 py-2 text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors flex items-center space-x-2 border border-blue-200"
+                className="inline-flex items-center gap-2 px-3 py-2 text-button font-semibold text-primary hover:bg-primary-container/40 rounded-btn transition-colors"
                 disabled={loading}
               >
                 <ArrowLeft className="w-4 h-4" />
                 <span>Trocar Prisma</span>
               </button>
-              
-              <div className="space-x-3">
+
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={handleClose}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                  className="px-4 py-2 text-button font-semibold text-on-surface-variant hover:bg-surface-container-high rounded-btn transition-colors"
                   disabled={loading}
                 >
                   Cancelar
@@ -714,9 +695,19 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-on-primary text-button font-semibold rounded-btn shadow-ambient-1 hover:bg-primary-container hover:shadow-ambient-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {loading ? 'Cadastrando...' : 'Finalizar Cadastro'}
+                  {loading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-on-primary border-t-transparent rounded-full animate-spin" />
+                      <span>Cadastrando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <UserCheck className="w-4 h-4" />
+                      <span>Finalizar Cadastro</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
