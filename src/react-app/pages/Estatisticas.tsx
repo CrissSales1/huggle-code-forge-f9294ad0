@@ -48,97 +48,77 @@ export default function Estatisticas() {
   return (
     <div className="px-4 sm:px-6 lg:px-8 mt-lg max-w-[1440px] w-full mx-auto">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-lg">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-lg">
         <div className="min-w-0">
-          <h1 className="text-h2 font-semibold text-on-surface tracking-tight">Estatísticas</h1>
-          <p className="text-on-surface-variant mt-1 text-body-sm">Análise detalhada dos dados de visitantes</p>
+          <h1 className="text-h1 text-on-surface tracking-tight">Estatísticas</h1>
+          <p className="text-on-surface-variant mt-1 text-body-md">Visão geral do fluxo e comportamento no condomínio</p>
         </div>
-        
-        <div className="flex gap-1 sm:gap-2">
-          <button
-            onClick={() => setPeriodo('7')}
-            className={`px-2.5 sm:px-3 lg:px-4 py-1.5 sm:py-2 rounded-lg font-medium transition-colors text-xs sm:text-sm ${
-              periodo === '7' 
-                ? 'bg-blue-600 text-white' 
-                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-            }`}
-          >
-            7d
-          </button>
-          <button
-            onClick={() => setPeriodo('30')}
-            className={`px-2.5 sm:px-3 lg:px-4 py-1.5 sm:py-2 rounded-lg font-medium transition-colors text-xs sm:text-sm ${
-              periodo === '30' 
-                ? 'bg-blue-600 text-white' 
-                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-            }`}
-          >
-            30d
-          </button>
-          <button
-            onClick={() => setPeriodo('90')}
-            className={`px-2.5 sm:px-3 lg:px-4 py-1.5 sm:py-2 rounded-lg font-medium transition-colors text-xs sm:text-sm ${
-              periodo === '90' 
-                ? 'bg-blue-600 text-white' 
-                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-            }`}
-          >
-            90d
-          </button>
+
+        {/* Period segmented control (M3) */}
+        <div className="inline-flex bg-surface-container rounded-lg p-1 border border-outline-variant/30">
+          {(['7', '30', '90'] as const).map((p) => (
+            <button
+              key={p}
+              onClick={() => setPeriodo(p)}
+              className={`px-4 py-1.5 rounded-md text-button transition-colors ${
+                periodo === p
+                  ? 'bg-surface-container-lowest text-on-surface shadow-ambient-1'
+                  : 'text-on-surface-variant hover:text-on-surface'
+              }`}
+            >
+              {p}d
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Cards de Resumo */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 lg:gap-4 mb-4 sm:mb-6 lg:mb-8">
-        <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-lg sm:rounded-xl p-3 sm:p-4 lg:p-6 shadow-sm">
-          <div className="flex items-start justify-between">
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] sm:text-xs lg:text-sm font-medium text-blue-700 opacity-75 truncate">Total Visitantes</p>
-              <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-blue-900 mt-1 sm:mt-2">{estatisticas.totalVisitantes}</p>
-              <p className="text-[10px] sm:text-xs text-blue-600 mt-0.5 sm:mt-1">Últimos {periodo}d</p>
-            </div>
-            <div className="p-1.5 sm:p-2 lg:p-3 rounded-lg bg-blue-100 text-blue-600 flex-shrink-0">
-              <Users className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6" />
-            </div>
+      {/* KPI Grid (M3) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-gutter mb-lg">
+        {/* KPI 1 - Total */}
+        <div className="bg-surface-container-lowest rounded-xl p-lg shadow-ambient-1 border border-outline-variant/20">
+          <div className="w-10 h-10 rounded-full bg-primary-fixed flex items-center justify-center mb-md">
+            <Users className="w-5 h-5 text-primary" />
+          </div>
+          <div className="text-h1 text-on-surface mb-1">{estatisticas.totalVisitantes}</div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-label-caps text-on-surface-variant uppercase">Total Visitantes</span>
+            <span className="text-body-sm text-outline">• {periodo}d</span>
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-lg sm:rounded-xl p-3 sm:p-4 lg:p-6 shadow-sm">
-          <div className="flex items-start justify-between">
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] sm:text-xs lg:text-sm font-medium text-green-700 opacity-75 truncate">Média/Dia</p>
-              <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-green-900 mt-1 sm:mt-2">{estatisticas.mediaPorDia}</p>
-              <p className="text-[10px] sm:text-xs text-green-600 mt-0.5 sm:mt-1">visitantes</p>
+        {/* KPI 2 - Média */}
+        <div className="bg-surface-container-lowest rounded-xl p-lg shadow-ambient-1 border border-outline-variant/20 relative overflow-hidden">
+          <div className="absolute inset-0 bg-secondary-container/10 pointer-events-none" />
+          <div className="relative z-10">
+            <div className="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center mb-md">
+              <TrendingUp className="w-5 h-5 text-on-secondary-container" />
             </div>
-            <div className="p-1.5 sm:p-2 lg:p-3 rounded-lg bg-green-100 text-green-600 flex-shrink-0">
-              <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6" />
-            </div>
+            <div className="text-h1 text-on-surface mb-1">{estatisticas.mediaPorDia}</div>
+            <span className="text-label-caps text-on-surface-variant uppercase">Média/Dia</span>
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-lg sm:rounded-xl p-3 sm:p-4 lg:p-6 shadow-sm">
-          <div className="flex items-start justify-between">
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] sm:text-xs lg:text-sm font-medium text-purple-700 opacity-75 truncate">Tempo Médio</p>
-              <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-purple-900 mt-1 sm:mt-2">{estatisticas.tempoMedioPermanencia}</p>
-              <p className="text-[10px] sm:text-xs text-purple-600 mt-0.5 sm:mt-1">permanência</p>
-            </div>
-            <div className="p-1.5 sm:p-2 lg:p-3 rounded-lg bg-purple-100 text-purple-600 flex-shrink-0">
-              <Clock className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6" />
-            </div>
+        {/* KPI 3 - Tempo Médio */}
+        <div className="bg-surface-container-lowest rounded-xl p-lg shadow-ambient-1 border border-outline-variant/20">
+          <div className="w-10 h-10 rounded-full bg-tertiary-fixed flex items-center justify-center mb-md">
+            <Clock className="w-5 h-5 text-tertiary" />
+          </div>
+          <div className="text-h1 text-on-surface mb-1">{estatisticas.tempoMedioPermanencia}</div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-label-caps text-on-surface-variant uppercase">Tempo Médio</span>
+            <span className="text-body-sm text-outline">• permanência</span>
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-orange-50 to-orange-100 border border-orange-200 rounded-lg sm:rounded-xl p-3 sm:p-4 lg:p-6 shadow-sm">
-          <div className="flex items-start justify-between">
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] sm:text-xs lg:text-sm font-medium text-orange-700 opacity-75 truncate">Taxa Ocupação</p>
-              <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-orange-900 mt-1 sm:mt-2">{estatisticas.taxaOcupacaoMedia}%</p>
-              <p className="text-[10px] sm:text-xs text-orange-600 mt-0.5 sm:mt-1">média</p>
+        {/* KPI 4 - Ocupação */}
+        <div className="bg-surface-container-lowest rounded-xl p-lg shadow-ambient-1 border border-outline-variant/20 relative overflow-hidden">
+          <div className="absolute inset-0 bg-orange-50 pointer-events-none" />
+          <div className="relative z-10">
+            <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center mb-md">
+              <Activity className="w-5 h-5 text-orange-600" />
             </div>
-            <div className="p-1.5 sm:p-2 lg:p-3 rounded-lg bg-orange-100 text-orange-600 flex-shrink-0">
-              <Activity className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6" />
-            </div>
+            <div className="text-h1 text-orange-600 mb-1">{estatisticas.taxaOcupacaoMedia}%</div>
+            <span className="text-label-caps text-on-surface-variant uppercase">Taxa de Ocupação</span>
           </div>
         </div>
       </div>

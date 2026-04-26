@@ -457,14 +457,14 @@ export default function Configuracoes() {
       )}
 
       {/* Gestão de Recursos */}
-      <div className="bg-white rounded-lg sm:rounded-xl border border-gray-200 mb-4 sm:mb-6 lg:mb-8">
-        <div className="p-3 sm:p-4 lg:p-6 border-b border-gray-200">
-          <div className="flex items-center space-x-2">
-            <SettingsIcon className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" />
-            <h2 className="text-base sm:text-lg lg:text-xl font-semibold text-gray-900">Gestão de Recursos</h2>
+      <div className="bg-surface-container-lowest rounded-xl shadow-ambient-1 mb-gutter">
+        <div className="p-lg border-b border-surface-variant">
+          <div className="flex items-center gap-2">
+            <SettingsIcon className="w-5 h-5 text-primary" />
+            <h2 className="text-h3 text-on-surface">Gestão de Recursos</h2>
           </div>
-          <p className="text-gray-600 mt-0.5 sm:mt-1 text-xs sm:text-sm">
-            Ajuste vagas e prismas disponíveis
+          <p className="text-body-sm text-on-surface-variant mt-1">
+            Ajuste a capacidade operacional do sistema
           </p>
         </div>
         
