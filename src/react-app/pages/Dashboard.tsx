@@ -49,22 +49,22 @@ export default function Dashboard() {
       {/* Header da página */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 sm:mb-6">
         <div className="min-w-0 flex-1">
-          <h1 className="text-h1 text-on-surface truncate">Dashboard</h1>
-          <p className="text-on-surface-variant mt-0.5 text-body-sm">Visão geral das atividades do condomínio</p>
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 truncate">Dashboard</h1>
+          <p className="text-gray-600 mt-0.5 text-xs sm:text-sm lg:text-base">Visão geral das atividades do condomínio</p>
         </div>
-
+        
         <div className="flex gap-2 w-full sm:w-auto">
           <button
             onClick={handleRefresh}
-            className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 px-4 py-2 text-button text-primary bg-transparent border border-outline rounded-btn hover:bg-surface-variant transition-colors"
+            className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 px-3 sm:px-4 py-2 text-sm sm:text-base text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
             <span className="hidden sm:inline">Atualizar</span>
           </button>
-
+          
           <button
             onClick={() => setShowCadastroModal(true)}
-            className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 px-4 sm:px-6 py-2 text-button bg-primary text-on-primary rounded-btn hover:bg-primary-container transition-colors shadow-ambient-1 hover:shadow-ambient-2"
+            className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 px-4 sm:px-6 py-2 text-sm sm:text-base bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
           >
             <PlusCircle className="w-4 h-4" />
             <span>Novo</span>
@@ -99,46 +99,40 @@ export default function Dashboard() {
       </div>
 
       {/* Lista de visitantes ativos */}
-      <div className="bg-surface-container-lowest rounded-card shadow-ambient-1">
-        <div className="p-md sm:p-lg border-b border-surface-variant flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-h3 text-on-surface">Visitantes Ativos</h2>
-            <p className="text-on-surface-variant mt-0.5 text-body-sm">
-              {visitantes.length === 0
-                ? 'Nenhum visitante ativo no momento'
-                : `${visitantes.length} visitante${visitantes.length !== 1 ? 's' : ''} ativo${visitantes.length !== 1 ? 's' : ''}`}
-            </p>
-          </div>
-          {visitantes.length > 0 && (
-            <span className="bg-surface-container-highest text-on-surface-variant text-label-caps px-3 py-1 rounded-full whitespace-nowrap">
-              {visitantes.length} {visitantes.length === 1 ? 'REGISTRO' : 'REGISTROS'}
-            </span>
-          )}
+      <div className="bg-white rounded-lg sm:rounded-xl shadow-sm border border-gray-200">
+        <div className="p-3 sm:p-4 lg:p-6 border-b border-gray-200">
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Visitantes Ativos</h2>
+          <p className="text-gray-600 mt-0.5 sm:mt-1 text-xs sm:text-sm">
+            {visitantes.length === 0 
+              ? 'Nenhum visitante ativo no momento' 
+              : `${visitantes.length} visitante${visitantes.length !== 1 ? 's' : ''} ativo${visitantes.length !== 1 ? 's' : ''}`
+            }
+          </p>
         </div>
-
-        <div className="p-md sm:p-lg">
+        
+        <div className="p-3 sm:p-4 lg:p-6">
           {loadingVisitantes ? (
-            <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto"></div>
-              <p className="mt-4 text-on-surface-variant text-body-sm">Carregando visitantes...</p>
+            <div className="text-center py-6 sm:py-8 lg:py-12">
+              <div className="animate-spin rounded-full h-8 w-8 sm:h-10 sm:w-10 lg:h-12 lg:w-12 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="mt-3 sm:mt-4 text-gray-500 text-xs sm:text-sm lg:text-base">Carregando visitantes...</p>
             </div>
           ) : visitantes.length === 0 ? (
-            <div className="text-center py-12">
-              <Users className="w-14 h-14 text-outline-variant mx-auto mb-4" />
-              <h3 className="text-h3 text-on-surface mb-2 px-4">Nenhum visitante ativo</h3>
-              <p className="text-on-surface-variant mb-6 text-body-sm px-4">
+            <div className="text-center py-6 sm:py-8 lg:py-12">
+              <Users className="w-10 h-10 sm:w-12 sm:h-12 lg:w-16 lg:h-16 text-gray-300 mx-auto mb-3 sm:mb-4" />
+              <h3 className="text-sm sm:text-base lg:text-lg font-medium text-gray-900 mb-1 sm:mb-2 px-4">Nenhum visitante ativo</h3>
+              <p className="text-gray-500 mb-4 sm:mb-6 text-xs sm:text-sm lg:text-base px-4">
                 Quando houver visitantes no condomínio, eles aparecerão aqui.
               </p>
               <button
                 onClick={() => setShowCadastroModal(true)}
-                className="inline-flex items-center space-x-1.5 px-4 py-2 text-button bg-primary text-on-primary rounded-btn hover:bg-primary-container transition-colors shadow-ambient-1"
+                className="inline-flex items-center space-x-1.5 px-3 sm:px-4 py-2 text-sm sm:text-base bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 <PlusCircle className="w-4 h-4" />
                 <span>Cadastrar Primeiro Visitante</span>
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-gutter">
+            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3 lg:gap-4 xl:gap-6">
               {visitantes.map((visitante) => (
                 <VisitanteCard
                   key={visitante.id}
