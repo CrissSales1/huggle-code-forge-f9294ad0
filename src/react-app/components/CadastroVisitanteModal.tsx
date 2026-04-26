@@ -629,57 +629,65 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
               />
             </div>
 
-            {/* Opção de estacionar na vaga do morador - DESTAQUE MÁXIMO */}
-            <div className="bg-gradient-to-r from-orange-100 to-yellow-100 border-2 lg:border-4 border-orange-400 rounded-xl p-3 lg:p-6 space-y-3 lg:space-y-4 shadow-lg">
-              <div className="flex items-center justify-center mb-2">
-                <div className="bg-gradient-to-r from-orange-600 to-red-600 text-white px-2 lg:px-4 py-1 lg:py-2 rounded-full text-xs lg:text-sm font-black uppercase tracking-wider shadow-lg animate-pulse">
-                  🚨 PERGUNTA OBRIGATÓRIA 🚨
-                </div>
-              </div>
-              
-              <div className="text-center bg-white rounded-lg p-2 lg:p-4 border-2 border-orange-300">
-                <h4 className="text-orange-900 font-black text-sm lg:text-lg mb-2 lg:mb-4 uppercase">
-                  🅿️ ONDE VAI ESTACIONAR? 🅿️
-                </h4>
-                
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 lg:gap-4">
-                  <button
-                    type="button"
-                    onClick={() => setEstacionarVagaMorador(false)}
-                    className={`py-3 lg:py-6 px-2 lg:px-4 rounded-xl font-black text-sm lg:text-lg transition-all duration-300 border-2 lg:border-4 ${
-                      !estacionarVagaMorador
-                        ? 'bg-green-500 text-white border-green-600 shadow-2xl transform lg:scale-110 ring-2 lg:ring-4 ring-green-300'
-                        : 'bg-gray-100 text-gray-600 border-gray-300 hover:bg-gray-200 hover:scale-105'
-                    }`}
-                  >
-                    <div className="text-2xl lg:text-4xl mb-1 lg:mb-2">🅿️</div>
-                    <div className="text-sm lg:text-xl font-black leading-tight">VAGA COMUM</div>
-                    <div className="text-xs lg:text-sm font-normal mt-0.5 lg:mt-1">Área de visitantes</div>
-                  </button>
-                  
-                  <button
-                    type="button"
-                    onClick={() => setEstacionarVagaMorador(true)}
-                    className={`py-3 lg:py-6 px-2 lg:px-4 rounded-xl font-black text-sm lg:text-lg transition-all duration-300 border-2 lg:border-4 ${
-                      estacionarVagaMorador
-                        ? 'bg-orange-500 text-white border-orange-600 shadow-2xl transform lg:scale-110 ring-2 lg:ring-4 ring-orange-300'
-                        : 'bg-gray-100 text-gray-600 border-gray-300 hover:bg-gray-200 hover:scale-105'
-                    }`}
-                  >
-                    <div className="text-2xl lg:text-4xl mb-1 lg:mb-2">🏠</div>
-                    <div className="text-sm lg:text-xl font-black leading-tight">VAGA MORADOR</div>
-                    <div className="text-xs lg:text-sm font-normal mt-0.5 lg:mt-1">Vaga particular</div>
-                  </button>
-                </div>
-              </div>
-              
-              <div className="text-center bg-white rounded-lg p-2 lg:p-3 border-2 border-orange-300">
-                <p className={`text-sm lg:text-lg font-bold leading-tight ${estacionarVagaMorador ? 'text-orange-700' : 'text-green-700'}`}>
-                  {estacionarVagaMorador ? 
-                    "🚨 AUTORIZADO: Vaga do próprio morador" : 
-                    "✅ PADRÃO: Vaga comum de visitantes"
-                  }
-                </p>
+            {/* Onde vai estacionar? — M3 */}
+            <div className="border-t border-outline-variant/30 pt-lg">
+              <h4 className="text-h3 text-on-surface mb-md">Onde vai estacionar?</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-md">
+                {/* Card A: Vaga Comum */}
+                <button
+                  type="button"
+                  onClick={() => setEstacionarVagaMorador(false)}
+                  className={`flex items-start p-md rounded-xl text-left transition-colors shadow-sm relative overflow-hidden ${
+                    !estacionarVagaMorador
+                      ? 'border-2 border-secondary bg-secondary-container/10'
+                      : 'border border-outline-variant bg-surface hover:bg-surface-container-highest'
+                  }`}
+                >
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 mr-md ${
+                    !estacionarVagaMorador ? 'bg-secondary/10 text-secondary' : 'bg-surface-container-highest text-on-surface-variant'
+                  }`}>
+                    <Home className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-body-md font-semibold text-on-surface">Vaga Comum</p>
+                    <p className={`text-body-sm mt-1 ${!estacionarVagaMorador ? 'text-secondary' : 'text-on-surface-variant'}`}>
+                      PADRÃO: Vaga comum de visitantes
+                    </p>
+                  </div>
+                  {!estacionarVagaMorador && (
+                    <div className="absolute top-md right-md text-secondary">
+                      <UserCheck className="w-5 h-5" />
+                    </div>
+                  )}
+                </button>
+
+                {/* Card B: Vaga Morador */}
+                <button
+                  type="button"
+                  onClick={() => setEstacionarVagaMorador(true)}
+                  className={`flex items-start p-md rounded-xl text-left transition-colors shadow-sm relative overflow-hidden ${
+                    estacionarVagaMorador
+                      ? 'border-2 border-tertiary bg-tertiary-fixed/30'
+                      : 'border border-outline-variant bg-surface hover:bg-surface-container-highest'
+                  }`}
+                >
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 mr-md ${
+                    estacionarVagaMorador ? 'bg-tertiary/10 text-tertiary' : 'bg-surface-container-highest text-on-surface-variant'
+                  }`}>
+                    <Home className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-body-md font-semibold text-on-surface">Vaga Morador</p>
+                    <p className={`text-body-sm mt-1 ${estacionarVagaMorador ? 'text-tertiary' : 'text-on-surface-variant'}`}>
+                      Estacionará na vaga da própria unidade
+                    </p>
+                  </div>
+                  {estacionarVagaMorador && (
+                    <div className="absolute top-md right-md text-tertiary">
+                      <UserCheck className="w-5 h-5" />
+                    </div>
+                  )}
+                </button>
               </div>
             </div>
 
