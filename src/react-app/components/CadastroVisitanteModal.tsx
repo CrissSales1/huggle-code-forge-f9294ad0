@@ -537,39 +537,39 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
             {/* Casa Visitada e Placa do Veículo lado a lado */}
             <div className="grid grid-cols-12 gap-4">
               <div className="col-span-3">
-                <label htmlFor="casa" className="block text-sm font-medium text-gray-700 mb-2">
-                  Casa *
+                <label htmlFor="casa" className="block text-label-caps uppercase text-on-surface-variant mb-1.5">
+                  Casa/Apto *
                 </label>
                 <input
                   type="text"
                   id="casa"
                   value={casaVisitada}
                   onChange={(e) => setCasaVisitada(e.target.value.toUpperCase())}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase text-center font-bold"
-                  placeholder="123"
-                  maxLength={3}
+                  className="w-full px-3 py-2.5 border border-outline-variant rounded-btn bg-surface-container-lowest text-on-surface uppercase text-center font-bold tracking-wide focus:border-primary"
+                  placeholder="Ex: 102A"
+                  maxLength={5}
                   required
                 />
               </div>
               
               <div className="col-span-9">
-                <label htmlFor="placa" className="block text-sm font-medium text-gray-700 mb-2">
-                  Placa do Veículo *
+                <label htmlFor="placa" className="block text-label-caps uppercase text-on-surface-variant mb-1.5">
+                  Placa do veículo *
                 </label>
-                <div className="flex space-x-2">
+                <div className="flex gap-2">
                   <div className="flex-1 relative">
                     <input
                       type="text"
                       id="placa"
                       value={placaVeiculo}
                       onChange={(e) => handlePlacaChange(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase tracking-wider font-mono"
-                      placeholder="ABC1234 ou ABC1A23"
+                      className="w-full px-3 py-2.5 border border-outline-variant rounded-btn bg-surface-container-lowest text-on-surface uppercase tracking-[0.15em] font-mono font-semibold focus:border-primary"
+                      placeholder="ABC-1234"
                       maxLength={7}
                       required
                     />
                     {placaVeiculo && !isValidPlaca(placaVeiculo) && (
-                      <div className="absolute top-full left-0 mt-1 text-xs text-red-600">
+                      <div className="absolute top-full left-0 mt-1 text-xs text-error font-medium">
                         Formato inválido. Use ABC1234 ou ABC1A23
                       </div>
                     )}
@@ -577,41 +577,41 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
                   <button
                     type="button"
                     onClick={() => setShowCameraModal(true)}
-                    className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-1 whitespace-nowrap"
+                    className="px-4 py-2.5 bg-secondary text-on-secondary rounded-btn hover:bg-on-secondary-fixed-variant hover:shadow-ambient-2 transition-all flex items-center gap-2 whitespace-nowrap text-button font-semibold"
                     title="Ler placa com câmera"
                   >
                     <Camera className="w-4 h-4" />
-                    <span className="hidden sm:inline">Ler Placa</span>
+                    <span className="hidden sm:inline">Ler Placa (OCR)</span>
                   </button>
                 </div>
               </div>
             </div>
 
             <div>
-              <label htmlFor="observacoes" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="observacoes" className="block text-label-caps uppercase text-on-surface-variant mb-1.5">
                 Observações
               </label>
               <textarea
                 id="observacoes"
                 value={observacoes}
                 onChange={(e) => setObservacoes(e.target.value.toUpperCase())}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase"
-                placeholder="Ex: Entregador, Uber, motorista particular, etc."
+                className="w-full px-3 py-2.5 border border-outline-variant rounded-btn bg-surface-container-lowest text-on-surface uppercase placeholder:normal-case placeholder:text-on-surface-variant/60 focus:border-primary resize-none"
+                placeholder="Informações adicionais relevantes..."
                 rows={3}
               />
             </div>
 
             <div>
-              <label htmlFor="liberadoPor" className="block text-sm font-medium text-gray-700 mb-2">
-                Liberado Por
+              <label htmlFor="liberadoPor" className="block text-label-caps uppercase text-on-surface-variant mb-1.5">
+                Liberado por
               </label>
               <input
                 type="text"
                 id="liberadoPor"
                 value={liberadoPor}
                 onChange={(e) => setLiberadoPor(e.target.value.toUpperCase())}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase"
-                placeholder="Nome de quem autorizou a entrada"
+                className="w-full px-3 py-2.5 border border-outline-variant rounded-btn bg-surface-container-lowest text-on-surface uppercase placeholder:normal-case placeholder:text-on-surface-variant/60 focus:border-primary"
+                placeholder="Nome do morador responsável pela liberação"
               />
             </div>
 
