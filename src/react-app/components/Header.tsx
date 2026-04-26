@@ -26,7 +26,7 @@ export default function Header() {
   const fecharMenu = () => setMenuAberto(false);
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-blue-600 to-blue-800 text-white shadow-lg pwa-safe-top">
+    <header className="fixed top-0 left-0 right-0 z-50 bg-primary text-on-primary shadow-ambient-2 pwa-safe-top">
       <div className="px-3 sm:px-4 lg:px-6 py-2.5 sm:py-3 lg:py-4">
         <div className="flex justify-between items-center">
           {/* Logo e Título */}
@@ -101,7 +101,7 @@ export default function Header() {
       </div>
       
       {/* Menu Desktop */}
-      <div className="hidden lg:block bg-gradient-to-r from-blue-400 to-blue-500 border-t border-blue-300">
+      <div className="hidden lg:block bg-primary-container border-t border-primary-fixed-dim/30">
         <div className="px-6">
           <div className="flex space-x-6">
             {navigationItems.map(({ path, label, icon: Icon }) => (
