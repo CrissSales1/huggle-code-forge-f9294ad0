@@ -29,16 +29,14 @@ const navigationItems = [
   { path: '/configuracoes', label: 'Configurações', icon: Settings },
 ];
 
-interface SideNavBarProps {
-  mobileOpen: boolean;
-  onMobileClose: () => void;
-}
-
-export default function SideNavBar({ mobileOpen, onMobileClose }: SideNavBarProps) {
+export default function SideNavBar() {
+  const [mobileOpen, setMobileOpen] = useState(false);
   const { logout } = useAuth();
   const { formattedDate, formattedTime } = useDateTime();
   const { isActive: isMonitoringActive } = useMonitoring();
   const { isActive: isVigilanciaActive } = useVigilancia();
+
+  const onMobileClose = () => setMobileOpen(false);
 
   const handleLogout = () => {
     onMobileClose();
@@ -149,7 +147,7 @@ export default function SideNavBar({ mobileOpen, onMobileClose }: SideNavBarProp
         <div className="flex items-center gap-2">
           <span className="font-mono font-bold text-sm text-on-surface">{formattedTime}</span>
           <button
-            onClick={() => (mobileOpen ? onMobileClose() : null)}
+            onClick={() => setMobileOpen((v) => !v)}
             aria-label="Abrir menu"
             className="p-2 rounded-btn text-on-surface-variant hover:bg-surface-container transition-colors"
           >
@@ -179,15 +177,4 @@ export default function SideNavBar({ mobileOpen, onMobileClose }: SideNavBarProp
       )}
     </>
   );
-}
-
-// Hook utilitário para botão hambúrguer externo (caso precisemos)
-export function useMobileNav() {
-  const [open, setOpen] = useState(false);
-  return {
-    open,
-    openNav: () => setOpen(true),
-    closeNav: () => setOpen(false),
-    toggleNav: () => setOpen((v) => !v),
-  };
 }
