@@ -419,8 +419,8 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
             )}
 
             <div className="relative">
-              <label htmlFor="nome" className="block text-sm font-medium text-gray-700 mb-2">
-                Nome do Visitante *
+              <label htmlFor="nome" className="block text-label-caps uppercase text-on-surface-variant mb-1.5">
+                Nome do visitante *
               </label>
               <div className="relative">
                 <input
@@ -429,8 +429,8 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
                   id="nome"
                   value={nome}
                   onChange={(e) => handleNomeChange(e.target.value)}
-                  className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase"
-                  placeholder="Digite o nome (mostra opções se já cadastrado)"
+                  className="w-full px-3 py-2.5 pr-9 border border-outline-variant rounded-btn bg-surface-container-lowest text-on-surface uppercase placeholder:normal-case placeholder:text-on-surface-variant/60 focus:border-primary"
+                  placeholder="Digite o nome para buscar ou cadastrar..."
                   required
                 />
                 {searchingNome && (
