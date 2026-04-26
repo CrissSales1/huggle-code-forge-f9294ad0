@@ -331,54 +331,63 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
     setShowSelecionarVisitante(false);
   };
 
+  // Stepper M3
+  const Stepper = () => (
+    <div className="flex items-center gap-sm mb-lg px-1">
+      <div className={`flex items-center gap-sm ${etapa === 'prisma' ? 'text-primary' : 'text-on-surface-variant'}`}>
+        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-button font-semibold ${
+          etapa === 'prisma' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant'
+        }`}>1</div>
+        <span className="text-body-sm font-medium hidden sm:inline">Identificação do Prisma</span>
+        <span className="text-body-sm font-medium sm:hidden">Prisma</span>
+      </div>
+      <div className="flex-1 h-px bg-outline-variant" />
+      <div className={`flex items-center gap-sm ${etapa === 'dados' ? 'text-primary' : 'text-on-surface-variant'}`}>
+        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-button font-semibold ${
+          etapa === 'dados' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant'
+        }`}>2</div>
+        <span className="text-body-sm font-medium hidden sm:inline">Dados do Visitante</span>
+        <span className="text-body-sm font-medium sm:hidden">Dados</span>
+      </div>
+    </div>
+  );
+
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Novo Cadastro de Visitante" size="lg">
+      <Stepper />
+
       {etapa === 'prisma' && (
         <div>
-          <h3 className="text-lg font-medium text-gray-900 mb-4">
-            1. Selecionar Prisma Magnético
-          </h3>
-          
+          <div className="mb-md">
+            <h3 className="text-h3 text-on-surface">Selecione um prisma magnético</h3>
+            <p className="text-body-sm text-on-surface-variant mt-1">
+              Escolha um prisma livre para identificar o visitante.
+            </p>
+          </div>
+
           {loadingPrismas ? (
-            <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="mt-2 text-gray-500">Carregando prismas...</p>
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary border-t-transparent mx-auto"></div>
+              <p className="mt-3 text-body-sm text-on-surface-variant">Carregando prismas...</p>
             </div>
           ) : prismas.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-red-600">Nenhum prisma disponível no momento.</p>
+            <div className="text-center py-12 bg-error-container/40 rounded-card">
+              <AlertTriangle className="w-8 h-8 text-error mx-auto mb-2" />
+              <p className="text-body-md text-on-error-container font-medium">Nenhum prisma disponível</p>
+              <p className="text-body-sm text-on-surface-variant mt-1">Libere um prisma em uso para cadastrar novo visitante.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2 lg:gap-3">
+            <div className="grid grid-cols-4 sm:grid-cols-5 lg:grid-cols-6 gap-sm">
               {prismas.map((prisma) => (
                 <button
                   key={prisma.id}
                   onClick={() => handleSelecionarPrisma(prisma.numero)}
-                  className="p-3 lg:p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all duration-300 text-center transform hover:scale-105"
+                  className="group aspect-square flex flex-col items-center justify-center gap-1 rounded-card border border-outline-variant bg-surface-container-low hover:bg-primary-container/30 hover:border-primary hover:shadow-ambient-2 transition-all"
                 >
-                  {/* Prisma 3D estilizado */}
-                  <div className="flex justify-center mb-2">
-                    <div className="relative w-10 h-10 lg:w-12 lg:h-12">
-                      {/* Face frontal do prisma */}
-                      <div className="absolute inset-0 bg-gradient-to-br from-orange-400 to-orange-600 rounded-lg transform perspective-1000 shadow-lg border border-orange-500">
-                        {/* Face lateral direita (efeito 3D) */}
-                        <div className="absolute top-0 right-0 w-2 h-full bg-gradient-to-b from-orange-500 to-orange-700 transform skew-y-12 origin-top-right rounded-r-lg"></div>
-                        {/* Face superior (efeito 3D) */}
-                        <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-orange-300 to-orange-500 transform skew-x-12 origin-top-left rounded-t-lg"></div>
-                        
-                        {/* Número do prisma centralizado */}
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <span className="font-black text-white text-lg lg:text-xl drop-shadow-lg tracking-tight" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-                            {prisma.numero}
-                          </span>
-                        </div>
-                        
-                        {/* Brilho/highlight no prisma */}
-                        <div className="absolute top-1 left-1 w-3 h-3 bg-white opacity-30 rounded-full blur-sm"></div>
-                      </div>
-                    </div>
-                  </div>
-                  <span className="text-xs lg:text-sm text-gray-600 font-medium">Prisma {prisma.numero}</span>
+                  <span className="text-h2 font-bold text-on-surface group-hover:text-primary transition-colors leading-none">
+                    {prisma.numero}
+                  </span>
+                  <span className="text-label-caps text-on-surface-variant uppercase">Prisma</span>
                 </button>
               ))}
             </div>
