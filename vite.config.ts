@@ -1,3 +1,4 @@
+// Design system v2 — Material 3 tokens (forçar restart do Vite)
 import path from "path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
