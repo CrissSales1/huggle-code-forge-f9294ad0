@@ -80,3 +80,104 @@ input, textarea {
   animation: fade-in 0.3s ease-out;
 }
 
+/* ============================================================
+   Camada de adaptação visual M3 para páginas/componentes
+   legados (Cadastro, Relatórios, Estatísticas, Monitoramento,
+   Configurações, Vigilância e modais) — sem reescrita.
+
+   Estratégia: refinamentos sutis de cor, sombra e radius para
+   alinhar visualmente ao novo design system, preservando layout
+   e funcionalidade existentes.
+   ============================================================ */
+@layer components {
+  /* Cards brancos antigos -> superfície M3 com sombra ambient */
+  .bg-white {
+    box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.03);
+  }
+
+  /* Bordas mais suaves nas cores neutras antigas */
+  .border-gray-200 { border-color: #e2e1ed; }
+  .border-gray-300 { border-color: #c3c5d7; }
+  .border-gray-100 { border-color: #ededf8; }
+
+  /* Texto neutro alinhado ao on-surface M3 */
+  .text-gray-900 { color: #191b23; }
+  .text-gray-800 { color: #2e3039; }
+  .text-gray-700 { color: #434654; }
+  .text-gray-600 { color: #434654; }
+  .text-gray-500 { color: #737686; }
+  .text-gray-400 { color: #c3c5d7; }
+
+  /* Botões azuis legados -> primary M3 */
+  .bg-blue-600 { background-color: #003fb1; }
+  .bg-blue-700 { background-color: #1a56db; }
+  .hover\:bg-blue-700:hover { background-color: #1a56db; }
+  .hover\:bg-blue-800:hover { background-color: #003dab; }
+  .text-blue-600 { color: #003fb1; }
+  .text-blue-700 { color: #003fb1; }
+  .text-blue-900 { color: #00174d; }
+  .border-blue-500 { border-color: #003fb1; }
+  .border-blue-600 { border-color: #003fb1; }
+  .focus\:border-blue-500:focus { border-color: #003fb1; }
+  .focus\:ring-blue-500:focus { --tw-ring-color: rgba(0, 63, 177, 0.4); }
+  .border-b-blue-600 { border-bottom-color: #003fb1; }
+
+  /* Verde -> secondary M3 */
+  .bg-green-600 { background-color: #006c4b; }
+  .bg-green-700 { background-color: #005137; }
+  .hover\:bg-green-700:hover { background-color: #005137; }
+  .hover\:bg-green-800:hover { background-color: #002114; }
+  .text-green-600 { color: #006c4b; }
+  .text-green-700 { color: #005137; }
+  .text-green-900 { color: #002114; }
+
+  /* Vermelho -> error M3 */
+  .bg-red-600 { background-color: #ba1a1a; }
+  .bg-red-700 { background-color: #93000a; }
+  .hover\:bg-red-700:hover { background-color: #93000a; }
+  .text-red-600 { color: #ba1a1a; }
+  .text-red-700 { color: #93000a; }
+
+  /* Backgrounds suaves coloridos legados -> superfícies M3 mais leves */
+  .bg-gray-50 { background-color: #f3f3fe; }
+  .bg-gray-100 { background-color: #ededf8; }
+  .bg-blue-50 { background-color: #E3F2FD; }
+  .bg-blue-100 { background-color: #dbe1ff; }
+  .bg-green-50 { background-color: #E8F5E9; }
+  .bg-green-100 { background-color: #96f6c8; }
+  .bg-purple-50 { background-color: #F3E5F5; }
+  .bg-orange-50 { background-color: #FFF3E0; }
+  .bg-red-50 { background-color: #FFEBEE; }
+  .bg-amber-50 { background-color: #FFF8E1; }
+  .bg-emerald-50 { background-color: #E8F5E9; }
+  .bg-indigo-50 { background-color: #E8EAF6; }
+
+  /* Inputs e selects: aparência mais leve M3 */
+  input[type="text"],
+  input[type="number"],
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"],
+  input[type="email"],
+  input[type="password"],
+  input[type="search"],
+  input[type="tel"],
+  textarea,
+  select {
+    border-radius: 8px;
+  }
+
+  input:focus,
+  textarea:focus,
+  select:focus {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 3px rgba(0, 63, 177, 0.15);
+  }
+
+  /* Cantos mais suaves para containers genéricos */
+  .rounded-xl { border-radius: 12px; }
+  .rounded-lg { border-radius: 8px; }
+}
+
+

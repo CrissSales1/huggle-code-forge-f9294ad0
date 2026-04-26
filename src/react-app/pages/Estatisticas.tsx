@@ -46,12 +46,12 @@ export default function Estatisticas() {
   if (!estatisticas) return null;
 
   return (
-    <div className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 lg:py-6 max-w-7xl mx-auto">
+    <div className="px-4 sm:px-6 lg:px-8 mt-lg max-w-[1440px] w-full mx-auto">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-4 sm:mb-6 lg:mb-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-lg">
         <div className="min-w-0">
-          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">Estatísticas</h1>
-          <p className="text-gray-600 mt-0.5 sm:mt-1 text-xs sm:text-sm lg:text-base">Análise detalhada dos dados de visitantes</p>
+          <h1 className="text-h2 font-semibold text-on-surface tracking-tight">Estatísticas</h1>
+          <p className="text-on-surface-variant mt-1 text-body-sm">Análise detalhada dos dados de visitantes</p>
         </div>
         
         <div className="flex gap-1 sm:gap-2">

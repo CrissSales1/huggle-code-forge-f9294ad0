@@ -415,11 +415,11 @@ export default function Configuracoes() {
     );
 
   return (
-    <div className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 lg:py-6 max-w-7xl mx-auto">
+    <div className="px-4 sm:px-6 lg:px-8 mt-lg max-w-[1440px] w-full mx-auto">
       {/* Header */}
-      <div className="mb-4 sm:mb-6 lg:mb-8">
-        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">Configurações do Sistema</h1>
-        <p className="text-gray-600 mt-0.5 sm:mt-1 text-xs sm:text-sm lg:text-base">Gerencie as configurações e dados do sistema</p>
+      <div className="mb-lg">
+        <h1 className="text-h2 font-semibold text-on-surface tracking-tight">Configurações do Sistema</h1>
+        <p className="text-on-surface-variant mt-1 text-body-sm">Gerencie as configurações e dados do sistema</p>
       </div>
 
       {/* Alerta de sucesso */}

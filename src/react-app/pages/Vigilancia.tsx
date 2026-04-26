@@ -210,7 +210,7 @@ export default function Vigilancia() {
       : { label: 'Desligado', color: 'text-gray-500', bg: 'bg-gradient-to-r from-gray-50 to-gray-100 border-gray-300', dot: 'bg-gray-400' };
 
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 pt-2">
+    <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 mt-lg">
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
