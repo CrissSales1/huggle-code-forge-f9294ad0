@@ -1,4 +1,4 @@
-import { AlertTriangle, Edit, LogOut, Home, Clock, FileText, User, Car, Wrench } from 'lucide-react';
+import { AlertTriangle, Edit, LogOut, Home, FileText, User, Car, Wrench } from 'lucide-react';
 import PlacaVeiculo from './PlacaVeiculo';
 import { useLiveTimer } from '@/react-app/hooks/useLiveTimer';
 import type { VisitanteAtivo } from '@/shared/types';
