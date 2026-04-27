@@ -279,31 +279,34 @@ export default function Monitoramento() {
 
   return (
     <div className="px-4 sm:px-6 lg:px-8 mt-lg max-w-[1440px] w-full mx-auto">
+      {/* Header — alinhado ao padrão das outras telas */}
       <div className="mb-lg flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
         <div className="min-w-0 flex-1">
-          <h1 className="text-h2 font-semibold text-on-surface tracking-tight mb-1 truncate">Monitoramento de Moradores</h1>
+          <h1 className="text-h2 font-semibold text-on-surface tracking-tight mb-1 truncate">
+            Monitoramento de Moradores
+          </h1>
           <p className="text-on-surface-variant text-body-sm">
             Reconhecimento via câmera local com OCR
           </p>
         </div>
-        <div className="flex items-center gap-3 flex-shrink-0">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <button
             onClick={handleLimparMonitoramento}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-error text-error bg-transparent hover:bg-error/5 transition-colors text-button"
+            className="flex items-center gap-2 px-4 py-2 rounded-btn border border-outline-variant text-on-surface-variant bg-transparent hover:bg-surface-container transition-colors text-button"
           >
             <RotateCcw className="w-4 h-4" />
             <span className="hidden sm:inline">Limpar</span>
           </button>
           <button
             onClick={() => setShowHelp(!showHelp)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors text-button ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-btn border transition-colors text-button ${
               showHelp
                 ? 'border-primary text-primary bg-primary/5'
-                : 'border-outline-variant text-on-surface-variant bg-transparent hover:bg-surface-dim'
+                : 'border-outline-variant text-on-surface-variant bg-transparent hover:bg-surface-container'
             }`}
           >
             <HelpCircle className="w-4 h-4" />
-            <span className="hidden sm:inline">{showHelp ? 'Ocultar' : ''} Ajuda</span>
+            <span className="hidden sm:inline">{showHelp ? 'Ocultar ajuda' : 'Ajuda'}</span>
           </button>
         </div>
       </div>
@@ -311,9 +314,9 @@ export default function Monitoramento() {
       {/* Ajuda de Configuração */}
       {showHelp && <MonitoramentoHelp />}
 
-      {/* Camera Monitor com Painel de Resultado - Layout responsivo 3 colunas */}
+      {/* Câmera + Resultado + Histórico — Grid 3 colunas */}
       <div className="grid grid-cols-1 lg:grid-cols-5 2xl:grid-cols-12 gap-3 lg:min-h-[530px]">
-        {/* Câmera - 3/5 em LG, 6/12 em 2XL */}
+        {/* Câmera */}
         <div className="lg:col-span-3 2xl:col-span-6 lg:min-h-[530px]">
           <CameraMonitor 
             onDetection={debouncedRefetch} 
@@ -322,19 +325,18 @@ export default function Monitoramento() {
           />
         </div>
         
-        {/* Painel de Resultado + Pipeline - 2/5 em LG, 4/12 em 2XL */}
+        {/* Painel de Resultado + Pipeline */}
         <div className="lg:col-span-2 2xl:col-span-4 flex flex-col gap-3 lg:h-full lg:max-h-[530px] lg:overflow-hidden">
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col">
-            {/* Header */}
-            <div className="px-4 py-2.5 2xl:py-2 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="font-semibold text-gray-900 flex items-center gap-2 text-sm 2xl:text-base">
-                <Activity className="w-4 h-4 2xl:w-5 2xl:h-5 text-blue-600" />
+          <div className="bg-surface-container-lowest rounded-card border border-outline-variant shadow-ambient-1 flex flex-col">
+            {/* Header do card */}
+            <div className="px-4 py-2.5 border-b border-outline-variant flex items-center justify-between">
+              <h3 className="font-semibold text-on-surface flex items-center gap-2 text-body-sm">
+                <Activity className="w-4 h-4 text-primary" />
                 <span>Resultado</span>
-                {/* v1.1.79: Badge de modo histórico */}
                 {selectedDetectionId !== null && (
                   <button 
                     onClick={() => setSelectedDetectionId(null)}
-                    className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full flex items-center gap-1 hover:bg-blue-200 transition-colors"
+                    className="text-[11px] bg-primary/10 text-primary px-2 py-0.5 rounded-full flex items-center gap-1 hover:bg-primary/15 transition-colors font-medium"
                   >
                     <Clock className="w-3 h-3" />
                     Histórico
@@ -342,259 +344,238 @@ export default function Monitoramento() {
                   </button>
                 )}
               </h3>
-              {displayedDetection && (
-                <span className={`text-xs px-2 py-0.5 rounded-full ${
-                  displayedDetection.morador 
-                    ? 'bg-green-100 text-green-700' 
-                    : displayedDetection.visitante
-                    ? 'bg-amber-100 text-amber-700'
-                    : 'bg-red-100 text-red-700'
-                }`}>
-                  {displayedDetection.morador ? 'Autorizado' : displayedDetection.visitante ? 'Visitante' : 'Desconhecido'}
-                </span>
-              )}
+              {displayedDetection && (() => {
+                const status = displayedDetection.morador
+                  ? { label: 'Autorizado', cls: 'bg-secondary-container text-on-secondary-container' }
+                  : displayedDetection.visitante
+                  ? { label: 'Visitante', cls: 'bg-tertiary-container text-on-tertiary-container' }
+                  : { label: 'Desconhecido', cls: 'bg-error-container text-on-error-container' };
+                return (
+                  <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${status.cls}`}>
+                    {status.label}
+                  </span>
+                );
+              })()}
             </div>
             
             {/* Conteúdo */}
-            <div className="p-3 2xl:p-4 flex flex-col">
-              {/* Card de resultado principal */}
+            <div className="p-3 flex flex-col">
               <div className="flex flex-col justify-start">
                 {!displayedDetection ? (
-                  /* Aguardando detecção */
-                  <div className="text-center py-8 2xl:py-6 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300">
-                    <Camera className="w-12 h-12 2xl:w-10 2xl:h-10 text-gray-400 mx-auto mb-2" />
-                    <p className="text-gray-600 text-base 2xl:text-sm font-medium">Aguardando detecção...</p>
-                    <p className="text-gray-400 text-sm 2xl:text-xs mt-1">O sistema exibirá os veículos</p>
+                  /* Estado vazio — sóbrio */
+                  <div className="text-center py-8 bg-surface-container-low rounded-card border border-dashed border-outline-variant">
+                    <Camera className="w-10 h-10 text-on-surface-variant/60 mx-auto mb-2" />
+                    <p className="text-on-surface text-body-sm font-medium">Aguardando detecção…</p>
+                    <p className="text-on-surface-variant text-[12px] mt-0.5">
+                      O sistema exibirá os veículos
+                    </p>
                   </div>
-                ) : displayedDetection.morador ? (
-                  <div className="bg-gradient-to-br from-green-100 via-green-50 to-emerald-100 border-4 border-green-500 rounded-2xl p-4 2xl:p-3 shadow-lg animate-fade-in">
-                    {/* Badge de status */}
-                    <div className="flex items-center justify-center mb-3 2xl:mb-2">
-                      <div className="bg-green-600 text-white px-4 py-1 2xl:px-3 2xl:py-0.5 rounded-full font-bold text-sm 2xl:text-xs flex items-center gap-1.5 shadow-md">
-                        <CheckCircle className="w-4 h-4 2xl:w-3.5 2xl:h-3.5" />
-                        <span>MORADOR AUTORIZADO</span>
+                ) : (() => {
+                  // Resolver tema único por status (sem gradientes)
+                  const theme = displayedDetection.morador
+                    ? {
+                        bar: 'bg-secondary',
+                        surface: 'bg-secondary-container/40',
+                        ring: 'border-secondary/30',
+                        chip: 'bg-secondary text-on-secondary',
+                        chipIcon: <CheckCircle className="w-3.5 h-3.5" />,
+                        chipLabel: 'MORADOR AUTORIZADO',
+                      }
+                    : displayedDetection.visitante
+                    ? {
+                        bar: 'bg-tertiary',
+                        surface: 'bg-tertiary-container/40',
+                        ring: 'border-tertiary/30',
+                        chip: 'bg-tertiary text-on-tertiary',
+                        chipIcon: <User className="w-3.5 h-3.5" />,
+                        chipLabel: 'VISITANTE ATIVO',
+                      }
+                    : {
+                        bar: 'bg-error',
+                        surface: 'bg-error-container/40',
+                        ring: 'border-error/30',
+                        chip: 'bg-error text-on-error',
+                        chipIcon: <XCircle className="w-3.5 h-3.5" />,
+                        chipLabel: 'VEÍCULO DESCONHECIDO',
+                      };
+
+                  return (
+                    <div className={`relative overflow-hidden rounded-card border ${theme.ring} ${theme.surface} p-3 animate-fade-in`}>
+                      {/* Faixa lateral colorida — única acentuação forte */}
+                      <div className={`absolute left-0 top-0 bottom-0 w-1 ${theme.bar}`} />
+
+                      {/* Chip de status */}
+                      <div className="flex items-center justify-center mb-3">
+                        <div className={`${theme.chip} px-3 py-1 rounded-full text-[11px] font-semibold tracking-wide flex items-center gap-1.5 shadow-ambient-1`}>
+                          {theme.chipIcon}
+                          <span>{theme.chipLabel}</span>
+                        </div>
                       </div>
-                    </div>
-                    
-                    {/* Placa centralizada */}
-                    <div className="flex justify-center mb-3 2xl:mb-2">
-                      <PlacaVeiculo placa={displayedDetection.placa} size="lg" />
-                    </div>
-                    
-                    {/* Casa do morador */}
-                    <div className="flex justify-center mb-2">
-                      <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border-2 border-green-300 shadow-sm">
-                        <Home className="w-5 h-5 2xl:w-4 2xl:h-4 text-blue-600" />
-                        <span className="text-2xl 2xl:text-xl font-bold text-green-700">
-                          Casa {displayedDetection.morador.casa}
+
+                      {/* Placa */}
+                      <div className="flex justify-center mb-3">
+                        <PlacaVeiculo placa={displayedDetection.placa} size="lg" />
+                      </div>
+
+                      {/* Info contextual */}
+                      {displayedDetection.morador && (
+                        <div className="flex justify-center mb-2">
+                          <div className="flex items-center gap-2 bg-surface-container-lowest px-3 py-1.5 rounded-lg border border-outline-variant">
+                            <Home className="w-4 h-4 text-on-surface-variant" />
+                            <span className="text-body-md font-semibold text-on-surface">
+                              Casa {displayedDetection.morador.casa}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {displayedDetection.visitante && (
+                        <div className="flex flex-col items-center gap-1.5 mb-2">
+                          <div className="flex items-center gap-2 bg-surface-container-lowest px-3 py-1.5 rounded-lg border border-outline-variant">
+                            <Home className="w-4 h-4 text-on-surface-variant" />
+                            <span className="text-body-md font-semibold text-on-surface">
+                              Casa {displayedDetection.visitante.casa}
+                            </span>
+                          </div>
+                          <div className="text-body-sm font-medium text-on-surface">
+                            {displayedDetection.visitante.nome}
+                          </div>
+                        </div>
+                      )}
+
+                      {!displayedDetection.morador && !displayedDetection.visitante && (
+                        <div className="flex justify-center mb-2">
+                          <p className="text-error text-[12px] font-medium">
+                            Verifique antes de liberar
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Horário e fonte — discretos */}
+                      <div className="text-center text-[11px] text-on-surface-variant mt-1">
+                        <span>{new Date(displayedDetection.timestamp).toLocaleTimeString('pt-BR')}</span>
+                        <span className="mx-1">•</span>
+                        <span>
+                          {displayedDetection.fonteDeteccao === 'api' ? 'API' : 'OCR'}
+                          {displayedDetection.confidence && ` (${Math.round(displayedDetection.confidence * 100)}%)`}
                         </span>
                       </div>
                     </div>
-                    
-                    {/* Horário e fonte */}
-                    <div className="text-center text-sm 2xl:text-xs">
-                      <span className="text-gray-600">
-                        {new Date(displayedDetection.timestamp).toLocaleTimeString('pt-BR')}
-                      </span>
-                      <span className="text-gray-400 ml-1">
-                        • {displayedDetection.fonteDeteccao === 'api' ? 'API' : 'OCR'}
-                        {displayedDetection.confidence && ` (${Math.round(displayedDetection.confidence * 100)}%)`}
-                      </span>
-                    </div>
-                  </div>
-                ) : displayedDetection.visitante ? (
-                  <div className="bg-gradient-to-br from-amber-100 via-yellow-50 to-orange-100 border-4 border-amber-500 rounded-2xl p-4 2xl:p-3 shadow-lg animate-fade-in">
-                    {/* Badge de status */}
-                    <div className="flex items-center justify-center mb-3 2xl:mb-2">
-                      <div className="bg-amber-600 text-white px-4 py-1 2xl:px-3 2xl:py-0.5 rounded-full font-bold text-sm 2xl:text-xs flex items-center gap-1.5 shadow-md">
-                        <User className="w-4 h-4 2xl:w-3.5 2xl:h-3.5" />
-                        <span>VISITANTE ATIVO</span>
-                      </div>
-                    </div>
-                    
-                    {/* Placa centralizada */}
-                    <div className="flex justify-center mb-3 2xl:mb-2">
-                      <PlacaVeiculo placa={displayedDetection.placa} size="lg" />
-                    </div>
-                    
-                    {/* Casa do visitante e nome */}
-                    <div className="flex flex-col items-center gap-1.5 mb-2">
-                      <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border-2 border-amber-300 shadow-sm">
-                        <Home className="w-4 h-4 text-blue-600" />
-                        <span className="text-xl 2xl:text-lg font-bold text-amber-700">
-                          Casa {displayedDetection.visitante.casa}
-                        </span>
-                      </div>
-                      <div className="text-base 2xl:text-sm font-semibold text-amber-800">
-                        {displayedDetection.visitante.nome}
-                      </div>
-                    </div>
-                    
-                    {/* Horário e fonte */}
-                    <div className="text-center text-sm 2xl:text-xs">
-                      <span className="text-gray-600">
-                        {new Date(displayedDetection.timestamp).toLocaleTimeString('pt-BR')}
-                      </span>
-                      <span className="text-gray-400 ml-1">
-                        • {displayedDetection.fonteDeteccao === 'api' ? 'API' : 'OCR'}
-                        {displayedDetection.confidence && ` (${Math.round(displayedDetection.confidence * 100)}%)`}
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="bg-gradient-to-br from-red-100 via-red-50 to-orange-100 border-4 border-red-500 rounded-2xl p-4 2xl:p-3 shadow-lg animate-fade-in">
-                    {/* Badge de alerta */}
-                    <div className="flex items-center justify-center mb-3 2xl:mb-2">
-                      <div className="bg-red-600 text-white px-4 py-1 2xl:px-3 2xl:py-0.5 rounded-full font-bold text-sm 2xl:text-xs flex items-center gap-1.5 shadow-md animate-pulse">
-                        <XCircle className="w-4 h-4 2xl:w-3.5 2xl:h-3.5" />
-                        <span>VEÍCULO DESCONHECIDO</span>
-                      </div>
-                    </div>
-                    
-                    {/* Placa centralizada */}
-                    <div className="flex justify-center mb-3 2xl:mb-2">
-                      <PlacaVeiculo placa={displayedDetection.placa} size="lg" />
-                    </div>
-                    
-                    {/* Aviso */}
-                    <div className="flex justify-center mb-2">
-                      <div className="bg-red-50 border border-red-200 px-2 py-1 rounded-lg">
-                        <p className="text-red-700 font-medium text-center text-xs">
-                          Verifique antes de liberar
-                        </p>
-                      </div>
-                    </div>
-                    
-                    {/* Horário e fonte */}
-                    <div className="text-center text-sm 2xl:text-xs">
-                      <span className="text-gray-600">
-                        {new Date(displayedDetection.timestamp).toLocaleTimeString('pt-BR')}
-                      </span>
-                      <span className="text-gray-400 ml-1">
-                        • {displayedDetection.fonteDeteccao === 'api' ? 'API' : 'OCR'}
-                        {displayedDetection.confidence && ` (${Math.round(displayedDetection.confidence * 100)}%)`}
-                      </span>
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
               
-              {/* Histórico de detecções - oculto em 2XL (vai para coluna separada) */}
+              {/* Histórico inline (quando não há coluna separada) */}
               {detectionHistory.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-gray-100 2xl:hidden">
-                  <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center justify-between">
+                <div className="mt-3 pt-3 border-t border-outline-variant 2xl:hidden">
+                  <h4 className="text-body-sm font-semibold text-on-surface mb-2 flex items-center justify-between">
                     <span>Histórico</span>
-                    <span className="text-gray-400 font-normal text-xs">({detectionHistory.length})</span>
+                    <span className="text-on-surface-variant font-normal text-[11px]">({detectionHistory.length})</span>
                   </h4>
                   <div className="space-y-1.5 max-h-[150px] overflow-y-auto pr-1">
-                    {detectionHistory.slice(0, 8).map((det, idx) => (
-                      <div 
-                        key={det.id || idx}
-                        onClick={() => handleHistoryClick(det.id)}
-                        className={`p-2 rounded-lg border text-xs cursor-pointer transition-all
-                          ${selectedDetectionId === det.id 
-                            ? 'ring-2 ring-blue-500 ring-offset-1 shadow-md' 
-                            : 'hover:shadow-md hover:scale-[1.01]'
-                          }
-                          ${det.morador 
-                            ? 'bg-green-50 border-green-200 hover:bg-green-100' 
-                            : det.visitante
-                            ? 'bg-amber-50 border-amber-200 hover:bg-amber-100'
-                            : 'bg-red-50 border-red-200 hover:bg-red-100'
-                          }`}
-                      >
-                        <div className="flex items-center justify-between gap-1 mb-0.5">
-                          <span className={`font-mono font-bold ${det.morador ? 'text-green-800' : det.visitante ? 'text-amber-800' : 'text-red-800'}`}>
-                            {det.placa}
-                          </span>
-                          <span className="text-gray-400 text-[10px]">
-                            {new Date(det.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
-                        {det.morador && (
-                          <div className="flex items-center gap-1 text-green-700">
-                            <Home className="w-3 h-3" />
-                            <span className="font-semibold">Casa {det.morador.casa}</span>
+                    {detectionHistory.slice(0, 8).map((det, idx) => {
+                      const accent = det.morador ? 'bg-secondary' : det.visitante ? 'bg-tertiary' : 'bg-error';
+                      return (
+                        <button 
+                          key={det.id || idx}
+                          onClick={() => handleHistoryClick(det.id)}
+                          className={`w-full text-left relative overflow-hidden p-2 pl-3 rounded-lg border bg-surface-container-low text-[12px] transition-all
+                            ${selectedDetectionId === det.id 
+                              ? 'border-primary ring-1 ring-primary/30' 
+                              : 'border-outline-variant hover:bg-surface-container'
+                            }`}
+                        >
+                          <span className={`absolute left-0 top-0 bottom-0 w-0.5 ${accent}`} />
+                          <div className="flex items-center justify-between gap-1 mb-0.5">
+                            <span className="font-mono font-bold text-on-surface">
+                              {det.placa}
+                            </span>
+                            <span className="text-on-surface-variant text-[10px]">
+                              {new Date(det.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
                           </div>
-                        )}
-                        {det.visitante && (
-                          <div className="flex items-center gap-1 text-amber-700">
-                            <User className="w-3 h-3" />
-                            <span className="font-semibold">{det.visitante.nome} • Casa {det.visitante.casa}</span>
-                          </div>
-                        )}
-                        {!det.morador && !det.visitante && (
-                          <span className="text-red-600 text-[10px]">Não cadastrado</span>
-                        )}
-                      </div>
-                    ))}
+                          {det.morador && (
+                            <div className="flex items-center gap-1 text-on-surface-variant">
+                              <Home className="w-3 h-3" />
+                              <span className="font-medium">Casa {det.morador.casa}</span>
+                            </div>
+                          )}
+                          {det.visitante && (
+                            <div className="flex items-center gap-1 text-on-surface-variant">
+                              <User className="w-3 h-3" />
+                              <span className="font-medium truncate">{det.visitante.nome} • Casa {det.visitante.casa}</span>
+                            </div>
+                          )}
+                          {!det.morador && !det.visitante && (
+                            <span className="text-on-surface-variant text-[10px]">Não cadastrado</span>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
             </div>
           </div>
           
-          {/* Pipeline de Processamento OCR - aparece quando monitoramento ativo + debug habilitado */}
+          {/* Pipeline OCR — também tokenizado */}
           {displayedPipeline && (
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3">
+            <div className="bg-surface-container-lowest rounded-card border border-outline-variant shadow-ambient-1 p-3">
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-xs font-medium text-purple-700">🔍 Pipeline de Processamento OCR</span>
+                <span className="text-[12px] font-medium text-on-surface">Pipeline de processamento OCR</span>
                 {displayedPipeline.rawText && (
-                  <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">
-                    OCR: "{displayedPipeline.rawText}" ({Math.round(displayedPipeline.ocrConfidence * 100)}%)
+                  <span className="text-[11px] bg-surface-container text-on-surface-variant px-2 py-0.5 rounded-full font-mono">
+                    {displayedPipeline.rawText} · {Math.round(displayedPipeline.ocrConfidence * 100)}%
                   </span>
                 )}
               </div>
               
-              <div className="grid grid-cols-2 gap-3">
-                {/* Placa Processada */}
-                <div className="bg-gray-800 rounded-lg overflow-hidden">
-                  <div className="text-xs text-center text-gray-300 py-1 bg-gray-900 font-medium">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-inverse-surface rounded-lg overflow-hidden">
+                  <div className="text-[10px] text-center text-inverse-on-surface/80 py-1 font-medium">
                     Placa Processada
                   </div>
                   {displayedPipeline.debugImages?.preprocessed ? (
                     <img 
                       src={displayedPipeline.debugImages.preprocessed} 
                       alt="Placa Processada" 
-                      className="w-full h-20 object-contain bg-gray-900" 
+                      className="w-full h-20 object-contain" 
                     />
                   ) : (
-                    <div className="h-20 flex items-center justify-center text-gray-500 text-xs">
-                      Aguardando detecção...
+                    <div className="h-20 flex items-center justify-center text-inverse-on-surface/50 text-[11px]">
+                      Aguardando…
                     </div>
                   )}
                 </div>
                 
-                {/* Resultado OCR */}
-                <div className="bg-gray-800 rounded-lg overflow-hidden border-2 border-green-500">
-                  <div className="text-xs text-center text-green-400 py-1 bg-gray-900 font-medium">
+                <div className="bg-inverse-surface rounded-lg overflow-hidden border border-secondary/40">
+                  <div className="text-[10px] text-center text-secondary-fixed-dim py-1 font-medium">
                     Resultado OCR
                   </div>
                   {displayedPipeline.debugImages?.final ? (
                     <img 
                       src={displayedPipeline.debugImages.final} 
                       alt="Resultado OCR" 
-                      className="w-full h-20 object-contain bg-gray-900" 
+                      className="w-full h-20 object-contain" 
                     />
                   ) : (
-                    <div className="h-20 flex items-center justify-center text-gray-500 text-xs">
-                      Aguardando leitura...
+                    <div className="h-20 flex items-center justify-center text-inverse-on-surface/50 text-[11px]">
+                      Aguardando leitura…
                     </div>
                   )}
                 </div>
               </div>
               
-              {/* Info adicional */}
-              <div className="flex items-center gap-4 mt-2 text-[10px] text-gray-500">
-                <span>Fonte: {displayedPipeline.usedYolo ? '🧠 YOLO' : '📐 Heurística'}</span>
+              <div className="flex items-center gap-3 mt-2 text-[10px] text-on-surface-variant">
+                <span>Fonte: {displayedPipeline.usedYolo ? 'YOLO' : 'Heurística'}</span>
                 {displayedPipeline.plateRegion && (
-                  <span>Região: {displayedPipeline.plateRegion.width}x{displayedPipeline.plateRegion.height}px</span>
+                  <span>Região: {displayedPipeline.plateRegion.width}×{displayedPipeline.plateRegion.height}px</span>
                 )}
               </div>
             </div>
           )}
         </div>
-        
+
         {/* Coluna de Histórico separada - só visível em 2XL */}
         <div className="hidden 2xl:block 2xl:col-span-2 h-full max-h-[530px]">
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col h-full overflow-hidden">
