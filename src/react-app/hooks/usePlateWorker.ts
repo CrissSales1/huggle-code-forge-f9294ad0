@@ -4,6 +4,7 @@
  * FASE 1: Interface principal para OCR - substitui usePlateRecognition
  */
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { logger } from '@/react-app/utils/logger';
 
 interface PlateValidationResult {
   isValid: boolean;
@@ -82,20 +83,21 @@ interface UsePlateWorkerReturn {
   terminate: () => void;
 }
 
-// Configurações de fallback do localStorage
-const FALLBACK_ENABLED_KEY = 'portacerta_fallback_enabled';
-const FALLBACK_API_URL_KEY = 'portacerta_fallback_url';
-const FALLBACK_API_TOKEN_KEY = 'portacerta_fallback_token';
+// SECURITY: O fallback OCR via API externa foi removido.
+// Limpamos chaves antigas do localStorage para não deixar credenciais residuais.
+const LEGACY_FALLBACK_KEYS = [
+  'portacerta_fallback_enabled',
+  'portacerta_fallback_url',
+  'portacerta_fallback_token',
+] as const;
 
-function loadFallbackConfig(): { enabled: boolean; apiUrl: string; apiToken: string } {
+function purgeLegacyFallbackKeys(): void {
   try {
-    return {
-      enabled: localStorage.getItem(FALLBACK_ENABLED_KEY) === 'true',
-      apiUrl: localStorage.getItem(FALLBACK_API_URL_KEY) || '',
-      apiToken: localStorage.getItem(FALLBACK_API_TOKEN_KEY) || '',
-    };
+    for (const key of LEGACY_FALLBACK_KEYS) {
+      localStorage.removeItem(key);
+    }
   } catch {
-    return { enabled: false, apiUrl: '', apiToken: '' };
+    // ignore
   }
 }
 
@@ -129,7 +131,7 @@ export function usePlateWorker(): UsePlateWorkerReturn {
           case 'READY':
             setIsReady(true);
             setError(null);
-            console.log('✅ PlateProcessor Worker pronto');
+            logger.log('✅ PlateProcessor Worker pronto');
             break;
             
           case 'MODEL_LOADED':
@@ -140,9 +142,9 @@ export function usePlateWorker(): UsePlateWorkerReturn {
             }
             if (event.data.payload.permanentFailure) {
               setModelFailed(true);
-              console.log('⚠️ Modelo YOLO falhou permanentemente:', event.data.payload.error || 'erro desconhecido');
+              logger.log('⚠️ Modelo YOLO falhou permanentemente:', event.data.payload.error || 'erro desconhecido');
             } else if (event.data.payload.success) {
-              console.log(`🧠 Modelo YOLO carregado no worker (backend: ${event.data.payload.backend})`);
+              logger.log(`🧠 Modelo YOLO carregado no worker (backend: ${event.data.payload.backend})`);
             }
             break;
             
@@ -183,16 +185,17 @@ export function usePlateWorker(): UsePlateWorkerReturn {
       };
       
       workerRef.current.onerror = (err) => {
-        console.error('Worker error:', err);
+        logger.error('Worker error:', err);
         setError(`Erro no worker: ${err.message}`);
         setIsReady(false);
       };
       
-      // Inicializar Tesseract no worker
+      // SECURITY: Limpar credenciais legadas do localStorage e inicializar
+      purgeLegacyFallbackKeys();
       workerRef.current.postMessage({ type: 'INIT' });
       
     } catch (err) {
-      console.error('Erro ao criar worker:', err);
+      logger.error('Erro ao criar worker:', err);
       setError('Falha ao inicializar processamento em background');
     }
     
@@ -211,12 +214,12 @@ export function usePlateWorker(): UsePlateWorkerReturn {
     options?: ProcessPlateOptions
   ): Promise<OCRResult | null> => {
     if (!workerRef.current || !isReady) {
-      console.warn('Worker não está pronto');
+      logger.warn('Worker não está pronto');
       return null;
     }
     
     if (isProcessing) {
-      console.warn('Processamento já em andamento');
+      logger.warn('Processamento já em andamento');
       return null;
     }
     
@@ -235,14 +238,13 @@ export function usePlateWorker(): UsePlateWorkerReturn {
       
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       
-      // Carregar configurações de fallback do localStorage se não especificadas
-      const fallbackConfig = loadFallbackConfig();
+      // SECURITY: Fallback externo desativado — sempre false, sem ler localStorage
       const finalOptions: ProcessPlateOptions = {
         enableDebug: options?.enableDebug ?? false,
-        enableFallback: options?.enableFallback ?? fallbackConfig.enabled,
-        fallbackApiUrl: options?.fallbackApiUrl ?? fallbackConfig.apiUrl,
-        fallbackApiToken: options?.fallbackApiToken ?? fallbackConfig.apiToken,
-        forceNightMode: options?.forceNightMode ?? false,  // v1.1.46: Passar para o worker
+        enableFallback: false,
+        fallbackApiUrl: undefined,
+        fallbackApiToken: undefined,
+        forceNightMode: options?.forceNightMode ?? false,
       };
       
       // Usar Transferable para zero-copy
