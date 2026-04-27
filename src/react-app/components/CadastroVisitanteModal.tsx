@@ -1,23 +1,17 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { Camera, ChevronDown, ArrowLeft, Pencil, AlertTriangle, UserCheck, Home } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Camera, ChevronDown, ArrowLeft, Pencil, AlertTriangle, Home } from 'lucide-react';
 import Modal from './Modal';
 import CameraModal from './CameraModal';
 import SelecionarVisitanteModal from './SelecionarVisitanteModal';
 import { usePrismasDisponiveis, useVisitanteActions } from '@/react-app/hooks/useApi';
 import { normalizarNumeroCasa } from '@/react-app/utils/formatters';
+import { encontrarNomeCanonical, nomesSimilares } from '@/react-app/utils/stringUtils';
 import type { VisitanteType } from '@/shared/types';
 
 interface CadastroVisitanteModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
-}
-
-// Tipo para visitante similar encontrado
-interface VisitanteSimilar {
-  visitante: VisitanteType;
-  similaridade: number;
-  totalVisitas: number;
 }
 
 export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: CadastroVisitanteModalProps) {
