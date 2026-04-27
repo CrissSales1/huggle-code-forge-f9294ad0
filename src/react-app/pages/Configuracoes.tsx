@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
-import { Save, Trash2, AlertTriangle, Settings as SettingsIcon, Hash, Car, CheckCircle, Upload, Download, Database, Loader2, FileJson, HardDrive, Lock, ShieldCheck, Gauge, Zap, Volume2, VolumeX, Play, Home, User, AlertCircle, Music, Brain } from 'lucide-react';
+import { Save, Trash2, AlertTriangle, Settings as SettingsIcon, Hash, Car, CheckCircle, Upload, Download, Database, Loader2, FileJson, HardDrive, Lock, ShieldCheck, Gauge, Volume2, VolumeX, Play, Home, User, AlertCircle, Music, Brain } from 'lucide-react';
+import { z } from 'zod';
 import { useConfiguracoes } from '@/react-app/hooks/useApi';
 import StatsCard from '@/react-app/components/StatsCard';
 import { supabase } from '@/integrations/supabase/client';
 import { normalizarNumeroCasa } from '@/react-app/utils/formatters';
+import { logger } from '@/react-app/utils/logger';
 import { 
   MotionSensitivity, 
   SENSITIVITY_PRESETS, 
@@ -13,7 +15,6 @@ import {
   saveCustomSensitivity,
   type CustomSensitivity,
 } from '@/react-app/utils/motionDetection';
-import { loadFallbackEnabled, saveFallbackEnabled } from '@/react-app/hooks/usePlateRecognition';
 import { 
   loadSoundEnabled, 
   saveSoundEnabled, 
@@ -41,6 +42,53 @@ interface BackupData {
   };
 }
 
+// ============ SECURITY: Schemas Zod para validar backup importado ============
+const MAX_ROWS = 100_000;
+
+// Aceita ISO 8601 ou formato simples sem timezone (legado)
+const isoDateString = z.string().min(1).max(40);
+
+const VisitanteImportSchema = z.object({
+  nome: z.string().trim().min(1).max(200),
+  casa_visitada: z.string().trim().min(1).max(50),
+  placa_veiculo: z.string().trim().min(1).max(20),
+  numero_prisma: z.union([z.number().int().min(0).max(9999), z.null()]).optional(),
+  estacionar_vaga_morador: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
+  hora_entrada: isoDateString,
+  hora_saida: z.union([isoDateString, z.null()]).optional(),
+  is_ativo: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
+  observacoes: z.union([z.string().max(2000), z.null()]).optional(),
+  liberado_por: z.union([z.string().max(200), z.null()]).optional(),
+}).passthrough();
+
+const VeiculoMoradorImportSchema = z.object({
+  placa_veiculo: z.string().trim().min(1).max(20),
+  casa: z.string().trim().min(1).max(50),
+}).passthrough();
+
+const LprDeteccaoImportSchema = z.object({
+  placa_detectada: z.string().trim().min(1).max(20),
+  timestamp: isoDateString,
+  confidence: z.union([z.number().min(0).max(1), z.null()]).optional(),
+  is_morador: z.union([z.boolean(), z.literal(0), z.literal(1), z.null()]).optional(),
+  casa_morador: z.union([z.string().max(50), z.null()]).optional(),
+}).passthrough();
+
+const BackupSchema = z.object({
+  metadata: z.object({
+    versao: z.string().max(20),
+    data_exportacao: z.string().max(40),
+    sistema: z.string().max(200),
+  }).partial().optional(),
+  tabelas: z.object({
+    visitantes: z.array(VisitanteImportSchema).max(MAX_ROWS).optional(),
+    veiculos_moradores: z.array(VeiculoMoradorImportSchema).max(MAX_ROWS).optional(),
+    lpr_deteccoes: z.array(LprDeteccaoImportSchema).max(MAX_ROWS).optional(),
+    prismas_magneticos: z.array(z.any()).max(MAX_ROWS).optional(),
+    configuracoes_sistema: z.array(z.any()).max(100).optional(),
+  }),
+});
+
 export default function Configuracoes() {
   const { configuracoes, atualizarConfiguracoes, limparBancoDados, loading, error } = useConfiguracoes();
   
@@ -49,7 +97,6 @@ export default function Configuracoes() {
   const [tempoDeduplicacao, setTempoDeduplicacao] = useState(configuracoes?.tempo_deduplicacao_segundos || 30);
   const [sensibilidade, setSensibilidade] = useState<MotionSensitivity>(loadMotionSensitivity());
   const [customSensitivity, setCustomSensitivity] = useState<CustomSensitivity>(loadCustomSensitivity());
-  const [usarApenasOCRLocal, setUsarApenasOCRLocal] = useState(!loadFallbackEnabled());
   
   
   // Estados para configuração de som
@@ -168,7 +215,7 @@ export default function Configuracoes() {
         .range(page * pageSize, (page + 1) * pageSize - 1);
 
       if (error) {
-        console.error(`Erro ao buscar ${tableName}:`, error);
+        logger.error(`Erro ao buscar ${tableName}:`, error);
         break;
       }
 
@@ -232,7 +279,7 @@ export default function Configuracoes() {
         detalhes: `${backup.tabelas.visitantes.length} visitantes, ${backup.tabelas.veiculos_moradores.length} veículos, ${backup.tabelas.lpr_deteccoes.length} detecções`,
       });
     } catch (err) {
-      console.error('Erro ao exportar backup:', err);
+      logger.error('Erro ao exportar backup:', err);
       setImportResult({
         success: false,
         message: 'Erro ao exportar backup',
@@ -255,9 +302,23 @@ export default function Configuracoes() {
 
     try {
       const content = await file.text();
-      const dados = JSON.parse(content) as BackupData;
 
-      // Validar estrutura básica
+      // Limite de tamanho: 50MB de JSON
+      if (content.length > 50 * 1024 * 1024) {
+        throw new Error('Arquivo muito grande (>50MB). Backup pode estar corrompido.');
+      }
+
+      const dadosRaw = JSON.parse(content);
+
+      // SECURITY: Validar com Zod antes de exibir/inserir
+      const parsed = BackupSchema.safeParse(dadosRaw);
+      if (!parsed.success) {
+        const issues = parsed.error.issues.slice(0, 5).map(i => `${i.path.join('.')}: ${i.message}`).join('; ');
+        throw new Error(`Backup inválido — ${issues}`);
+      }
+
+      const dados = dadosRaw as BackupData;
+
       if (!dados.tabelas) {
         throw new Error('Formato de arquivo inválido: campo "tabelas" não encontrado');
       }
@@ -266,7 +327,7 @@ export default function Configuracoes() {
       setShowConfirmacaoImport(true);
       setImportResult(null);
     } catch (err) {
-      console.error('Erro ao ler arquivo:', err);
+      logger.error('Erro ao ler arquivo:', err);
       setImportResult({
         success: false,
         message: 'Erro ao ler arquivo de backup',
@@ -324,7 +385,7 @@ export default function Configuracoes() {
             .insert(batch);
 
           if (insertError) {
-            console.error(`Erro no lote de visitantes:`, insertError.message);
+            logger.error(`Erro no lote de visitantes:`, insertError.message);
           } else {
             visitantesImportados += batch.length;
             setImportProgress(`Importando visitantes: ${visitantesImportados}/${tabelas.visitantes.length}`);
@@ -348,7 +409,7 @@ export default function Configuracoes() {
             .insert(batch);
 
           if (insertError) {
-            console.error(`Erro no lote de veículos:`, insertError.message);
+            logger.error(`Erro no lote de veículos:`, insertError.message);
           } else {
             veiculosImportados += batch.length;
           }
@@ -374,7 +435,7 @@ export default function Configuracoes() {
             .insert(batch);
 
           if (insertError) {
-            console.error(`Erro no lote de detecções:`, insertError.message);
+            logger.error(`Erro no lote de detecções:`, insertError.message);
           } else {
             deteccoesImportadas += batch.length;
           }
@@ -387,7 +448,7 @@ export default function Configuracoes() {
         detalhes: `${visitantesImportados} visitantes, ${veiculosImportados} veículos, ${deteccoesImportadas} detecções importadas`,
       });
     } catch (err) {
-      console.error('Erro na importação:', err);
+      logger.error('Erro na importação:', err);
       setImportResult({
         success: false,
         message: 'Erro durante a importação',
@@ -660,66 +721,7 @@ export default function Configuracoes() {
               </p>
             </div>
 
-            {/* Modo Econômico OCR */}
-            <div className="col-span-1 sm:col-span-2">
-              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2 sm:mb-3">
-                <div className="flex items-center space-x-1.5">
-                  <Zap className="w-3.5 h-3.5 text-green-500" />
-                  <span>Modo de Reconhecimento (OCR)</span>
-                </div>
-              </label>
-              <div className="grid grid-cols-2 gap-2 sm:gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUsarApenasOCRLocal(true);
-                    saveFallbackEnabled(false);
-                  }}
-                  className={`flex flex-col items-center p-2 sm:p-3 rounded-lg border-2 transition-all ${
-                    usarApenasOCRLocal
-                      ? 'border-green-500 bg-green-50 text-green-700'
-                      : 'border-gray-200 hover:border-green-300 hover:bg-green-50/50 text-gray-600'
-                  }`}
-                >
-                  <span className={`text-xs sm:text-sm font-medium ${usarApenasOCRLocal ? 'text-green-700' : 'text-gray-800'}`}>
-                    🆓 Econômico
-                  </span>
-                  <span className={`text-[10px] sm:text-xs mt-0.5 text-center ${usarApenasOCRLocal ? 'text-green-600' : 'text-gray-500'}`}>
-                    Apenas OCR local (gratuito)
-                  </span>
-                  <span className="text-[9px] sm:text-[10px] mt-1 px-1.5 py-0.5 bg-green-100 text-green-600 rounded-full">
-                    Custo zero
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUsarApenasOCRLocal(false);
-                    saveFallbackEnabled(true);
-                  }}
-                  className={`flex flex-col items-center p-2 sm:p-3 rounded-lg border-2 transition-all ${
-                    !usarApenasOCRLocal
-                      ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 text-gray-600'
-                  }`}
-                >
-                  <span className={`text-xs sm:text-sm font-medium ${!usarApenasOCRLocal ? 'text-blue-700' : 'text-gray-800'}`}>
-                    🎯 Precisão
-                  </span>
-                  <span className={`text-[10px] sm:text-xs mt-0.5 text-center ${!usarApenasOCRLocal ? 'text-blue-600' : 'text-gray-500'}`}>
-                    API externa se necessário
-                  </span>
-                  <span className="text-[9px] sm:text-[10px] mt-1 px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded-full">
-                    Custo por uso
-                  </span>
-                </button>
-              </div>
-              <p className="text-[10px] sm:text-xs text-gray-500 mt-2">
-                <strong>Econômico:</strong> Usa apenas OCR local (gratuito), pode falhar em placas difíceis.
-                <br />
-                <strong>Precisão:</strong> Usa API externa quando confiança &lt; 90% (mais preciso, mas tem custo).
-              </p>
-            </div>
+            {/* OCR via API externa removido por motivos de segurança (v1.2.0) */}
           </div>
           
           {configuracoesAlteradas && (
