@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Save, Trash2, AlertTriangle, Settings as SettingsIcon, Hash, Car, CheckCircle, Upload, Download, Database, Loader2, FileJson, HardDrive, Lock, ShieldCheck, Gauge, Zap, Volume2, VolumeX, Play, Home, User, AlertCircle, Music, Brain } from 'lucide-react';
+import { Save, Trash2, AlertTriangle, Settings as SettingsIcon, Hash, Car, CheckCircle, Upload, Download, Database, Loader2, FileJson, HardDrive, Lock, ShieldCheck, Gauge, Volume2, VolumeX, Play, Home, User, AlertCircle, Music, Brain } from 'lucide-react';
 import { z } from 'zod';
 import { useConfiguracoes } from '@/react-app/hooks/useApi';
 import StatsCard from '@/react-app/components/StatsCard';
@@ -50,7 +50,6 @@ export default function Configuracoes() {
   const [tempoDeduplicacao, setTempoDeduplicacao] = useState(configuracoes?.tempo_deduplicacao_segundos || 30);
   const [sensibilidade, setSensibilidade] = useState<MotionSensitivity>(loadMotionSensitivity());
   const [customSensitivity, setCustomSensitivity] = useState<CustomSensitivity>(loadCustomSensitivity());
-  const [usarApenasOCRLocal, setUsarApenasOCRLocal] = useState(!loadFallbackEnabled());
   
   
   // Estados para configuração de som
