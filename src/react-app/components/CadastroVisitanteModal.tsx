@@ -188,10 +188,29 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
       return;
     }
 
+    const placaFinal = placaVeiculo.trim().toUpperCase();
+    let nomeFinal = nome.trim();
+
+    // Normalização silenciosa: se a placa já existe em cadastros anteriores
+    // e o nome digitado é similar ao nome canônico desses cadastros,
+    // reaproveitar a grafia canônica para preservar agrupamento em estatísticas.
+    try {
+      const anteriores = await buscarVisitantes(placaFinal);
+      const mesmaPlaca = anteriores.filter(v => v.placa_veiculo === placaFinal);
+      if (mesmaPlaca.length > 0) {
+        const canonical = encontrarNomeCanonical(mesmaPlaca.map(v => v.nome));
+        if (canonical && nomesSimilares(canonical, nomeFinal, 85)) {
+          nomeFinal = canonical;
+        }
+      }
+    } catch {
+      // Falha silenciosa — segue com o nome digitado
+    }
+
     const sucesso = await cadastrarVisitante({
-      nome: nome.trim(),
+      nome: nomeFinal,
       casa_visitada: normalizarNumeroCasa(casaVisitada.trim()),
-      placa_veiculo: placaVeiculo.trim().toUpperCase(),
+      placa_veiculo: placaFinal,
       numero_prisma: prismaSelecionado,
       estacionar_vaga_morador: estacionarVagaMorador,
       observacoes: observacoes.trim() || undefined,
