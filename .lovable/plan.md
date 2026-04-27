@@ -1,52 +1,45 @@
+## Objetivo
 
+Remover do `CadastroVisitanteModal` o bloco/lógica visual de **"Visitante similar encontrado"** (que está atrapalhando o operador), **sem** quebrar o agrupamento das estatísticas (que hoje agrupa por placa ou por nome normalizado).
 
-# Plano: Investigar Loop Infinito do Preview e Sincronização GitHub/Cloudflare
+A regra "se for as mesmas informações siga com a regra para não atrapalhar nas estatísticas" será garantida silenciosamente no momento do cadastro: se a placa digitada já existir, reaproveitamos a grafia canônica do nome anterior (mesma placa = mesma pessoa). Assim o agrupamento em Estatísticas/Relatórios continua consolidando corretamente, sem precisar exibir a sugestão para o usuário.
 
-## Situação 1 — Loop infinito no preview
+## Mudanças
 
-### Diagnóstico
-O dev-server (Vite) está rodando normalmente em `:8080` — o único erro nos logs é benigno (referência a `tailwind.config.ts` quando o projeto usa `.js`, gerado pelo lovable-tagger). Portanto o "loop de reinício" **não é restart do servidor**, é **re-render/reload do app** no browser. As causas mais prováveis, em ordem:
+### 1. `src/react-app/components/CadastroVisitanteModal.tsx` — remoção da UI de similares
 
-1. **PWA Service Worker em modo `autoUpdate`** (`vite.config.ts`): em produção, o SW detecta novo build, chama `skipWaiting` e força reload da página automaticamente. Se o build é gerado continuamente (Lovable rebuilda a cada commit), o ciclo "novo SW → reload → novo SW" se sustenta. Mesmo com `devOptions.enabled: false`, o preview do Lovable serve build com PWA ativo.
-2. **MonitoringContext v1.7.9 — Auto-Recovery agressivo**: o bloco em volta da linha 1234 chama `setStatus('monitoring')` a cada tick em que `staleMs > 1800`. Se algum efeito downstream depender de `status` e disparar nova execução do loop sem zerar `lastOcrAttemptTimeRef`, pode gerar setState repetitivos a cada frame. Não causa "reload" da página, mas causa o app a parecer "reiniciando" (toast/status piscando).
-3. **`reconnectStream` chamado por `BackgroundVideo`/`BackgroundVigilancia`** em ciclo de mount/unmount sempre que rota muda (ex.: `/` → autenticação → `/`).
+- Remover do JSX o bloco "Visitante similar encontrado" (cards com % de similaridade e botões "Usar" / "Descartar").
+- Remover os estados: `visitantesSimilares`, `buscandoSimilares`, `similarDescartado`.
+- Remover funções: `buscarSimilares`, `handleUsarSimilar`, `handleDescartarSimilar`.
+- Remover as chamadas a `buscarSimilares(...)` dentro de `handlePlacaChange` e `handleNomeChange`.
+- Remover a interface local `VisitanteSimilar` e o import de `buscarVisitantesSimilares` do hook (no modal apenas — manter o hook intacto).
+- Remover o reset desses estados no `resetForm`.
 
-### Mudanças propostas
+**Preservar intactas:**
+- Busca por placa existente (`buscarVisitantes`) e o modal `SelecionarVisitanteModal` (operador continua podendo escolher um cadastro anterior pela placa — fluxo principal e desejado).
+- Dropdown de autocomplete por nome (`nomeOptions`) — esse não é a "sugestão de similar", é apenas autocomplete.
+- Stepper, validação de placa, OCR, prismas, etc.
 
-| Arquivo | Correção |
-|---|---|
-| `vite.config.ts` | Trocar `registerType: 'autoUpdate'` por `'prompt'` para que o usuário (e não um reload automático) decida quando atualizar. Elimina o ciclo "novo SW → reload". |
-| `src/react-app/main.tsx` | Adicionar registro manual via `virtual:pwa-register` que apenas loga ("Nova versão disponível") em vez de recarregar — evita reloads silenciosos no preview. |
-| `src/react-app/contexts/MonitoringContext.tsx` | Adicionar guard no auto-recovery (linhas ~1233-1241): só chamar `setStatus('monitoring')` se o status atual no React **for** `'processing'` (comparar via `setStatus(prev => prev === 'processing' ? 'monitoring' : prev)`) e atualizar `lastOcrAttemptTimeRef.current = Date.now()` para impedir re-disparo no próximo tick. |
-| `src/react-app/components/BackgroundVideo.tsx` e `BackgroundVigilancia.tsx` | Adicionar dependência estável (já têm guard, mas reconfirmar que `reconnectStream`/`reconnectSource` são `useCallback` estáveis no contexto — caso contrário, envolver no contexto). |
+### 2. `src/react-app/components/CadastroVisitanteModal.tsx` — normalização silenciosa no submit
 
-### Versão
-Bumpar para **v1.8.2 (Stop Reload Loop)** em `Configuracoes.tsx`.
+No `handleSubmit`, antes de chamar `cadastrarVisitante`:
 
-## Situação 2 — Atualizações não chegaram ao GitHub / Cloudflare Pages
+- Se a placa digitada (`placaVeiculo`) já existir em registros anteriores (consulta `buscarVisitantes(placaVeiculo)` filtrada por placa exata):
+  - Pegar o **nome canônico** desses cadastros (variação mais frequente, via `encontrarNomeCanonical` já existente em `stringUtils.ts`).
+  - Se o nome canônico, comparado com o nome digitado via `nomesSimilares(... , 85)`, for considerado a mesma pessoa, **substituir silenciosamente** `data.nome` pelo nome canônico antes de salvar.
+  - Caso contrário (nome claramente diferente para a mesma placa, ex.: venda do carro), manter o nome digitado.
+- Aplicar `normalizarNome` apenas para a comparação; o valor gravado é a string canônica original (com acentos/maiúsculas conforme já era salva).
 
-### Explicação
-O Lovable faz **push automático** ao GitHub a cada edição quando o repositório está conectado. Não consigo executar `git` (estado é gerenciado pelo Lovable). As mudanças recentes (v1.7.7 → v1.8.1) foram salvas no projeto Lovable, mas se o GitHub não recebeu commits, há três causas possíveis:
+Isso garante que o agrupamento existente em `useApi.ts` (linha ~993, `gerarChaveAgrupamento(placa, nome)` → `nome:${normalizarNome(...)}`) continue colapsando variações da mesma pessoa nos relatórios e estatísticas, sem precisar de UI extra.
 
-1. **Conexão GitHub interrompida**: o app GitHub do Lovable foi desautorizado/desconectado. Verificar em **Connectors → GitHub**.
-2. **Token expirado / permissões revogadas**: reautorizar em GitHub Settings → Applications → Lovable.
-3. **Branch protegida**: regras de proteção no `main` impedem o bot de push.
+### 3. Sem mudanças em
 
-### Ação para o usuário
-1. Abrir **Connectors → GitHub** no Lovable e confirmar o status "Connected".
-2. Se desconectado: clicar **Connect project** novamente.
-3. Após reconectar, eu farei uma edição mínima (bump de versão para v1.8.2) — esse commit deve aparecer no GitHub e o Cloudflare Pages fará o build automático.
-4. Se ainda assim não atualizar: verificar no Cloudflare Pages → Deployments se há build falhando ou se o webhook do GitHub está desativado.
+- `src/react-app/hooks/useApi.ts` — `buscarVisitantesSimilares` permanece exportado (pode ser útil em outras telas/futuro), apenas deixa de ser consumido pelo modal.
+- `src/react-app/utils/stringUtils.ts` — utilitários permanecem (são usados no agrupamento e agora também no submit).
+- Demais componentes, hooks e estatísticas — sem alteração.
 
-### Não posso fazer pelo usuário
-- Reautorizar o app GitHub (requer login do usuário no GitHub).
-- Verificar painel do Cloudflare Pages.
-- Forçar um push manual (estado git é interno ao Lovable).
+## Resultado esperado
 
-## Ordem de execução
-
-1. Aplicar correções do PWA + MonitoringContext + bump v1.8.2.
-2. O commit gerado servirá de teste para a sincronização GitHub → Cloudflare.
-3. Se o commit aparecer no GitHub: problema 2 resolvido.
-4. Se não aparecer: usuário precisa reconectar GitHub em Connectors.
-
+- O modal de cadastro fica mais limpo: sem o aviso amarelo/laranja de "Visitante similar encontrado" interrompendo o operador.
+- O fluxo "placa já cadastrada → escolher cadastro anterior" continua funcionando via `SelecionarVisitanteModal` (que é explicitamente acionado pela placa exata).
+- Estatísticas e Relatórios continuam agrupando corretamente registros da mesma pessoa, porque o nome é padronizado silenciosamente no momento do cadastro quando a placa coincide.
