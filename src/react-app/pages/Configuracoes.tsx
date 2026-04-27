@@ -215,7 +215,7 @@ export default function Configuracoes() {
         .range(page * pageSize, (page + 1) * pageSize - 1);
 
       if (error) {
-        console.error(`Erro ao buscar ${tableName}:`, error);
+        logger.error(`Erro ao buscar ${tableName}:`, error);
         break;
       }
 
@@ -279,7 +279,7 @@ export default function Configuracoes() {
         detalhes: `${backup.tabelas.visitantes.length} visitantes, ${backup.tabelas.veiculos_moradores.length} veículos, ${backup.tabelas.lpr_deteccoes.length} detecções`,
       });
     } catch (err) {
-      console.error('Erro ao exportar backup:', err);
+      logger.error('Erro ao exportar backup:', err);
       setImportResult({
         success: false,
         message: 'Erro ao exportar backup',
@@ -385,7 +385,7 @@ export default function Configuracoes() {
             .insert(batch);
 
           if (insertError) {
-            console.error(`Erro no lote de visitantes:`, insertError.message);
+            logger.error(`Erro no lote de visitantes:`, insertError.message);
           } else {
             visitantesImportados += batch.length;
             setImportProgress(`Importando visitantes: ${visitantesImportados}/${tabelas.visitantes.length}`);
@@ -409,7 +409,7 @@ export default function Configuracoes() {
             .insert(batch);
 
           if (insertError) {
-            console.error(`Erro no lote de veículos:`, insertError.message);
+            logger.error(`Erro no lote de veículos:`, insertError.message);
           } else {
             veiculosImportados += batch.length;
           }
@@ -435,7 +435,7 @@ export default function Configuracoes() {
             .insert(batch);
 
           if (insertError) {
-            console.error(`Erro no lote de detecções:`, insertError.message);
+            logger.error(`Erro no lote de detecções:`, insertError.message);
           } else {
             deteccoesImportadas += batch.length;
           }
@@ -448,7 +448,7 @@ export default function Configuracoes() {
         detalhes: `${visitantesImportados} visitantes, ${veiculosImportados} veículos, ${deteccoesImportadas} detecções importadas`,
       });
     } catch (err) {
-      console.error('Erro na importação:', err);
+      logger.error('Erro na importação:', err);
       setImportResult({
         success: false,
         message: 'Erro durante a importação',
