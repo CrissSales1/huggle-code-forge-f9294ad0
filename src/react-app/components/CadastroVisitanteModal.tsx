@@ -404,60 +404,6 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
               )}
             </div>
 
-            {/* v1.1.64: Alerta de visitante similar encontrado — M3 */}
-            {visitantesSimilares.length > 0 && !showNomeDropdown && (
-              <div className="bg-tertiary-fixed/40 border border-tertiary-fixed-dim rounded-card p-md space-y-3">
-                <div className="flex items-center gap-2 text-on-tertiary-fixed-variant">
-                  <AlertTriangle className="w-5 h-5 flex-shrink-0" />
-                  <span className="text-body-md font-semibold">Visitante similar encontrado</span>
-                  {buscandoSimilares && (
-                    <div className="w-4 h-4 border-2 border-tertiary border-t-transparent rounded-full animate-spin ml-auto"></div>
-                  )}
-                </div>
-                
-                <div className="space-y-2">
-                  {visitantesSimilares.slice(0, 3).map((similar, index) => (
-                    <div 
-                      key={index}
-                      className="bg-surface-container-lowest rounded-btn p-3 border border-outline-variant flex items-center justify-between gap-3"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="text-body-md font-semibold text-on-surface uppercase flex items-center gap-2 flex-wrap">
-                          <UserCheck className="w-4 h-4 text-secondary flex-shrink-0" />
-                          <span>{similar.visitante.nome}</span>
-                          {similar.similaridade < 100 && (
-                            <span className="text-label-caps uppercase bg-tertiary-fixed text-on-tertiary-fixed-variant px-2 py-0.5 rounded-full">
-                              {similar.similaridade}% similar
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-body-sm text-on-surface-variant mt-1 flex items-center gap-4 flex-wrap">
-                          <span>Casa: <strong className="text-on-surface">{similar.visitante.casa_visitada}</strong></span>
-                          <span>Placa: <strong className="font-mono text-on-surface">{similar.visitante.placa_veiculo}</strong></span>
-                          <span className="text-secondary font-semibold">{similar.totalVisitas} visita{similar.totalVisitas !== 1 ? 's' : ''}</span>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleUsarSimilar(similar)}
-                        className="px-3 py-1.5 bg-secondary text-on-secondary text-button font-semibold rounded-btn hover:bg-on-secondary-fixed-variant transition-colors flex-shrink-0"
-                      >
-                        Usar este
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                
-                <button
-                  type="button"
-                  onClick={handleDescartarSimilar}
-                  className="w-full text-center text-button font-medium text-on-tertiary-fixed-variant hover:bg-tertiary-fixed/60 py-1.5 rounded-btn transition-colors"
-                >
-                  Ignorar e criar novo cadastro
-                </button>
-              </div>
-            )}
-
             {/* Casa Visitada e Placa do Veículo lado a lado */}
             <div className="grid grid-cols-12 gap-4">
               <div className="col-span-3">
