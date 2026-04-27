@@ -42,6 +42,53 @@ interface BackupData {
   };
 }
 
+// ============ SECURITY: Schemas Zod para validar backup importado ============
+const MAX_ROWS = 100_000;
+
+// Aceita ISO 8601 ou formato simples sem timezone (legado)
+const isoDateString = z.string().min(1).max(40);
+
+const VisitanteImportSchema = z.object({
+  nome: z.string().trim().min(1).max(200),
+  casa_visitada: z.string().trim().min(1).max(50),
+  placa_veiculo: z.string().trim().min(1).max(20),
+  numero_prisma: z.union([z.number().int().min(0).max(9999), z.null()]).optional(),
+  estacionar_vaga_morador: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
+  hora_entrada: isoDateString,
+  hora_saida: z.union([isoDateString, z.null()]).optional(),
+  is_ativo: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
+  observacoes: z.union([z.string().max(2000), z.null()]).optional(),
+  liberado_por: z.union([z.string().max(200), z.null()]).optional(),
+}).passthrough();
+
+const VeiculoMoradorImportSchema = z.object({
+  placa_veiculo: z.string().trim().min(1).max(20),
+  casa: z.string().trim().min(1).max(50),
+}).passthrough();
+
+const LprDeteccaoImportSchema = z.object({
+  placa_detectada: z.string().trim().min(1).max(20),
+  timestamp: isoDateString,
+  confidence: z.union([z.number().min(0).max(1), z.null()]).optional(),
+  is_morador: z.union([z.boolean(), z.literal(0), z.literal(1), z.null()]).optional(),
+  casa_morador: z.union([z.string().max(50), z.null()]).optional(),
+}).passthrough();
+
+const BackupSchema = z.object({
+  metadata: z.object({
+    versao: z.string().max(20),
+    data_exportacao: z.string().max(40),
+    sistema: z.string().max(200),
+  }).partial().optional(),
+  tabelas: z.object({
+    visitantes: z.array(VisitanteImportSchema).max(MAX_ROWS).optional(),
+    veiculos_moradores: z.array(VeiculoMoradorImportSchema).max(MAX_ROWS).optional(),
+    lpr_deteccoes: z.array(LprDeteccaoImportSchema).max(MAX_ROWS).optional(),
+    prismas_magneticos: z.array(z.any()).max(MAX_ROWS).optional(),
+    configuracoes_sistema: z.array(z.any()).max(100).optional(),
+  }),
+});
+
 export default function Configuracoes() {
   const { configuracoes, atualizarConfiguracoes, limparBancoDados, loading, error } = useConfiguracoes();
   
@@ -255,9 +302,23 @@ export default function Configuracoes() {
 
     try {
       const content = await file.text();
-      const dados = JSON.parse(content) as BackupData;
 
-      // Validar estrutura básica
+      // Limite de tamanho: 50MB de JSON
+      if (content.length > 50 * 1024 * 1024) {
+        throw new Error('Arquivo muito grande (>50MB). Backup pode estar corrompido.');
+      }
+
+      const dadosRaw = JSON.parse(content);
+
+      // SECURITY: Validar com Zod antes de exibir/inserir
+      const parsed = BackupSchema.safeParse(dadosRaw);
+      if (!parsed.success) {
+        const issues = parsed.error.issues.slice(0, 5).map(i => `${i.path.join('.')}: ${i.message}`).join('; ');
+        throw new Error(`Backup inválido — ${issues}`);
+      }
+
+      const dados = dadosRaw as BackupData;
+
       if (!dados.tabelas) {
         throw new Error('Formato de arquivo inválido: campo "tabelas" não encontrado');
       }
@@ -266,7 +327,7 @@ export default function Configuracoes() {
       setShowConfirmacaoImport(true);
       setImportResult(null);
     } catch (err) {
-      console.error('Erro ao ler arquivo:', err);
+      logger.error('Erro ao ler arquivo:', err);
       setImportResult({
         success: false,
         message: 'Erro ao ler arquivo de backup',
