@@ -576,66 +576,64 @@ export default function Monitoramento() {
           )}
         </div>
 
-        {/* Coluna de Histórico separada - só visível em 2XL */}
+        {/* Coluna de Histórico separada — só visível em 2XL */}
         <div className="hidden 2xl:block 2xl:col-span-2 h-full max-h-[530px]">
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col h-full overflow-hidden">
-            <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between bg-gray-50 rounded-t-xl">
-              <h3 className="font-semibold text-gray-900 flex items-center gap-2 text-sm">
-                <Clock className="w-4 h-4 text-blue-600" />
+          <div className="bg-surface-container-lowest rounded-card border border-outline-variant shadow-ambient-1 flex flex-col h-full overflow-hidden">
+            <div className="px-3 py-2 border-b border-outline-variant flex items-center justify-between bg-surface-container-low">
+              <h3 className="font-semibold text-on-surface flex items-center gap-2 text-body-sm">
+                <Clock className="w-4 h-4 text-primary" />
                 <span>Histórico</span>
               </h3>
-              <span className="text-xs text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">
+              <span className="text-[11px] text-on-surface-variant bg-surface-container px-2 py-0.5 rounded-full font-medium">
                 {detectionHistory.length}
               </span>
             </div>
             <div className="flex-1 p-2 overflow-y-auto">
               {detectionHistory.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-gray-400 text-sm">
+                <div className="h-full flex items-center justify-center text-on-surface-variant text-body-sm">
                   <p>Nenhuma detecção</p>
                 </div>
               ) : (
                 <div className="space-y-1.5">
-                  {detectionHistory.map((det, idx) => (
-                    <div 
-                      key={det.id || idx}
-                      onClick={() => handleHistoryClick(det.id)}
-                      className={`p-2 rounded-lg border text-xs cursor-pointer transition-all
-                        ${selectedDetectionId === det.id 
-                          ? 'ring-2 ring-blue-500 ring-offset-1 shadow-md' 
-                          : 'hover:shadow-md hover:scale-[1.01]'
-                        }
-                        ${det.morador 
-                          ? 'bg-green-50 border-green-200 hover:bg-green-100' 
-                          : det.visitante
-                          ? 'bg-amber-50 border-amber-200 hover:bg-amber-100'
-                          : 'bg-red-50 border-red-200 hover:bg-red-100'
-                        }`}
-                    >
-                      <div className="flex items-center justify-between gap-1 mb-0.5">
-                        <span className={`font-mono font-bold text-[11px] ${det.morador ? 'text-green-800' : det.visitante ? 'text-amber-800' : 'text-red-800'}`}>
-                          {det.placa}
-                        </span>
-                        <span className="text-gray-400 text-[10px]">
-                          {new Date(det.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
-                      {det.morador && (
-                        <div className="flex items-center gap-1 text-green-700">
-                          <Home className="w-2.5 h-2.5" />
-                          <span className="font-medium text-[10px]">Casa {det.morador.casa}</span>
+                  {detectionHistory.map((det, idx) => {
+                    const accent = det.morador ? 'bg-secondary' : det.visitante ? 'bg-tertiary' : 'bg-error';
+                    return (
+                      <button
+                        key={det.id || idx}
+                        onClick={() => handleHistoryClick(det.id)}
+                        className={`w-full text-left relative overflow-hidden p-2 pl-3 rounded-lg border bg-surface-container-low text-[12px] transition-all
+                          ${selectedDetectionId === det.id 
+                            ? 'border-primary ring-1 ring-primary/30' 
+                            : 'border-outline-variant hover:bg-surface-container'
+                          }`}
+                      >
+                        <span className={`absolute left-0 top-0 bottom-0 w-0.5 ${accent}`} />
+                        <div className="flex items-center justify-between gap-1 mb-0.5">
+                          <span className="font-mono font-bold text-[11px] text-on-surface">
+                            {det.placa}
+                          </span>
+                          <span className="text-on-surface-variant text-[10px]">
+                            {new Date(det.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
                         </div>
-                      )}
-                      {det.visitante && (
-                        <div className="flex items-center gap-1 text-amber-700">
-                          <User className="w-2.5 h-2.5" />
-                          <span className="font-medium text-[10px]">{det.visitante.nome}</span>
-                        </div>
-                      )}
-                      {!det.morador && !det.visitante && (
-                        <span className="text-red-600 text-[10px]">Não cadastrado</span>
-                      )}
-                    </div>
-                  ))}
+                        {det.morador && (
+                          <div className="flex items-center gap-1 text-on-surface-variant">
+                            <Home className="w-2.5 h-2.5" />
+                            <span className="font-medium text-[10px]">Casa {det.morador.casa}</span>
+                          </div>
+                        )}
+                        {det.visitante && (
+                          <div className="flex items-center gap-1 text-on-surface-variant">
+                            <User className="w-2.5 h-2.5" />
+                            <span className="font-medium text-[10px] truncate">{det.visitante.nome}</span>
+                          </div>
+                        )}
+                        {!det.morador && !det.visitante && (
+                          <span className="text-on-surface-variant text-[10px]">Não cadastrado</span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -643,109 +641,132 @@ export default function Monitoramento() {
         </div>
       </div>
       
-      {/* Lista de Veículos - Versão expandível para todas as telas */}
-      {/* z-10 garante que fica abaixo do vídeo durante edição de polígono (z-50) */}
+      {/* Lista de Veículos — sóbria, alinhada com o restante do sistema */}
       <div className="mt-4 relative z-10">
-        <button onClick={async () => {
-        if (!showVeiculosCadastrados) {
-          await carregarVeiculos();
-        }
-        setShowVeiculosCadastrados(!showVeiculosCadastrados);
-      }} className="w-full bg-white border sm:border-2 border-gray-200 rounded-lg p-3 sm:p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
-          <div className="flex items-center space-x-2 sm:space-x-3">
-            <Car className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
-            <h2 className="text-sm sm:text-base lg:text-lg font-semibold text-gray-900">
-              Veículos Cadastrados ({veiculos.length})
+        <button
+          onClick={async () => {
+            if (!showVeiculosCadastrados) {
+              await carregarVeiculos();
+            }
+            setShowVeiculosCadastrados(!showVeiculosCadastrados);
+          }}
+          className="w-full bg-surface-container-lowest border border-outline-variant rounded-card p-3 sm:p-4 flex items-center justify-between hover:bg-surface-container-low transition-colors"
+        >
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Car className="w-4 h-4 sm:w-5 sm:h-5 text-on-surface-variant" />
+            <h2 className="text-body-sm sm:text-body-md font-semibold text-on-surface">
+              Veículos cadastrados
+              <span className="ml-1.5 text-on-surface-variant font-normal">({veiculos.length})</span>
             </h2>
           </div>
-          <div className={`transform transition-transform ${showVeiculosCadastrados ? 'rotate-180' : ''}`}>
-            <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className={`transform transition-transform text-on-surface-variant ${showVeiculosCadastrados ? 'rotate-180' : ''}`}>
+            <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </div>
         </button>
 
-        {showVeiculosCadastrados && <div className="bg-white border sm:border-2 border-t-0 border-gray-200 rounded-b-lg p-3 sm:p-4 max-h-[350px] overflow-y-auto">
+        {showVeiculosCadastrados && (
+          <div className="bg-surface-container-lowest border border-t-0 border-outline-variant rounded-b-card p-3 sm:p-4 max-h-[350px] overflow-y-auto">
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
-              {/* Campo de Busca */}
+              {/* Campo de busca */}
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant" />
                 <input
                   type="text"
                   placeholder="Buscar por placa ou casa..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  className="w-full pl-9 pr-8 py-2 bg-surface-container-lowest border border-outline-variant rounded-btn text-body-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors"
                 />
                 {searchTerm && (
                   <button 
                     onClick={() => setSearchTerm('')} 
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 hover:bg-gray-100 rounded"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 hover:bg-surface-container rounded"
                   >
-                    <X className="w-4 h-4 text-gray-400 hover:text-gray-600" />
+                    <X className="w-4 h-4 text-on-surface-variant" />
                   </button>
                 )}
               </div>
               
-              {/* Botão Cadastrar */}
-              <button onClick={() => setShowCadastroModal(true)} className="flex items-center justify-center space-x-1.5 sm:space-x-2 px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm flex-shrink-0">
-                <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
-                <span>Cadastrar Veículo</span>
+              {/* Botão Cadastrar — primary do sistema */}
+              <button
+                onClick={() => setShowCadastroModal(true)}
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-btn hover:bg-primary/90 transition-colors text-button flex-shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Cadastrar veículo</span>
               </button>
             </div>
 
-            {/* Contador de resultados */}
             {searchTerm && (
-              <p className="text-xs text-gray-500 mb-2">
+              <p className="text-[11px] text-on-surface-variant mb-2">
                 Mostrando {veiculosFiltrados.length} de {veiculos.length} veículos
               </p>
             )}
 
-            {veiculos.length === 0 ? <div className="bg-gray-50 border border-dashed sm:border-2 border-gray-300 rounded-lg p-6 sm:p-8 text-center">
-                <Car className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-2 sm:mb-3" />
-                <p className="text-gray-600 text-sm sm:text-base">Nenhum veículo cadastrado</p>
-              </div> : veiculosFiltrados.length === 0 ? <div className="bg-gray-50 border border-dashed sm:border-2 border-gray-300 rounded-lg p-6 sm:p-8 text-center">
-                <Search className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-2 sm:mb-3" />
-                <p className="text-gray-600 text-sm sm:text-base">Nenhum veículo encontrado para "{searchTerm}"</p>
-              </div> : <div className="overflow-x-auto -mx-3 sm:mx-0">
+            {veiculos.length === 0 ? (
+              <div className="bg-surface-container-low border border-dashed border-outline-variant rounded-card p-6 sm:p-8 text-center">
+                <Car className="w-10 h-10 text-on-surface-variant/60 mx-auto mb-2" />
+                <p className="text-on-surface-variant text-body-sm">Nenhum veículo cadastrado</p>
+              </div>
+            ) : veiculosFiltrados.length === 0 ? (
+              <div className="bg-surface-container-low border border-dashed border-outline-variant rounded-card p-6 sm:p-8 text-center">
+                <Search className="w-10 h-10 text-on-surface-variant/60 mx-auto mb-2" />
+                <p className="text-on-surface-variant text-body-sm">Nenhum veículo encontrado para "{searchTerm}"</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto -mx-3 sm:mx-0">
                 <table className="w-full min-w-[400px]">
-                  <thead className="bg-gray-50">
+                  <thead className="bg-surface-container-low">
                     <tr>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-[10px] sm:text-xs font-medium text-gray-500 uppercase">Placa</th>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-[10px] sm:text-xs font-medium text-gray-500 uppercase">Casa</th>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-[10px] sm:text-xs font-medium text-gray-500 uppercase">Ações</th>
+                      <th className="px-2 sm:px-4 py-2 text-left text-[10px] sm:text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Placa</th>
+                      <th className="px-2 sm:px-4 py-2 text-left text-[10px] sm:text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Casa</th>
+                      <th className="px-2 sm:px-4 py-2 text-right text-[10px] sm:text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Ações</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {veiculosFiltrados.map(veiculo => <tr key={veiculo.id} className="hover:bg-gray-50">
+                  <tbody className="divide-y divide-outline-variant">
+                    {veiculosFiltrados.map(veiculo => (
+                      <tr key={veiculo.id} className="hover:bg-surface-container-low transition-colors">
                         <td className="px-2 sm:px-4 py-2 sm:py-3">
                           <div className="scale-90 sm:scale-100 origin-left">
                             <PlacaVeiculo placa={veiculo.placa_veiculo} size="sm" />
                           </div>
                         </td>
                         <td className="px-2 sm:px-4 py-2 sm:py-3">
-                          <div className="flex items-center space-x-1 sm:space-x-2">
-                            <Home className="w-3 h-3 sm:w-4 sm:h-4 text-blue-600" />
-                            <span className="text-xs sm:text-sm font-semibold">{veiculo.casa}</span>
+                          <div className="flex items-center gap-1.5">
+                            <Home className="w-3.5 h-3.5 text-on-surface-variant" />
+                            <span className="text-body-sm font-semibold text-on-surface">{veiculo.casa}</span>
                           </div>
                         </td>
                         <td className="px-2 sm:px-4 py-2 sm:py-3 text-right">
-                          <div className="flex justify-end gap-1 sm:gap-2">
-                            <button onClick={() => handleEditarVeiculo(veiculo)} className="flex items-center space-x-0.5 sm:space-x-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 text-xs sm:text-sm">
-                              <Edit2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                          <div className="flex justify-end gap-1.5">
+                            <button
+                              onClick={() => handleEditarVeiculo(veiculo)}
+                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-btn border border-outline-variant text-on-surface-variant hover:bg-surface-container hover:text-on-surface text-[12px] transition-colors"
+                              aria-label="Editar"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
                               <span className="hidden sm:inline">Editar</span>
                             </button>
-                            <button onClick={() => handleExcluirVeiculo(veiculo.id)} className="flex items-center space-x-0.5 sm:space-x-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-xs sm:text-sm">
-                              <Trash2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                            <button
+                              onClick={() => handleExcluirVeiculo(veiculo.id)}
+                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-btn border border-error/30 text-error hover:bg-error/5 text-[12px] transition-colors"
+                              aria-label="Excluir"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
                               <span className="hidden sm:inline">Excluir</span>
                             </button>
                           </div>
                         </td>
-                      </tr>)}
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
-              </div>}
-          </div>}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <CadastroMoradorModal 
