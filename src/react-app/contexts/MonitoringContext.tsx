@@ -577,7 +577,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       });
       
       if (matchedGroup && matchedGroup !== entry.placa) {
-        console.log(`🔗 Agrupando "${entry.placa}" com "${matchedGroup}" (similar visual)`);
+        logger.log(`🔗 Agrupando "${entry.placa}" com "${matchedGroup}" (similar visual)`);
       }
     }
     
@@ -590,7 +590,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       const score = votes.count * avgConf;
       
       const variantsList = [...votes.variants].join(', ');
-      console.log(`📊 Grupo ${groupPlate}: ${votes.count}x [${variantsList}], avg=${(avgConf * 100).toFixed(1)}%, best=${votes.bestVariant}@${(votes.bestVariantConf * 100).toFixed(1)}%`);
+      logger.log(`📊 Grupo ${groupPlate}: ${votes.count}x [${variantsList}], avg=${(avgConf * 100).toFixed(1)}%, best=${votes.bestVariant}@${(votes.bestVariantConf * 100).toFixed(1)}%`);
       
       if (score > bestScore) {
         bestScore = score;
@@ -606,7 +606,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     const finalBestPlate = hasConsensus ? bestGroupData.bestVariant : plateText;
     
     if (hasConsensus) {
-      console.log(`✅ Consenso v1.1.64: Grupo "${bestGroupPlate}" com ${matchCount}x → Melhor variante: "${finalBestPlate}" (${(bestGroupData.bestVariantConf * 100).toFixed(1)}%)`);
+      logger.log(`✅ Consenso v1.1.64: Grupo "${bestGroupPlate}" com ${matchCount}x → Melhor variante: "${finalBestPlate}" (${(bestGroupData.bestVariantConf * 100).toFixed(1)}%)`);
     } else {
       logger.log(`🔄 Fast-Track Buffer: "${plateText}" score=${bestScore.toFixed(2)} (consenso=${hasConsensus ? '✅' : '❌'})`);
     }
@@ -648,7 +648,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       
       const todasVariacoes = [...new Set([...variacoesSimples, ...variacoesAgressivas])];
       
-      console.log(`🔍 Fuzzy: ${placaLimpa} → ${todasVariacoes.length} variações`);
+      logger.log(`🔍 Fuzzy: ${placaLimpa} → ${todasVariacoes.length} variações`);
       
       logger.log(`🔍 Buscando morador com ${todasVariacoes.length} variações de "${placaLimpa}"`);
       
@@ -709,7 +709,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         ...generateAggressiveVariations(placaLimpa)
       ])];
       
-      console.log(`🔍 Fuzzy visitante: ${placaLimpa} → ${variacoes.length} variações`);
+      logger.log(`🔍 Fuzzy visitante: ${placaLimpa} → ${variacoes.length} variações`);
       
       if (variacoes.length > 1) {
         const { data: fuzzyMatch, error: fuzzyError } = await supabase
@@ -913,7 +913,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         }
         
         const variacoesArray = [...allVariations];
-        console.log(`🔍 Batch Beam: ${allCandidatePlates.length} candidatos → ${variacoesArray.length} variações únicas`);
+        logger.log(`🔍 Batch Beam: ${allCandidatePlates.length} candidatos → ${variacoesArray.length} variações únicas`);
         
         const { data: moradorMatch, error: moradorErr } = await supabase
           .from('veiculos_moradores')
@@ -926,7 +926,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
           isMorador = true;
           casa = moradorMatch.casa;
           placaCadastrada = moradorMatch.placa_veiculo;
-          console.log(`🎯 Batch Match morador: ${moradorMatch.placa_veiculo} (Casa ${casa})`);
+          logger.log(`🎯 Batch Match morador: ${moradorMatch.placa_veiculo} (Casa ${casa})`);
         }
         
         casaFinal = casa;
@@ -946,7 +946,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
             nomeVisitante = visitanteMatch.nome;
             casaFinal = visitanteMatch.casa_visitada;
             placaFinal = visitanteMatch.placa_veiculo;
-            console.log(`🎯 Batch Match visitante: ${visitanteMatch.placa_veiculo} (${nomeVisitante})`);
+            logger.log(`🎯 Batch Match visitante: ${visitanteMatch.placa_veiculo} (${nomeVisitante})`);
           }
         }
         
@@ -957,8 +957,8 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
             .update({ status_presenca: 'presente', ultima_movimentacao: new Date().toISOString() })
             .eq('placa_veiculo', placaCadastrada)
             .then(({ error: updateErr }) => {
-              if (updateErr) console.error('Erro ao atualizar status_presenca:', updateErr);
-              else console.log(`📍 Status presença atualizado: ${placaCadastrada} → presente`);
+              if (updateErr) logger.error('Erro ao atualizar status_presenca:', updateErr);
+              else logger.log(`📍 Status presença atualizado: ${placaCadastrada} → presente`);
             });
         }
         
@@ -1000,7 +1000,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         return false;
       }
     } catch (e) {
-      console.error('Erro ao processar OCR:', e);
+      logger.error('Erro ao processar OCR:', e);
       finishProcessingTimer();
       setStatusMessage('❌ Erro OCR');
       setStatus('monitoring');
@@ -1083,7 +1083,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         const placa = result.validation.corrected;
         
         if (isPlateRecent(placa)) {
-          console.log(`⏳ Placa ${placa} detectada recentemente, ignorando duplicata...`);
+          logger.log(`⏳ Placa ${placa} detectada recentemente, ignorando duplicata...`);
           finishProcessingTimer();
           setStatus(isActive ? 'monitoring' : 'idle');
           setStatusMessage(`⏳ ${placa} já detectada recentemente`);
@@ -1164,7 +1164,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
         return false;
       }
     } catch (e) {
-      console.error('Erro na leitura manual:', e);
+      logger.error('Erro na leitura manual:', e);
       finishProcessingTimer();
       setStatusMessage('❌ Erro no processamento');
       setStatus(isActive ? 'monitoring' : 'idle');
@@ -1256,7 +1256,7 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
       const centerShift = Math.max(centerDx / frameW, centerDy / frameH);
       
       if (iou < 0.45 || centerShift > 0.25) {
-        console.log(`🔄 Vehicle Swap: IoU=${iou.toFixed(2)} centerShift=${(centerShift*100).toFixed(0)}% — novo veículo, resetando pipeline`);
+        logger.log(`🔄 Vehicle Swap: IoU=${iou.toFixed(2)} centerShift=${(centerShift*100).toFixed(0)}% — novo veículo, resetando pipeline`);
         ocrBufferRef.current = [];
         fastTrackValidatedRef.current = false;
         ocrLockUntilRef.current = 0;
@@ -1388,9 +1388,9 @@ export function MonitoringProvider({ children }: { children: React.ReactNode }) 
     try {
       await initObjectDetector();
       setMediapipeReady(true);
-      console.log('✅ MediaPipe ObjectDetector pronto para detecção de veículos');
+      logger.log('✅ MediaPipe ObjectDetector pronto para detecção de veículos');
     } catch (err) {
-      console.error('❌ Falha ao inicializar MediaPipe:', err);
+      logger.error('❌ Falha ao inicializar MediaPipe:', err);
       setMediapipeReady(false);
     } finally {
       setMediapipeLoading(false);

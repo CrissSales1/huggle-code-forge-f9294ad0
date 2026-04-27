@@ -65,7 +65,7 @@ export function useDashboardStats() {
 
       setStats(dashboardStats);
     } catch (err) {
-      console.error('Erro ao buscar estatísticas:', err);
+      logger.error('Erro ao buscar estatísticas:', err);
       setError(err instanceof Error ? err.message : 'Erro de conexão com o servidor');
     } finally {
       setLoading(false);
@@ -100,7 +100,7 @@ export function useVisitantesAtivos() {
 
       setVisitantes(data as VisitanteAtivo[] || []);
     } catch (err) {
-      console.error('Erro ao buscar visitantes ativos:', err);
+      logger.error('Erro ao buscar visitantes ativos:', err);
       setError(err instanceof Error ? err.message : 'Erro de conexão com o servidor');
     } finally {
       setLoading(false);
@@ -153,7 +153,7 @@ export function usePrismasDisponiveis() {
 
       setPrismas(prismasDisponiveis as PrismaMagneticoType[]);
     } catch (err) {
-      console.error('Erro ao buscar prismas disponíveis:', err);
+      logger.error('Erro ao buscar prismas disponíveis:', err);
       setError(err instanceof Error ? err.message : 'Erro de conexão com o servidor');
     } finally {
       setLoading(false);
@@ -204,10 +204,10 @@ export async function sincronizarPrismas(): Promise<boolean> {
         .update({ is_em_uso: false, visitante_id: null });
     }
 
-    console.log('Prismas sincronizados com sucesso');
+    logger.log('Prismas sincronizados com sucesso');
     return true;
   } catch (err) {
-    console.error('Erro ao sincronizar prismas:', err);
+    logger.error('Erro ao sincronizar prismas:', err);
     return false;
   }
 }
@@ -253,7 +253,7 @@ export function useVisitanteActions() {
 
       return true;
     } catch (err) {
-      console.error('Erro ao cadastrar visitante:', err);
+      logger.error('Erro ao cadastrar visitante:', err);
       setError(err instanceof Error ? err.message : 'Erro ao cadastrar visitante');
       return false;
     } finally {
@@ -298,7 +298,7 @@ export function useVisitanteActions() {
 
       return true;
     } catch (err) {
-      console.error('Erro ao registrar saída:', err);
+      logger.error('Erro ao registrar saída:', err);
       setError(err instanceof Error ? err.message : 'Erro ao registrar saída');
       return false;
     } finally {
@@ -357,7 +357,7 @@ export function useVisitanteActions() {
 
       return true;
     } catch (err) {
-      console.error('Erro ao editar visitante:', err);
+      logger.error('Erro ao editar visitante:', err);
       setError(err instanceof Error ? err.message : 'Erro ao editar visitante');
       return false;
     } finally {
@@ -378,7 +378,7 @@ export function useVisitanteActions() {
 
       return data as VisitanteType[] || [];
     } catch (err) {
-      console.error('Erro ao buscar visitantes:', err);
+      logger.error('Erro ao buscar visitantes:', err);
       return [];
     }
   };
@@ -468,7 +468,7 @@ export function useVisitanteActions() {
         }))
         .sort((a, b) => b.totalVisitas - a.totalVisitas);
     } catch (err) {
-      console.error('Erro ao buscar visitantes similares:', err);
+      logger.error('Erro ao buscar visitantes similares:', err);
       return [];
     }
   };
@@ -534,7 +534,7 @@ export async function buscarTodosParaExportar(filtros: FiltroRelatorioType): Pro
     const { data, error } = await query;
 
     if (error) {
-      console.error('Erro ao buscar dados para exportar:', error);
+      logger.error('Erro ao buscar dados para exportar:', error);
       break;
     }
 
@@ -698,7 +698,7 @@ export function useRelatorios() {
         limite_por_pagina: limite,
       };
     } catch (err) {
-      console.error('Erro ao gerar relatório:', err);
+      logger.error('Erro ao gerar relatório:', err);
       setError(err instanceof Error ? err.message : 'Erro ao gerar relatório');
       return {
         visitantes: [],
@@ -738,7 +738,7 @@ export function useConfiguracoes() {
 
       setConfiguracoes(data as ConfiguracoesSistemaType);
     } catch (err) {
-      console.error('Erro ao carregar configurações:', err);
+      logger.error('Erro ao carregar configurações:', err);
       setError(err instanceof Error ? err.message : 'Erro ao carregar configurações');
     } finally {
       setLoading(false);
@@ -808,7 +808,7 @@ export function useConfiguracoes() {
       await refetch();
       return true;
     } catch (err) {
-      console.error('Erro ao atualizar configurações:', err);
+      logger.error('Erro ao atualizar configurações:', err);
       setError(err instanceof Error ? err.message : 'Erro ao atualizar configurações');
       return false;
     } finally {
@@ -855,7 +855,7 @@ export function useConfiguracoes() {
 
       return true;
     } catch (err) {
-      console.error('Erro ao limpar banco de dados:', err);
+      logger.error('Erro ao limpar banco de dados:', err);
       setError(err instanceof Error ? err.message : 'Erro ao limpar banco de dados');
       return false;
     } finally {
@@ -1048,7 +1048,7 @@ export function useEstatisticas(periodo: '7' | '30' | '90') {
           alertas: [],
         });
       } catch (err) {
-        console.error('Erro ao carregar estatísticas:', err);
+        logger.error('Erro ao carregar estatísticas:', err);
         setError(err instanceof Error ? err.message : 'Erro ao carregar estatísticas');
       } finally {
         setLoading(false);
@@ -1112,7 +1112,7 @@ export function useLPRDetections() {
       // v1.1.30: Silenciar erros de rede transitórios (Failed to fetch)
       const errorMessage = err instanceof Error ? err.message : String(err);
       if (!errorMessage.includes('Failed to fetch')) {
-        console.error('Erro ao buscar detecções:', err);
+        logger.error('Erro ao buscar detecções:', err);
       }
       setError(err instanceof Error ? err.message : 'Erro ao buscar detecções');
     } finally {
@@ -1178,7 +1178,7 @@ export function useLPRDetections() {
         }
       )
       .subscribe((status) => {
-        console.log('Status da conexão Realtime:', status);
+        logger.log('Status da conexão Realtime:', status);
         setIsConnected(status === 'SUBSCRIBED');
       });
 

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { logger } from '@/react-app/utils/logger';
 import { Camera, X, Eye, Zap, Edit3, Video, Settings, Target } from 'lucide-react';
 import { usePlateWorker, OCRResult } from '../hooks/usePlateWorker';
 
@@ -70,7 +71,7 @@ export default function CameraModal({ isOpen, onClose, onPlacaDetected }: Camera
       
       return cameras;
     } catch (err) {
-      console.error('Erro ao obter câmeras disponíveis:', err);
+      logger.error('Erro ao obter câmeras disponíveis:', err);
       return [];
     } finally {
       setLoadingCameras(false);
@@ -152,14 +153,14 @@ export default function CameraModal({ isOpen, onClose, onPlacaDetected }: Camera
         };
       }
     } catch (err) {
-      console.error('Erro ao acessar câmera:', err);
+      logger.error('Erro ao acessar câmera:', err);
       if (err instanceof Error && err.name === 'NotAllowedError') {
         setPermissionDenied(true);
         setCameraError('Acesso à câmera negado. Por favor, permita o acesso à câmera e tente novamente.');
       } else if (err instanceof Error && err.name === 'OverconstrainedError') {
         // Se falhar com câmera específica, tentar sem restrições
         if (cameraId) {
-          console.warn('Falha ao usar câmera específica, tentando padrão...');
+          logger.warn('Falha ao usar câmera específica, tentando padrão...');
           await initCamera(); // Tentar sem especificar câmera
         } else {
           setCameraError('Câmera selecionada não está disponível. Tente selecionar outra câmera.');
@@ -187,7 +188,7 @@ export default function CameraModal({ isOpen, onClose, onPlacaDetected }: Camera
   // Carregar modelo YOLO quando modal abrir e worker estiver pronto
   useEffect(() => {
     if (isOpen && workerReady && !modelLoaded && !modelLoading) {
-      console.log('🧠 Carregando modelo YOLO para captura...');
+      logger.log('🧠 Carregando modelo YOLO para captura...');
       loadYoloModel();
     }
   }, [isOpen, workerReady, modelLoaded, modelLoading, loadYoloModel]);
@@ -229,23 +230,23 @@ export default function CameraModal({ isOpen, onClose, onPlacaDetected }: Camera
         canvas.width = width;
         canvas.height = height;
         
-        console.log(`=== CAPTURANDO ÁREA SELECIONADA ===`);
-        console.log(`Área: ${x},${y} ${width}x${height}`);
+        logger.log(`=== CAPTURANDO ÁREA SELECIONADA ===`);
+        logger.log(`Área: ${x},${y} ${width}x${height}`);
         
         ctx.drawImage(video, x, y, width, height, 0, 0, width, height);
       } else {
         canvas.width = video.videoWidth || video.clientWidth;
         canvas.height = video.videoHeight || video.clientHeight;
         
-        console.log(`=== CAPTURANDO IMAGEM COMPLETA ===`);
-        console.log(`Resolução: ${canvas.width}x${canvas.height}`);
+        logger.log(`=== CAPTURANDO IMAGEM COMPLETA ===`);
+        logger.log(`Resolução: ${canvas.width}x${canvas.height}`);
         
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       }
       
       // Usar Worker com YOLO + Tesseract
       setStatusMessage('🧠 Detectando placa com YOLO + OCR...');
-      console.log('🔍 Processando com Worker (YOLO + Tesseract)...');
+      logger.log('🔍 Processando com Worker (YOLO + Tesseract)...');
       
       const result = await processPlate(canvas, { enableDebug: true });
       
@@ -255,7 +256,7 @@ export default function CameraModal({ isOpen, onClose, onPlacaDetected }: Camera
         if (result.success && result.validation.isValid) {
           const placa = result.validation.formatted;
           const yoloUsed = result.usedYolo ? '(YOLO)' : '(heurístico)';
-          console.log(`✅ PLACA RECONHECIDA ${yoloUsed}: ${placa} (${Math.round(result.validation.confidence * 100)}% confiança)`);
+          logger.log(`✅ PLACA RECONHECIDA ${yoloUsed}: ${placa} (${Math.round(result.validation.confidence * 100)}% confiança)`);
           setStatusMessage(`✅ Placa detectada: ${placa}`);
           
           setTimeout(() => {
@@ -270,7 +271,7 @@ export default function CameraModal({ isOpen, onClose, onPlacaDetected }: Camera
       }
       
     } catch (err) {
-      console.error('Erro no reconhecimento:', err);
+      logger.error('Erro no reconhecimento:', err);
       setCameraError(`Erro ao processar a imagem: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
     }
   };
