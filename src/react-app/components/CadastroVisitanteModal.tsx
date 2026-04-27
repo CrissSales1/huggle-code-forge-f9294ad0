@@ -119,11 +119,6 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
     if (upperValue.length >= 3) {
       setSearchingNome(true);
       
-      // v1.1.64: Buscar similares
-      if (!similarDescartado) {
-        buscarSimilares(upperValue, placaVeiculo);
-      }
-      
       const visitantes = await buscarVisitantes(upperValue);
       const visitantesFiltrados = visitantes.filter(v => 
         v.nome.toLowerCase().includes(upperValue.toLowerCase())
