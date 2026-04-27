@@ -73,10 +73,6 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
     setShowSelecionarVisitante(false);
     setVisitantesEncontrados([]);
     setPlacaPesquisada('');
-    // Resetar estados de similares v1.1.64
-    setVisitantesSimilares([]);
-    setBuscandoSimilares(false);
-    setSimilarDescartado(false);
   };
 
   const handleSelecionarPrisma = (numeroPrisma: number) => {
@@ -84,51 +80,6 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
     setEtapa('dados');
   };
 
-  // Buscar visitantes similares quando nome ou placa mudar (debounced)
-  const buscarSimilares = useCallback(async (nomeAtual: string, placaAtual: string) => {
-    if (similarDescartado) return; // Usuário já descartou sugestão
-    
-    // Só buscar se tiver nome com 3+ chars ou placa completa
-    if ((nomeAtual.length < 3 && placaAtual.length !== 7)) {
-      setVisitantesSimilares([]);
-      return;
-    }
-    
-    setBuscandoSimilares(true);
-    try {
-      const similares = await buscarVisitantesSimilares(
-        nomeAtual.length >= 3 ? nomeAtual : undefined,
-        placaAtual.length === 7 ? placaAtual : undefined
-      );
-      setVisitantesSimilares(similares);
-    } catch (err) {
-      console.error('Erro ao buscar similares:', err);
-    } finally {
-      setBuscandoSimilares(false);
-    }
-  }, [buscarVisitantesSimilares, similarDescartado]);
-
-  // Usar visitante similar sugerido
-  const handleUsarSimilar = (similar: VisitanteSimilar) => {
-    const v = similar.visitante;
-    setNome(v.nome.toUpperCase());
-    setCasaVisitada(v.casa_visitada.toUpperCase());
-    setPlacaVeiculo(v.placa_veiculo);
-    if (v.observacoes) {
-      setObservacoes(v.observacoes.toUpperCase());
-    }
-    if (v.liberado_por) {
-      setLiberadoPor(v.liberado_por.toUpperCase());
-    }
-    setVisitantesSimilares([]);
-    setSimilarDescartado(true); // Não mostrar mais sugestões
-  };
-
-  // Descartar sugestão de similar
-  const handleDescartarSimilar = () => {
-    setVisitantesSimilares([]);
-    setSimilarDescartado(true);
-  };
 
   // Verificar se placa já existe e mostrar opções
   const handlePlacaChange = async (value: string) => {
