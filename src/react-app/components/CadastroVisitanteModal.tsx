@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Camera, ChevronDown, ArrowLeft, Pencil, AlertTriangle, Home } from 'lucide-react';
+import { Camera, ChevronDown, ArrowLeft, Pencil, AlertTriangle, UserCheck, Home } from 'lucide-react';
 import Modal from './Modal';
 import CameraModal from './CameraModal';
 import SelecionarVisitanteModal from './SelecionarVisitanteModal';
