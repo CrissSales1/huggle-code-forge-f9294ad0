@@ -31,16 +31,11 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
   const [visitantesEncontrados, setVisitantesEncontrados] = useState<VisitanteType[]>([]);
   const [placaPesquisada, setPlacaPesquisada] = useState('');
   
-  // Estados para detecção de similares v1.1.64
-  const [visitantesSimilares, setVisitantesSimilares] = useState<VisitanteSimilar[]>([]);
-  const [buscandoSimilares, setBuscandoSimilares] = useState(false);
-  const [similarDescartado, setSimilarDescartado] = useState(false);
-  
   const nomeInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   
   const { prismas, loading: loadingPrismas, refetch: refetchPrismas } = usePrismasDisponiveis();
-  const { cadastrarVisitante, buscarVisitantes, buscarVisitantesSimilares, loading, error } = useVisitanteActions();
+  const { cadastrarVisitante, buscarVisitantes, loading, error } = useVisitanteActions();
 
   // Função para validar formato de placa
   const isValidPlaca = (placa: string): boolean => {
