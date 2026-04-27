@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { Save, Trash2, AlertTriangle, Settings as SettingsIcon, Hash, Car, CheckCircle, Upload, Download, Database, Loader2, FileJson, HardDrive, Lock, ShieldCheck, Gauge, Zap, Volume2, VolumeX, Play, Home, User, AlertCircle, Music, Brain } from 'lucide-react';
+import { z } from 'zod';
 import { useConfiguracoes } from '@/react-app/hooks/useApi';
 import StatsCard from '@/react-app/components/StatsCard';
 import { supabase } from '@/integrations/supabase/client';
 import { normalizarNumeroCasa } from '@/react-app/utils/formatters';
+import { logger } from '@/react-app/utils/logger';
 import { 
   MotionSensitivity, 
   SENSITIVITY_PRESETS, 
@@ -13,7 +15,6 @@ import {
   saveCustomSensitivity,
   type CustomSensitivity,
 } from '@/react-app/utils/motionDetection';
-import { loadFallbackEnabled, saveFallbackEnabled } from '@/react-app/hooks/usePlateRecognition';
 import { 
   loadSoundEnabled, 
   saveSoundEnabled, 
@@ -660,66 +661,7 @@ export default function Configuracoes() {
               </p>
             </div>
 
-            {/* Modo Econômico OCR */}
-            <div className="col-span-1 sm:col-span-2">
-              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2 sm:mb-3">
-                <div className="flex items-center space-x-1.5">
-                  <Zap className="w-3.5 h-3.5 text-green-500" />
-                  <span>Modo de Reconhecimento (OCR)</span>
-                </div>
-              </label>
-              <div className="grid grid-cols-2 gap-2 sm:gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUsarApenasOCRLocal(true);
-                    saveFallbackEnabled(false);
-                  }}
-                  className={`flex flex-col items-center p-2 sm:p-3 rounded-lg border-2 transition-all ${
-                    usarApenasOCRLocal
-                      ? 'border-green-500 bg-green-50 text-green-700'
-                      : 'border-gray-200 hover:border-green-300 hover:bg-green-50/50 text-gray-600'
-                  }`}
-                >
-                  <span className={`text-xs sm:text-sm font-medium ${usarApenasOCRLocal ? 'text-green-700' : 'text-gray-800'}`}>
-                    🆓 Econômico
-                  </span>
-                  <span className={`text-[10px] sm:text-xs mt-0.5 text-center ${usarApenasOCRLocal ? 'text-green-600' : 'text-gray-500'}`}>
-                    Apenas OCR local (gratuito)
-                  </span>
-                  <span className="text-[9px] sm:text-[10px] mt-1 px-1.5 py-0.5 bg-green-100 text-green-600 rounded-full">
-                    Custo zero
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUsarApenasOCRLocal(false);
-                    saveFallbackEnabled(true);
-                  }}
-                  className={`flex flex-col items-center p-2 sm:p-3 rounded-lg border-2 transition-all ${
-                    !usarApenasOCRLocal
-                      ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 text-gray-600'
-                  }`}
-                >
-                  <span className={`text-xs sm:text-sm font-medium ${!usarApenasOCRLocal ? 'text-blue-700' : 'text-gray-800'}`}>
-                    🎯 Precisão
-                  </span>
-                  <span className={`text-[10px] sm:text-xs mt-0.5 text-center ${!usarApenasOCRLocal ? 'text-blue-600' : 'text-gray-500'}`}>
-                    API externa se necessário
-                  </span>
-                  <span className="text-[9px] sm:text-[10px] mt-1 px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded-full">
-                    Custo por uso
-                  </span>
-                </button>
-              </div>
-              <p className="text-[10px] sm:text-xs text-gray-500 mt-2">
-                <strong>Econômico:</strong> Usa apenas OCR local (gratuito), pode falhar em placas difíceis.
-                <br />
-                <strong>Precisão:</strong> Usa API externa quando confiança &lt; 90% (mais preciso, mas tem custo).
-              </p>
-            </div>
+            {/* OCR via API externa removido por motivos de segurança (v1.2.0) */}
           </div>
           
           {configuracoesAlteradas && (
