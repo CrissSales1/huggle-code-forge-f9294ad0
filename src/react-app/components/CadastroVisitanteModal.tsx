@@ -90,11 +90,6 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
 
     // Se a placa estiver completa (7 caracteres) e for válida
     if (placaFormatada.length === 7 && isValidPlaca(placaFormatada)) {
-      // v1.1.64: Buscar similares primeiro
-      if (!similarDescartado) {
-        buscarSimilares(nome, placaFormatada);
-      }
-      
       const visitantes = await buscarVisitantes(placaFormatada);
       const visitantesComPlaca = visitantes.filter(v => 
         v.placa_veiculo === placaFormatada
