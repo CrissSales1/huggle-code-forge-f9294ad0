@@ -144,7 +144,6 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
     } else {
       setNomeOptions([]);
       setShowNomeDropdown(false);
-      setVisitantesSimilares([]); // Limpar similares se nome for curto
     }
   };
 
