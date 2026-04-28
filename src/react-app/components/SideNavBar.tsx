@@ -147,7 +147,10 @@ export default function SideNavBar() {
           <h1 className="text-base font-bold text-primary truncate">Águas da Fonte</h1>
         </div>
         <div className="flex items-center gap-2">
-          <span className="font-mono font-bold text-sm text-on-surface">{formattedTime}</span>
+          <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-surface-container">
+            <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse" aria-hidden />
+            <span className="font-mono font-bold text-sm tabular-nums text-on-surface">{formattedTime}</span>
+          </span>
           <button
             onClick={() => setMobileOpen((v) => !v)}
             aria-label="Abrir menu"
