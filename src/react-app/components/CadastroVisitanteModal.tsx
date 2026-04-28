@@ -302,7 +302,7 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
   );
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Novo Cadastro de Visitante" size="lg">
+    <Modal isOpen={isOpen} onClose={handleClose} title="Novo Cadastro de Visitante" size="xl">
       <Stepper />
 
       {etapa === 'prisma' && (
