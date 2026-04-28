@@ -38,10 +38,16 @@ export default function VisitanteCard({
 
   const tipoVaga = visitante.estacionar_vaga_morador ? 'Morador' : 'Visitante';
 
+  const topAccent = alertaPermanenciaProlongada ? 'border-t-error' : 'border-t-[#E65100]';
+  const headerBg = alertaPermanenciaProlongada ? 'bg-error/5' : 'bg-[#FFF3E0]/40';
+
   return (
-    <div className="bg-surface-container-lowest rounded-card shadow-ambient-1 hover:shadow-ambient-2 transition-shadow duration-300 flex flex-col h-full">
+    <div
+      className={`bg-surface-container-lowest rounded-card shadow-ambient-1 hover:shadow-ambient-2 hover:-translate-y-0.5 transition-all duration-300 flex flex-col h-full border border-outline-variant/40 border-t-[3px] ${topAccent} overflow-hidden`}
+    >
       {/* Header */}
-      <div className="p-md border-b border-surface-variant flex justify-between items-start gap-3">
+      <div className={`p-md border-b border-outline-variant/60 flex justify-between items-start gap-3 ${headerBg}`}>
+
         <div className="min-w-0 flex-1">
           <h3 className="text-h3 font-semibold text-on-surface mb-1 truncate" title={visitante.nome}>
             {visitante.nome}
@@ -64,7 +70,7 @@ export default function VisitanteCard({
           )}
         </div>
         {/* Badge prisma */}
-        <div className="w-10 h-10 rounded-full bg-[#FFF3E0] text-[#E65100] flex items-center justify-center font-bold text-h3 shadow-ambient-1 flex-shrink-0">
+        <div className="w-11 h-11 rounded-full bg-[#FFF3E0] text-[#E65100] flex items-center justify-center font-bold text-h3 shadow-ambient-2 ring-4 ring-[#E65100]/10 flex-shrink-0">
           {visitante.numero_prisma ?? '?'}
         </div>
       </div>
@@ -77,16 +83,16 @@ export default function VisitanteCard({
         </div>
 
         {/* Timing */}
-        <div className="bg-surface-container-low rounded-lg p-3 grid grid-cols-2 gap-4">
+        <div className="bg-primary/5 border border-primary/15 rounded-lg p-3 grid grid-cols-2 gap-4 divide-x divide-primary/15">
           <div>
-            <p className="text-label-caps text-outline mb-1">ENTRADA</p>
-            <p className="text-body-md text-on-surface font-medium">
+            <p className="text-label-caps text-primary/80 mb-1">ENTRADA</p>
+            <p className="text-body-md text-on-surface font-semibold">
               {formatarHoraCurta(visitante.hora_entrada!)}
             </p>
-            <p className="text-[12px] text-outline">{formatarDataDia(visitante.hora_entrada!)}</p>
+            <p className="text-[12px] text-on-surface-variant">{formatarDataDia(visitante.hora_entrada!)}</p>
           </div>
-          <div>
-            <p className="text-label-caps text-outline mb-1">PERMANÊNCIA</p>
+          <div className="pl-4">
+            <p className="text-label-caps text-primary/80 mb-1">PERMANÊNCIA</p>
             <span
               className={`text-body-md font-semibold inline-block px-2 py-0.5 rounded ${
                 alertaPermanenciaProlongada
@@ -120,11 +126,11 @@ export default function VisitanteCard({
       </div>
 
       {/* Ações */}
-      <div className="p-md border-t border-surface-variant grid grid-cols-2 gap-3 bg-surface-container-low rounded-b-card">
+      <div className="p-md border-t border-outline-variant/60 grid grid-cols-2 gap-3 bg-surface-container-low/60 rounded-b-card">
         <button
           onClick={() => onEdit(visitante)}
           disabled={loading}
-          className="bg-surface-container-lowest border border-outline text-primary text-button font-medium rounded-btn py-2 hover:bg-surface-variant transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+          className="bg-surface-container-lowest border border-primary/30 text-primary text-button font-semibold rounded-btn py-2 hover:bg-primary/10 hover:border-primary/60 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
         >
           <Edit className="w-4 h-4" />
           Editar
@@ -132,7 +138,7 @@ export default function VisitanteCard({
         <button
           onClick={() => onRegistrarSaida(visitante.id!)}
           disabled={loading}
-          className="bg-secondary text-on-secondary text-button font-medium rounded-btn py-2 hover:bg-secondary-fixed-dim transition-colors shadow-ambient-1 disabled:opacity-50 flex items-center justify-center gap-1.5"
+          className="bg-secondary text-on-secondary text-button font-semibold rounded-btn py-2 hover:bg-secondary-fixed-dim hover:shadow-ambient-2 transition-all shadow-ambient-1 disabled:opacity-50 flex items-center justify-center gap-1.5"
         >
           <LogOut className="w-4 h-4" />
           Dar Baixa
