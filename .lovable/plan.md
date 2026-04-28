@@ -1,109 +1,65 @@
-## Objetivo
-
-Eliminar a rolagem na etapa "Dados do visitante" do modal mantendo **uma única coluna** (layout vertical familiar). Vamos compactar verticalmente cada campo e o seletor de vaga, sem mexer na dinâmica de cadastro.
-
----
-
-## Diagnóstico
-
-No viewport 1106×718, o `Modal` permite ~640px de área útil (`max-h-[90vh] - 120px`). O conteúdo atual da etapa 2 ocupa ~720px, gerando a rolagem visível no print. As maiores fontes de altura são:
-
-- Cards "Vaga Comum / Vaga Morador" (~110px cada, com ícone 48px e textos grandes).
-- `<textarea>` de observações com `rows={3}` (~96px).
-- Espaçamentos generosos (`space-y-4`, `pt-lg`, `mb-md`).
-- Header da etapa + chip "Trocar" (~64px).
-
-Reduzindo essas alturas dá para encaixar tudo em ~560–600px, sem rolagem, sem mudar para 2 colunas.
+## Goal
+Refinar a aparência dos cards de visitante, melhorar o widget do relógio na sidebar e padronizar o prisma 3D na tela de Busca.
 
 ---
 
-## Mudanças (apenas em `CadastroVisitanteModal.tsx`)
+## 1. `VisitanteCard.tsx` — chips, cores e botão "Dar Baixa"
 
-Tudo abaixo se aplica ao bloco `etapa === 'dados'`. A etapa de prismas e a lógica (handlers, validações, OCR, dropdown, modais auxiliares) ficam intactas.
+**Chip Casa (destacar mais, sem quebrar linha):**
+- Aumentar o ícone Home: bolinha interna de `w-5 h-5` → `w-6 h-6`, ícone `w-3 h-3` → `w-3.5 h-3.5`.
+- Texto da casa um pouco maior (`text-xs` → `text-sm`), padding ajustado.
+- Manter `flex-wrap` no container para não quebrar dentro do chip; reduzir `max-w` do nome se necessário para garantir tudo numa linha em viewports comuns.
 
-### 1. Header da etapa mais compacto
+**Chip Vaga (cores distintas):**
+- **Vaga Morador** → tom âmbar/laranja suave: `bg-amber-500/10`, `text-amber-700`, `border-amber-500/40` (destaca que é vaga "privada/morador", combina com prisma laranja).
+- **Vaga Visitante** → tom azul/teal: `bg-sky-500/10`, `text-sky-700`, `border-sky-500/40` (cor neutra/positiva, diferencia claramente).
+- Aumentar ícone Car: `w-3 h-3` → `w-4 h-4`, texto `text-[10px]` → `text-xs`, padding `py-0.5` → `py-1`.
 
-- Reduzir `mb-md` → `mb-sm`.
-- Trocar `<h3 className="text-h3">` por `text-body-md font-semibold` (rótulo discreto, já que o título do Modal já anuncia "Novo Cadastro de Visitante").
-- O chip "Prisma + Trocar" continua à direita, sem mudanças.
-
-### 2. Espaçamento do form
-
-- `space-y-4` → `space-y-3` (reduz ~8px entre cada um dos ~5 blocos = ~32px economizados).
-
-### 3. Linha "Casa/Apto + Placa + OCR" (já é uma linha só)
-
-Mantém como está (3/9 grid). Sem mudanças.
-
-### 4. Observações
-
-- `rows={3}` → `rows={2}` (~32px economizados).
-- `placeholder` mantido.
-
-### 5. "Liberado por"
-
-Sem mudanças (input simples já é compacto).
-
-### 6. Bloco "Onde vai estacionar?" — versão compacta inline
-
-Substituir os dois cards grandes por **dois botões pill lado a lado** numa única linha de ~56px de altura (~110px economizados).
-
-```text
-Onde vai estacionar?
-┌──────────────────────────────┬──────────────────────────────┐
-│ ⌂  Vaga Comum (PADRÃO)    ✓  │ ⌂  Vaga Morador              │
-└──────────────────────────────┴──────────────────────────────┘
-```
-
-- Container: substituir `border-t pt-lg` por apenas `pt-1` (sem divisor extra) e título `text-label-caps uppercase text-on-surface-variant mb-1.5` (mesmo padrão dos outros labels do form).
-- Grid: `grid grid-cols-2 gap-2`.
-- Cada botão:
-  - `flex items-center gap-2 px-3 py-2.5 rounded-btn border text-left`.
-  - Ícone Home `w-4 h-4` (sem círculo grande).
-  - Título `text-body-sm font-semibold` + caption curta `text-xs` em segunda linha apenas se couber (ou remover a caption — a label "PADRÃO" pode virar um pequeno chip à direita).
-  - Selecionado:
-    - Vaga Comum: `border-2 border-secondary bg-secondary-container/20` + `<UserCheck className="w-4 h-4 ml-auto text-secondary" />`.
-    - Vaga Morador: `border-2 border-tertiary bg-tertiary-fixed/30` + `<UserCheck className="w-4 h-4 ml-auto text-tertiary" />`.
-  - Não selecionado: `border border-outline-variant bg-surface hover:bg-surface-container-highest`.
-
-### 7. Footer de ações
-
-- `pt-md border-t` → `pt-3 border-t` (-8px).
-- Mantém `Trocar Prisma` à esquerda e `Cancelar / Finalizar Cadastro` à direita.
-
-### 8. Mensagem de erro
-
-Sem mudanças (só aparece quando há erro, e empurra o conteúdo o mínimo).
+**Botão "Dar Baixa" (vermelho suave, não forte):**
+- Substituir gradient `from-secondary to-secondary-fixed-dim` por tom rosé/coral suave: `bg-rose-500/90 hover:bg-rose-600 text-white` (ou tokens equivalentes — usar `rose-500` que é vermelho dessaturado, não vermelho-erro).
+- Não usar `bg-error` (vermelho forte reservado para alertas como "+24h").
 
 ---
 
-## Estimativa de altura
+## 2. `useDateTime.ts` — novo formato de data
 
-| Bloco | Antes | Depois |
-|---|---|---|
-| Header etapa | 56px | 36px |
-| Nome | 76px | 76px |
-| Casa + Placa + OCR | 76px | 76px |
-| Observações | 124px | 92px |
-| Liberado por | 76px | 76px |
-| Onde estacionar | 180px | 90px |
-| Footer ações | 76px | 64px |
-| Espaçamentos (4 gaps) | 64px | 48px |
-| **Total** | **~728px** | **~558px** |
-
-Com ~558px, cabe folgado nos ~640px disponíveis em 1106×718 — sem rolagem.
+Adicionar/ajustar formatador `formatDateLong`:
+- Saída: `Ter, 28 de Abril de 2026` (dia abreviado capitalizado + ponto removido + mês completo capitalizado).
+- Implementação: usar `toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'long', year: 'numeric' })` e pós-processar para:
+  - Capitalizar weekday e mês (`Ter`, `Abril`).
+  - Remover pontos do weekday.
+  - Garantir formato `Ter, 28 de Abril de 2026`.
+- Expor `formattedDateLong` no retorno do hook (mantendo os outros).
 
 ---
 
-## Não muda
+## 3. `SideNavBar.tsx` — widget de relógio com ícones
 
-- Lógica de `handleSubmit`, `handlePlacaChange`, `handleNomeChange`, OCR (`CameraModal`), validação de placa, dropdown de busca por nome, `SelecionarVisitanteModal`.
-- Etapa 1 (seleção de prisma) e o `Stepper`.
-- `Modal.tsx` (mantém `size="lg"`).
-- Estados, props e tipos.
+Substituir o widget atual por um layout com ícones lucide:
+- Linha 1 (hora): ícone `Clock` (`w-4 h-4 text-secondary`) + `formattedTime` em mono bold + ponto pulsante à direita.
+- Divisor sutil (linha de 1px com `bg-outline-variant/40`).
+- Linha 2 (data): ícone `Calendar` (`w-3.5 h-3.5 text-on-surface-variant`) + `formattedDateLong` em texto de 11–12px.
+- Manter o card com gradient e shadow já existentes; aumentar levemente o padding interno.
 
 ---
 
-## Arquivo afetado
+## 4. `Relatorios.tsx` — adotar `PrismaBadge`
 
-- `src/react-app/components/CadastroVisitanteModal.tsx` — apenas ajustes de markup/estilos no bloco `etapa === 'dados'`.
+Na coluna "Prisma" da tabela de resultados (linhas ~740–764):
+- Remover todo o markup inline do prisma 3D (gradient + skew + brilho).
+- Substituir por:
+  ```tsx
+  <PrismaBadge numero={visitante.numero_prisma} size="sm" variant="orange" />
+  ```
+- Importar `PrismaBadge` no topo do arquivo.
+- Manter o fallback `-` quando não houver prisma.
+
+---
+
+## Arquivos modificados
+- `src/react-app/components/VisitanteCard.tsx`
+- `src/react-app/hooks/useDateTime.ts`
+- `src/react-app/components/SideNavBar.tsx`
+- `src/react-app/pages/Relatorios.tsx`
+
+Nenhuma migração ou alteração de schema necessária.

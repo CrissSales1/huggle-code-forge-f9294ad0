@@ -11,6 +11,8 @@ export function useDateTime() {
     return () => clearInterval(timer);
   }, []);
 
+  const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+
   const formatDate = (date: Date) => {
     return date.toLocaleDateString('pt-BR', {
       weekday: 'long',
@@ -39,10 +41,27 @@ export function useDateTime() {
       .replace(/\./g, '');
   };
 
+  /**
+   * Formato: "Ter, 28 de Abril de 2026"
+   */
+  const formatDateLong = (date: Date) => {
+    const weekdayRaw = date
+      .toLocaleDateString('pt-BR', { weekday: 'short' })
+      .replace(/\./g, '');
+    // pt-BR retorna "ter" — pegamos as 3 primeiras letras e capitalizamos
+    const weekday = cap(weekdayRaw.slice(0, 3));
+    const day = date.toLocaleDateString('pt-BR', { day: '2-digit' });
+    const monthRaw = date.toLocaleDateString('pt-BR', { month: 'long' });
+    const month = cap(monthRaw);
+    const year = date.getFullYear();
+    return `${weekday}, ${day} de ${month} de ${year}`;
+  };
+
   return {
     dateTime,
     formattedDate: formatDate(dateTime),
     formattedDateShort: formatDateShort(dateTime),
+    formattedDateLong: formatDateLong(dateTime),
     formattedTime: formatTime(dateTime),
   };
 }
