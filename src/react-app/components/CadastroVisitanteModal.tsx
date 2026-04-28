@@ -3,6 +3,7 @@ import { Camera, ChevronDown, ArrowLeft, Pencil, AlertTriangle, UserCheck, Home 
 import Modal from './Modal';
 import CameraModal from './CameraModal';
 import SelecionarVisitanteModal from './SelecionarVisitanteModal';
+import PrismaBadge from './PrismaBadge';
 import { usePrismasDisponiveis, useVisitanteActions } from '@/react-app/hooks/useApi';
 import { normalizarNumeroCasa } from '@/react-app/utils/formatters';
 import { encontrarNomeCanonical, nomesSimilares } from '@/react-app/utils/stringUtils';
@@ -330,12 +331,15 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
                 <button
                   key={prisma.id}
                   onClick={() => handleSelecionarPrisma(prisma.numero)}
-                  className="group aspect-square flex flex-col items-center justify-center gap-1 rounded-card border border-outline-variant bg-surface-container-low hover:bg-primary-container/30 hover:border-primary hover:shadow-ambient-2 transition-all"
+                  className="group aspect-square flex flex-col items-center justify-center gap-1 rounded-card border border-outline-variant bg-surface-container-low hover:bg-primary-container/20 hover:border-primary hover:shadow-ambient-2 hover:-translate-y-0.5 transition-all p-2"
                 >
-                  <span className="text-h2 font-bold text-on-surface group-hover:text-primary transition-colors leading-none">
-                    {prisma.numero}
-                  </span>
-                  <span className="text-label-caps text-on-surface-variant uppercase">Prisma</span>
+                  <PrismaBadge
+                    numero={prisma.numero}
+                    size="lg"
+                    withGroundShadow
+                    className="group-hover:scale-105 transition-transform"
+                  />
+                  <span className="text-label-caps text-on-surface-variant uppercase mt-1">Prisma</span>
                 </button>
               ))}
             </div>
@@ -347,15 +351,16 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
         <div>
           <div className="flex items-center justify-between mb-md">
             <h3 className="text-h3 text-on-surface">Dados do visitante</h3>
-            {/* Chip M3 do prisma selecionado */}
+            {/* Prisma 3D selecionado — clicável para trocar */}
             <button
               type="button"
               onClick={handleVoltar}
-              className="group inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed border border-tertiary-fixed-dim hover:bg-tertiary-fixed-dim hover:shadow-ambient-1 transition-all"
+              className="group inline-flex items-center gap-2 pl-1 pr-3 py-1 rounded-full bg-surface-container-low border border-outline-variant hover:bg-surface-container hover:border-primary/50 hover:shadow-ambient-1 transition-all"
               title="Clique para trocar o prisma"
             >
-              <span className="text-button font-semibold">Prisma {prismaSelecionado}</span>
-              <Pencil className="w-3.5 h-3.5 opacity-70 group-hover:opacity-100 transition-opacity" />
+              <PrismaBadge numero={prismaSelecionado} size="sm" />
+              <span className="text-button font-semibold text-on-surface">Trocar</span>
+              <Pencil className="w-3.5 h-3.5 text-on-surface-variant opacity-70 group-hover:opacity-100 transition-opacity" />
             </button>
           </div>
 
