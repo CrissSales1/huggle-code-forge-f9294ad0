@@ -281,18 +281,23 @@ export default function Monitoramento() {
     <div className="px-4 sm:px-6 lg:px-8 mt-lg max-w-[1440px] w-full mx-auto">
       {/* Header — alinhado ao padrão das outras telas */}
       <div className="mb-lg flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
-        <div className="min-w-0 flex-1">
-          <h1 className="text-h2 font-semibold text-on-surface tracking-tight mb-1 truncate">
-            Monitoramento de Moradores
-          </h1>
-          <p className="text-on-surface-variant text-body-sm">
-            Reconhecimento via câmera local com OCR
-          </p>
+        <div className="min-w-0 flex-1 flex items-start gap-3">
+          <div className="w-11 h-11 rounded-full bg-primary/10 ring-4 ring-primary/5 text-primary flex items-center justify-center flex-shrink-0">
+            <Activity className="w-5 h-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-h2 font-semibold text-on-surface tracking-tight mb-1 truncate">
+              Monitoramento de Moradores
+            </h1>
+            <p className="text-on-surface-variant text-body-sm">
+              Reconhecimento via câmera local com OCR
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <button
             onClick={handleLimparMonitoramento}
-            className="flex items-center gap-2 px-4 py-2 rounded-btn border border-outline-variant text-on-surface-variant bg-transparent hover:bg-surface-container transition-colors text-button"
+            className="flex items-center gap-2 px-4 py-2 rounded-btn border border-error/40 text-error bg-transparent hover:bg-error/10 transition-colors text-button"
           >
             <RotateCcw className="w-4 h-4" />
             <span className="hidden sm:inline">Limpar</span>
@@ -301,8 +306,8 @@ export default function Monitoramento() {
             onClick={() => setShowHelp(!showHelp)}
             className={`flex items-center gap-2 px-4 py-2 rounded-btn border transition-colors text-button ${
               showHelp
-                ? 'border-primary text-primary bg-primary/5'
-                : 'border-outline-variant text-on-surface-variant bg-transparent hover:bg-surface-container'
+                ? 'border-primary text-primary bg-primary/10 shadow-ambient-1'
+                : 'border-outline-variant text-on-surface-variant bg-transparent hover:bg-primary/5 hover:border-primary/40 hover:text-primary'
             }`}
           >
             <HelpCircle className="w-4 h-4" />
@@ -327,9 +332,18 @@ export default function Monitoramento() {
         
         {/* Painel de Resultado + Pipeline */}
         <div className="lg:col-span-2 2xl:col-span-4 flex flex-col gap-3 lg:h-full lg:max-h-[530px] lg:overflow-hidden">
-          <div className="bg-surface-container-lowest rounded-card border border-outline-variant shadow-ambient-1 flex flex-col">
+          {(() => {
+            const cardAccent = !displayedDetection
+              ? 'border-l-primary'
+              : displayedDetection.morador
+                ? 'border-l-secondary'
+                : displayedDetection.visitante
+                  ? 'border-l-tertiary'
+                  : 'border-l-error';
+            return (
+          <div className={`bg-surface-container-lowest rounded-card border border-outline-variant shadow-ambient-1 flex flex-col border-l-4 ${cardAccent}`}>
             {/* Header do card */}
-            <div className="px-4 py-2.5 border-b border-outline-variant flex items-center justify-between">
+            <div className="px-4 py-2.5 border-b border-outline-variant flex items-center justify-between bg-primary/5">
               <h3 className="font-semibold text-on-surface flex items-center gap-2 text-body-sm">
                 <Activity className="w-4 h-4 text-primary" />
                 <span>Resultado</span>
