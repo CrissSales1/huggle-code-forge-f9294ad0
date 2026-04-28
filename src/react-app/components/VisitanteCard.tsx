@@ -49,30 +49,30 @@ export default function VisitanteCard({
           <h3 className="text-h3 font-semibold text-on-surface mb-2 truncate" title={visitante.nome}>
             {visitante.nome}
           </h3>
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-nowrap overflow-hidden">
             {/* Chip Casa visitada */}
-            <div className="inline-flex items-center gap-1.5 bg-primary/10 border border-primary/25 text-primary px-2 py-1 rounded-full text-label-caps font-semibold">
+            <div className="inline-flex items-center gap-1 bg-primary/10 border border-primary/25 text-primary px-2 py-1 rounded-full text-label-caps font-semibold flex-shrink-0">
               <Home className="w-3.5 h-3.5" />
-              <span className="truncate max-w-[120px]" title={visitante.casa_visitada}>
+              <span className="truncate max-w-[70px]" title={visitante.casa_visitada}>
                 {visitante.casa_visitada}
               </span>
             </div>
             {/* Chip Vaga — diferenciação clara entre Morador e Visitante */}
             {visitante.estacionar_vaga_morador ? (
               <div
-                className="inline-flex items-center gap-1.5 bg-secondary/15 border border-secondary/40 text-secondary px-2 py-1 rounded-full text-label-caps font-bold shadow-ambient-1"
+                className="inline-flex items-center gap-1 bg-secondary/15 border border-secondary/40 text-secondary px-2 py-1 rounded-full text-label-caps font-bold shadow-ambient-1 flex-shrink min-w-0"
                 title="Estacionado em vaga de morador"
               >
-                <Car className="w-3.5 h-3.5" />
-                <span>VAGA MORADOR</span>
+                <Car className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="truncate">VAGA MORADOR</span>
               </div>
             ) : (
               <div
-                className="inline-flex items-center gap-1.5 bg-tertiary/10 border border-tertiary/30 text-tertiary px-2 py-1 rounded-full text-label-caps font-semibold"
+                className="inline-flex items-center gap-1 bg-tertiary/10 border border-tertiary/30 text-tertiary px-2 py-1 rounded-full text-label-caps font-semibold flex-shrink min-w-0"
                 title="Estacionado em vaga de visitante"
               >
-                <Car className="w-3.5 h-3.5" />
-                <span>VAGA VISITANTE</span>
+                <Car className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="truncate">VAGA VISITANTE</span>
               </div>
             )}
           </div>
