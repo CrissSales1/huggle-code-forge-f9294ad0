@@ -531,12 +531,17 @@ export default function Monitoramento() {
               )}
             </div>
           </div>
+            );
+          })()}
           
           {/* Pipeline OCR — também tokenizado */}
           {displayedPipeline && (
-            <div className="bg-surface-container-lowest rounded-card border border-outline-variant shadow-ambient-1 p-3">
+            <div className="bg-surface-container-lowest rounded-card border border-outline-variant shadow-ambient-1 p-3 border-l-4 border-l-primary">
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-[12px] font-medium text-on-surface">Pipeline de processamento OCR</span>
+                <div className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+                  <Camera className="w-3.5 h-3.5" />
+                </div>
+                <span className="text-[12px] font-semibold text-on-surface">Pipeline de processamento OCR</span>
                 {displayedPipeline.rawText && (
                   <span className="text-[11px] bg-surface-container text-on-surface-variant px-2 py-0.5 rounded-full font-mono">
                     {displayedPipeline.rawText} · {Math.round(displayedPipeline.ocrConfidence * 100)}%
