@@ -11,8 +11,6 @@ import {
   LogOut,
   Menu,
   X,
-  Clock,
-  Calendar,
 } from 'lucide-react';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { useDateTime } from '@/react-app/hooks/useDateTime';
