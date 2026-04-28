@@ -550,8 +550,8 @@ export default function Monitoramento() {
               </div>
               
               <div className="grid grid-cols-2 gap-2">
-                <div className="bg-inverse-surface rounded-lg overflow-hidden">
-                  <div className="text-[10px] text-center text-inverse-on-surface/80 py-1 font-medium">
+                <div className="bg-inverse-surface rounded-lg overflow-hidden border border-primary/40">
+                  <div className="text-[10px] text-center bg-primary/15 text-primary py-1 font-semibold">
                     Placa Processada
                   </div>
                   {displayedPipeline.debugImages?.preprocessed ? (
@@ -568,7 +568,7 @@ export default function Monitoramento() {
                 </div>
                 
                 <div className="bg-inverse-surface rounded-lg overflow-hidden border border-secondary/40">
-                  <div className="text-[10px] text-center text-secondary-fixed-dim py-1 font-medium">
+                  <div className="text-[10px] text-center bg-secondary/15 text-on-secondary-container py-1 font-semibold">
                     Resultado OCR
                   </div>
                   {displayedPipeline.debugImages?.final ? (
@@ -597,8 +597,8 @@ export default function Monitoramento() {
 
         {/* Coluna de Histórico separada — só visível em 2XL */}
         <div className="hidden 2xl:block 2xl:col-span-2 h-full max-h-[530px]">
-          <div className="bg-surface-container-lowest rounded-card border border-outline-variant shadow-ambient-1 flex flex-col h-full overflow-hidden">
-            <div className="px-3 py-2 border-b border-outline-variant flex items-center justify-between bg-surface-container-low">
+          <div className="bg-surface-container-lowest rounded-card border border-outline-variant shadow-ambient-1 flex flex-col h-full overflow-hidden border-l-4 border-l-tertiary">
+            <div className="px-3 py-2 border-b border-outline-variant flex items-center justify-between bg-tertiary/5">
               <h3 className="font-semibold text-on-surface flex items-center gap-2 text-body-sm">
                 <Clock className="w-4 h-4 text-primary" />
                 <span>Histórico</span>
