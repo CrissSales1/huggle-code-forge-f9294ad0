@@ -560,7 +560,7 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
               </div>
             </div>
 
-            <div className="flex items-center justify-between pt-md border-t border-outline-variant/30">
+            <div className="flex items-center justify-between pt-3 border-t border-outline-variant/30">
               <button
                 type="button"
                 onClick={handleVoltar}
