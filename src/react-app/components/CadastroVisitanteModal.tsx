@@ -485,13 +485,13 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
               <label htmlFor="observacoes" className="block text-label-caps uppercase text-on-surface-variant mb-1.5">
                 Observações
               </label>
-              <textarea
+              <input
+                type="text"
                 id="observacoes"
                 value={observacoes}
                 onChange={(e) => setObservacoes(e.target.value.toUpperCase())}
-                className="w-full px-3 py-2.5 border border-outline-variant rounded-btn bg-surface-container-lowest text-on-surface uppercase placeholder:normal-case placeholder:text-on-surface-variant/60 focus:border-primary resize-none"
+                className="w-full px-3 py-2.5 border border-outline-variant rounded-btn bg-surface-container-lowest text-on-surface uppercase placeholder:normal-case placeholder:text-on-surface-variant/60 focus:border-primary"
                 placeholder="Informações adicionais relevantes..."
-                rows={2}
               />
             </div>
 
