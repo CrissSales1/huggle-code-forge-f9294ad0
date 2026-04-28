@@ -36,106 +36,133 @@ export default function VisitanteCard({
       .toString()
       .padStart(2, '0')}min`;
   };
-  const topAccent = alertaPermanenciaProlongada ? 'border-t-error' : 'border-t-[#E65100]';
-  const headerBg = alertaPermanenciaProlongada ? 'bg-error/5' : 'bg-[#FFF3E0]/40';
+
+  const accentGradient = alertaPermanenciaProlongada
+    ? 'bg-gradient-to-r from-error via-error to-error/70'
+    : 'bg-gradient-to-r from-[#E65100] via-[#F36F1A] to-[#FFB74D]';
 
   return (
     <div
-      className={`bg-surface-container-lowest rounded-card shadow-ambient-1 hover:shadow-ambient-2 hover:-translate-y-0.5 transition-all duration-300 flex flex-col h-full border border-outline-variant/40 border-t-[3px] ${topAccent} overflow-hidden`}
+      className="group relative bg-surface-container-lowest rounded-2xl shadow-ambient-1 hover:shadow-ambient-3 hover:-translate-y-1 hover:ring-1 hover:ring-primary/20 transition-all duration-300 flex flex-col h-full border border-outline-variant/40 overflow-hidden"
     >
-      {/* Header */}
-      <div className={`p-md border-b border-outline-variant/60 flex justify-between items-start gap-3 ${headerBg}`}>
+      {/* Faixa de acento superior */}
+      <div className={`h-1 w-full ${accentGradient}`} aria-hidden />
 
-        <div className="min-w-0 flex-1">
-          <h3 className="text-h3 font-semibold text-on-surface mb-2 truncate" title={visitante.nome}>
-            {visitante.nome}
-          </h3>
-          <div className="flex items-center gap-2 flex-nowrap overflow-hidden">
-            {/* Chip Casa visitada — destaque principal */}
-            <div className="inline-flex items-center gap-1.5 bg-primary/10 border border-primary/30 text-primary pl-1.5 pr-2.5 py-1 rounded-full shadow-ambient-1 flex-shrink-0">
-              <span className="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center flex-shrink-0">
-                <Home className="w-3.5 h-3.5" strokeWidth={2.75} />
-              </span>
-              <span
-                className="font-bold text-body-sm leading-none truncate max-w-[90px]"
+      {/* Header */}
+      <div className="relative p-4 pb-3">
+        <div className="flex items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <h3
+              className="text-base font-semibold tracking-tight text-on-surface truncate leading-snug"
+              title={visitante.nome}
+            >
+              {visitante.nome}
+            </h3>
+            <div className="mt-1 h-px bg-outline-variant/40" />
+
+            <div className="mt-2.5 flex items-center gap-2 flex-wrap">
+              {/* Chip Casa visitada */}
+              <div
+                className="inline-flex items-center gap-1.5 bg-primary/10 text-primary pl-1 pr-2.5 py-0.5 rounded-full"
                 title={`Casa ${visitante.casa_visitada}`}
               >
-                {visitante.casa_visitada}
-              </span>
+                <span className="w-5 h-5 rounded-full bg-primary text-on-primary flex items-center justify-center flex-shrink-0">
+                  <Home className="w-3 h-3" strokeWidth={2.75} />
+                </span>
+                <span className="text-xs font-semibold leading-none truncate max-w-[100px]">
+                  {visitante.casa_visitada}
+                </span>
+              </div>
+
+              {/* Tag Vaga — minimalista */}
+              {visitante.estacionar_vaga_morador ? (
+                <span
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-secondary/40 text-secondary text-[10px] font-bold uppercase tracking-wider"
+                  title="Estacionado em vaga de morador"
+                >
+                  <Car className="w-3 h-3" strokeWidth={2.5} />
+                  Vaga Morador
+                </span>
+              ) : (
+                <span
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-outline-variant text-on-surface-variant text-[10px] font-bold uppercase tracking-wider"
+                  title="Estacionado em vaga de visitante"
+                >
+                  <Car className="w-3 h-3" strokeWidth={2.5} />
+                  Vaga Visitante
+                </span>
+              )}
+
+              {alertaPermanenciaProlongada && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-error/10 text-error text-[10px] font-bold uppercase tracking-wider">
+                  <AlertTriangle className="w-3 h-3 animate-pulse" />
+                  +24h
+                </span>
+              )}
             </div>
-            {/* Chip Vaga — diferenciação clara entre Morador e Visitante */}
-            {visitante.estacionar_vaga_morador ? (
-              <div
-                className="inline-flex items-center gap-1 bg-secondary/15 border border-secondary/40 text-secondary px-2 py-1 rounded-full text-label-caps font-bold shadow-ambient-1 flex-shrink min-w-0"
-                title="Estacionado em vaga de morador"
-              >
-                <Car className="w-3.5 h-3.5 flex-shrink-0" strokeWidth={2.5} />
-                <span className="truncate">VAGA MORADOR</span>
-              </div>
-            ) : (
-              <div
-                className="inline-flex items-center gap-1 bg-tertiary/10 border border-tertiary/30 text-tertiary px-2 py-1 rounded-full text-label-caps font-semibold flex-shrink min-w-0"
-                title="Estacionado em vaga de visitante"
-              >
-                <Car className="w-3.5 h-3.5 flex-shrink-0" strokeWidth={2.5} />
-                <span className="truncate">VAGA VISITANTE</span>
-              </div>
-            )}
           </div>
-          {alertaPermanenciaProlongada && (
-            <div className="mt-2 inline-flex items-center gap-1 bg-error/10 text-error px-2 py-0.5 rounded-full text-label-caps font-bold">
-              <AlertTriangle className="w-3 h-3" />
-              <span>+24H</span>
-            </div>
-          )}
+
+          {/* Prisma 3D */}
+          <PrismaBadge
+            numero={visitante.numero_prisma}
+            size="sm"
+            variant={alertaPermanenciaProlongada ? 'error' : 'orange'}
+            withGroundShadow
+            className="flex-shrink-0"
+          />
         </div>
-        {/* Badge prisma 3D */}
-        <PrismaBadge
-          numero={visitante.numero_prisma}
-          size="sm"
-          variant={alertaPermanenciaProlongada ? 'error' : 'orange'}
-          className="flex-shrink-0"
-        />
       </div>
 
       {/* Conteúdo */}
-      <div className="p-md flex-1 flex flex-col gap-md">
+      <div className="px-4 pb-4 flex-1 flex flex-col gap-3">
         {/* Placa */}
         <div className="flex justify-center">
           <PlacaVeiculo placa={visitante.placa_veiculo} size="md" />
         </div>
 
-        {/* Timing */}
-        <div className="bg-primary/5 border border-primary/15 rounded-lg p-3 grid grid-cols-2 gap-4 divide-x divide-primary/15">
+        {/* Painel Entrada / Permanência */}
+        <div className="rounded-xl bg-surface-container/70 backdrop-blur-sm border border-outline-variant/40 p-3 grid grid-cols-2 gap-3">
           <div>
-            <p className="text-label-caps text-primary/80 mb-1">ENTRADA</p>
-            <p className="text-body-md text-on-surface font-semibold">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-outline mb-1">
+              Entrada
+            </p>
+            <p className="font-mono tabular-nums text-sm font-semibold text-on-surface leading-tight">
               {formatarHoraCurta(visitante.hora_entrada!)}
             </p>
-            <p className="text-[12px] text-on-surface-variant">{formatarDataDia(visitante.hora_entrada!)}</p>
+            <p className="text-[11px] text-on-surface-variant mt-0.5">
+              {formatarDataDia(visitante.hora_entrada!)}
+            </p>
           </div>
-          <div className="pl-4">
-            <p className="text-label-caps text-primary/80 mb-1">PERMANÊNCIA</p>
-            <span
-              className={`text-body-md font-semibold inline-block px-2 py-0.5 rounded ${
-                alertaPermanenciaProlongada
-                  ? 'bg-error/10 text-error'
-                  : 'bg-secondary/10 text-secondary'
+          <div className="border-l border-outline-variant/40 pl-3">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-outline mb-1">
+              Permanência
+            </p>
+            <p
+              className={`font-mono tabular-nums text-sm font-semibold leading-tight inline-flex items-center gap-1.5 ${
+                alertaPermanenciaProlongada ? 'text-error' : 'text-on-surface'
               }`}
             >
+              <span
+                className={`w-1.5 h-1.5 rounded-full animate-pulse ${
+                  alertaPermanenciaProlongada ? 'bg-error' : 'bg-secondary'
+                }`}
+                aria-hidden
+              />
               {formatarTempoPermanencia(tempoPermanenciaHoras)}
-            </span>
+            </p>
+            <p className="text-[11px] text-on-surface-variant mt-0.5">em tempo real</p>
           </div>
         </div>
 
         {/* Observações / liberado por */}
         {(visitante.observacoes || visitante.liberado_por) && (
-          <div className="flex items-start gap-2 bg-surface p-3 rounded-lg border border-surface-variant">
-            <Info className="text-outline w-4 h-4 mt-0.5 flex-shrink-0" />
-            <div className="text-body-sm text-on-surface-variant min-w-0">
+          <div className="flex items-start gap-2 bg-surface-container-low/60 p-2.5 rounded-lg">
+            <Info className="text-outline w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+            <div className="text-[12px] text-on-surface-variant min-w-0 leading-snug">
               {visitante.liberado_por && (
                 <p className="truncate">
-                  <span className="font-semibold">Liberado por:</span> {visitante.liberado_por}
+                  <span className="font-semibold text-on-surface">Liberado por:</span>{' '}
+                  {visitante.liberado_por}
                 </p>
               )}
               {visitante.observacoes && (
@@ -149,11 +176,11 @@ export default function VisitanteCard({
       </div>
 
       {/* Ações */}
-      <div className="p-md border-t border-outline-variant/60 grid grid-cols-2 gap-3 bg-surface-container-low/60 rounded-b-card">
+      <div className="px-4 py-3 border-t border-outline-variant/40 grid grid-cols-[1fr_auto] gap-2 bg-surface-container-low/40">
         <button
           onClick={() => onEdit(visitante)}
           disabled={loading}
-          className="bg-surface-container-lowest border border-primary/30 text-primary text-button font-semibold rounded-btn py-2 hover:bg-primary/10 hover:border-primary/60 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+          className="text-primary text-sm font-semibold rounded-lg py-2.5 hover:bg-primary/10 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
         >
           <Edit className="w-4 h-4" />
           Editar
@@ -161,9 +188,9 @@ export default function VisitanteCard({
         <button
           onClick={() => onRegistrarSaida(visitante.id!)}
           disabled={loading}
-          className="bg-secondary text-on-secondary text-button font-semibold rounded-btn py-2 hover:bg-secondary-fixed-dim hover:shadow-ambient-2 transition-all shadow-ambient-1 disabled:opacity-50 flex items-center justify-center gap-1.5"
+          className="group/btn bg-gradient-to-br from-secondary to-secondary-fixed-dim text-on-secondary text-sm font-semibold rounded-lg px-4 py-2.5 hover:shadow-ambient-2 transition-all shadow-ambient-1 disabled:opacity-50 flex items-center justify-center gap-1.5"
         >
-          <LogOut className="w-4 h-4" />
+          <LogOut className="w-4 h-4 transition-transform group-hover/btn:translate-x-0.5" />
           Dar Baixa
         </button>
       </div>
