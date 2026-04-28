@@ -671,13 +671,15 @@ export default function Monitoramento() {
             }
             setShowVeiculosCadastrados(!showVeiculosCadastrados);
           }}
-          className="w-full bg-surface-container-lowest border border-outline-variant rounded-card p-3 sm:p-4 flex items-center justify-between hover:bg-surface-container-low transition-colors"
+          className={`w-full bg-surface-container-lowest border border-outline-variant border-l-4 border-l-primary p-3 sm:p-4 flex items-center justify-between hover:bg-primary/5 transition-colors ${showVeiculosCadastrados ? 'rounded-t-card' : 'rounded-card'}`}
         >
           <div className="flex items-center gap-2 sm:gap-3">
-            <Car className="w-4 h-4 sm:w-5 sm:h-5 text-on-surface-variant" />
+            <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+              <Car className="w-4 h-4 sm:w-5 sm:h-5" />
+            </div>
             <h2 className="text-body-sm sm:text-body-md font-semibold text-on-surface">
               Veículos cadastrados
-              <span className="ml-1.5 text-on-surface-variant font-normal">({veiculos.length})</span>
+              <span className="ml-1.5 bg-primary/10 text-primary font-semibold text-[11px] px-2 py-0.5 rounded-full">{veiculos.length}</span>
             </h2>
           </div>
           <div className={`transform transition-transform text-on-surface-variant ${showVeiculosCadastrados ? 'rotate-180' : ''}`}>
