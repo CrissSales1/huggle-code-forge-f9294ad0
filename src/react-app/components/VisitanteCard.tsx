@@ -35,9 +35,6 @@ export default function VisitanteCard({
       .toString()
       .padStart(2, '0')}min`;
   };
-
-  const tipoVaga = visitante.estacionar_vaga_morador ? 'Morador' : 'Visitante';
-
   const topAccent = alertaPermanenciaProlongada ? 'border-t-error' : 'border-t-[#E65100]';
   const headerBg = alertaPermanenciaProlongada ? 'bg-error/5' : 'bg-[#FFF3E0]/40';
 
@@ -49,18 +46,35 @@ export default function VisitanteCard({
       <div className={`p-md border-b border-outline-variant/60 flex justify-between items-start gap-3 ${headerBg}`}>
 
         <div className="min-w-0 flex-1">
-          <h3 className="text-h3 font-semibold text-on-surface mb-1 truncate" title={visitante.nome}>
+          <h3 className="text-h3 font-semibold text-on-surface mb-2 truncate" title={visitante.nome}>
             {visitante.nome}
           </h3>
-          <div className="flex items-center gap-3 text-on-surface-variant text-body-sm">
-            <div className="flex items-center gap-1">
-              <Home className="w-4 h-4" />
-              <span className="truncate">{visitante.casa_visitada}</span>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {/* Chip Casa visitada */}
+            <div className="inline-flex items-center gap-1.5 bg-primary/10 border border-primary/25 text-primary px-2 py-1 rounded-full text-label-caps font-semibold">
+              <Home className="w-3.5 h-3.5" />
+              <span className="truncate max-w-[120px]" title={visitante.casa_visitada}>
+                {visitante.casa_visitada}
+              </span>
             </div>
-            <div className="flex items-center gap-1">
-              <Car className="w-4 h-4" />
-              <span>{tipoVaga}</span>
-            </div>
+            {/* Chip Vaga — diferenciação clara entre Morador e Visitante */}
+            {visitante.estacionar_vaga_morador ? (
+              <div
+                className="inline-flex items-center gap-1.5 bg-secondary/15 border border-secondary/40 text-secondary px-2 py-1 rounded-full text-label-caps font-bold shadow-ambient-1"
+                title="Estacionado em vaga de morador"
+              >
+                <Car className="w-3.5 h-3.5" />
+                <span>VAGA MORADOR</span>
+              </div>
+            ) : (
+              <div
+                className="inline-flex items-center gap-1.5 bg-tertiary/10 border border-tertiary/30 text-tertiary px-2 py-1 rounded-full text-label-caps font-semibold"
+                title="Estacionado em vaga de visitante"
+              >
+                <Car className="w-3.5 h-3.5" />
+                <span>VAGA VISITANTE</span>
+              </div>
+            )}
           </div>
           {alertaPermanenciaProlongada && (
             <div className="mt-2 inline-flex items-center gap-1 bg-error/10 text-error px-2 py-0.5 rounded-full text-label-caps font-bold">
