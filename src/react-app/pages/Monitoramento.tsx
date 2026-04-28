@@ -741,16 +741,16 @@ export default function Monitoramento() {
             ) : (
               <div className="overflow-x-auto -mx-3 sm:mx-0">
                 <table className="w-full min-w-[400px]">
-                  <thead className="bg-surface-container-low">
+                  <thead className="bg-primary/5 border-b-2 border-primary/30">
                     <tr>
-                      <th className="px-2 sm:px-4 py-2 text-left text-[10px] sm:text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Placa</th>
-                      <th className="px-2 sm:px-4 py-2 text-left text-[10px] sm:text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Casa</th>
-                      <th className="px-2 sm:px-4 py-2 text-right text-[10px] sm:text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Ações</th>
+                      <th className="px-2 sm:px-4 py-2 text-left text-[10px] sm:text-[11px] font-bold text-primary uppercase tracking-wide">Placa</th>
+                      <th className="px-2 sm:px-4 py-2 text-left text-[10px] sm:text-[11px] font-bold text-primary uppercase tracking-wide">Casa</th>
+                      <th className="px-2 sm:px-4 py-2 text-right text-[10px] sm:text-[11px] font-bold text-primary uppercase tracking-wide">Ações</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-outline-variant">
                     {veiculosFiltrados.map(veiculo => (
-                      <tr key={veiculo.id} className="hover:bg-surface-container-low transition-colors">
+                      <tr key={veiculo.id} className="even:bg-surface-container-low/40 hover:bg-primary/5 transition-colors">
                         <td className="px-2 sm:px-4 py-2 sm:py-3">
                           <div className="scale-90 sm:scale-100 origin-left">
                             <PlacaVeiculo placa={veiculo.placa_veiculo} size="sm" />
@@ -758,7 +758,7 @@ export default function Monitoramento() {
                         </td>
                         <td className="px-2 sm:px-4 py-2 sm:py-3">
                           <div className="flex items-center gap-1.5">
-                            <Home className="w-3.5 h-3.5 text-on-surface-variant" />
+                            <Home className="w-3.5 h-3.5 text-primary" />
                             <span className="text-body-sm font-semibold text-on-surface">{veiculo.casa}</span>
                           </div>
                         </td>
@@ -766,7 +766,7 @@ export default function Monitoramento() {
                           <div className="flex justify-end gap-1.5">
                             <button
                               onClick={() => handleEditarVeiculo(veiculo)}
-                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-btn border border-outline-variant text-on-surface-variant hover:bg-surface-container hover:text-on-surface text-[12px] transition-colors"
+                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-btn border border-primary/30 text-primary hover:bg-primary/10 hover:border-primary/60 text-[12px] transition-colors"
                               aria-label="Editar"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
