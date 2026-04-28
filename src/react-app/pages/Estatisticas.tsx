@@ -75,9 +75,9 @@ export default function Estatisticas() {
       {/* KPI Grid (M3) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-gutter mb-lg">
         {/* KPI 1 - Total */}
-        <div className="bg-surface-container-lowest rounded-xl p-lg shadow-ambient-1 border border-outline-variant/20">
-          <div className="w-10 h-10 rounded-full bg-primary-fixed flex items-center justify-center mb-md">
-            <Users className="w-5 h-5 text-primary" />
+        <div className="bg-surface-container-lowest rounded-xl p-lg shadow-ambient-1 border border-outline-variant/40 border-l-4 border-l-primary hover:shadow-ambient-2 hover:-translate-y-0.5 transition-all">
+          <div className="w-12 h-12 rounded-full bg-primary/10 ring-4 ring-primary/5 flex items-center justify-center mb-md">
+            <Users className="w-6 h-6 text-primary" />
           </div>
           <div className="text-h1 text-on-surface mb-1">{estatisticas.totalVisitantes}</div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -87,11 +87,10 @@ export default function Estatisticas() {
         </div>
 
         {/* KPI 2 - Média */}
-        <div className="bg-surface-container-lowest rounded-xl p-lg shadow-ambient-1 border border-outline-variant/20 relative overflow-hidden">
-          <div className="absolute inset-0 bg-secondary-container/10 pointer-events-none" />
+        <div className="bg-surface-container-lowest rounded-xl p-lg shadow-ambient-1 border border-outline-variant/40 border-l-4 border-l-secondary hover:shadow-ambient-2 hover:-translate-y-0.5 transition-all relative overflow-hidden">
           <div className="relative z-10">
-            <div className="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center mb-md">
-              <TrendingUp className="w-5 h-5 text-on-secondary-container" />
+            <div className="w-12 h-12 rounded-full bg-secondary/10 ring-4 ring-secondary/5 flex items-center justify-center mb-md">
+              <TrendingUp className="w-6 h-6 text-secondary" />
             </div>
             <div className="text-h1 text-on-surface mb-1">{estatisticas.mediaPorDia}</div>
             <span className="text-label-caps text-on-surface-variant uppercase">Média/Dia</span>
@@ -99,9 +98,9 @@ export default function Estatisticas() {
         </div>
 
         {/* KPI 3 - Tempo Médio */}
-        <div className="bg-surface-container-lowest rounded-xl p-lg shadow-ambient-1 border border-outline-variant/20">
-          <div className="w-10 h-10 rounded-full bg-tertiary-fixed flex items-center justify-center mb-md">
-            <Clock className="w-5 h-5 text-tertiary" />
+        <div className="bg-surface-container-lowest rounded-xl p-lg shadow-ambient-1 border border-outline-variant/40 border-l-4 border-l-tertiary hover:shadow-ambient-2 hover:-translate-y-0.5 transition-all">
+          <div className="w-12 h-12 rounded-full bg-tertiary/10 ring-4 ring-tertiary/5 flex items-center justify-center mb-md">
+            <Clock className="w-6 h-6 text-tertiary" />
           </div>
           <div className="text-h1 text-on-surface mb-1">{estatisticas.tempoMedioPermanencia}</div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -111,13 +110,12 @@ export default function Estatisticas() {
         </div>
 
         {/* KPI 4 - Ocupação */}
-        <div className="bg-surface-container-lowest rounded-xl p-lg shadow-ambient-1 border border-outline-variant/20 relative overflow-hidden">
-          <div className="absolute inset-0 bg-orange-50 pointer-events-none" />
+        <div className="bg-surface-container-lowest rounded-xl p-lg shadow-ambient-1 border border-outline-variant/40 border-l-4 border-l-[#E65100] hover:shadow-ambient-2 hover:-translate-y-0.5 transition-all relative overflow-hidden">
           <div className="relative z-10">
-            <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center mb-md">
-              <Activity className="w-5 h-5 text-orange-600" />
+            <div className="w-12 h-12 rounded-full bg-[#FFF3E0] ring-4 ring-[#E65100]/5 flex items-center justify-center mb-md">
+              <Activity className="w-6 h-6 text-[#E65100]" />
             </div>
-            <div className="text-h1 text-orange-600 mb-1">{estatisticas.taxaOcupacaoMedia}%</div>
+            <div className="text-h1 text-[#E65100] mb-1">{estatisticas.taxaOcupacaoMedia}%</div>
             <span className="text-label-caps text-on-surface-variant uppercase">Taxa de Ocupação</span>
           </div>
         </div>

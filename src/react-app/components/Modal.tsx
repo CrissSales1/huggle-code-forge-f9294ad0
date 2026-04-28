@@ -19,27 +19,29 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
   if (!isOpen) return null;
 
   return (
-    <div 
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+    <div
+      className="fixed inset-0 bg-on-surface/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in"
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-title"
     >
-      <div className={`bg-white rounded-xl shadow-xl w-full ${sizeClasses[size]} max-h-[90vh] overflow-hidden`}>
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h2 id="modal-title" className="text-xl font-semibold text-gray-900">{title}</h2>
+      <div
+        className={`bg-surface-container-lowest rounded-xl shadow-ambient-3 w-full ${sizeClasses[size]} max-h-[90vh] overflow-hidden border border-outline-variant border-t-[3px] border-t-primary`}
+      >
+        <div className="flex items-center justify-between p-6 border-b border-outline-variant bg-primary/5">
+          <h2 id="modal-title" className="text-xl font-semibold text-on-surface">
+            {title}
+          </h2>
           <button
             onClick={onClose}
-            className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-1 hover:bg-surface-container rounded-lg transition-colors"
             aria-label="Fechar modal"
           >
-            <X className="w-5 h-5 text-gray-500" />
+            <X className="w-5 h-5 text-on-surface-variant" />
           </button>
         </div>
-        
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
-          {children}
-        </div>
+
+        <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">{children}</div>
       </div>
     </div>
   );

@@ -281,18 +281,23 @@ export default function Monitoramento() {
     <div className="px-4 sm:px-6 lg:px-8 mt-lg max-w-[1440px] w-full mx-auto">
       {/* Header — alinhado ao padrão das outras telas */}
       <div className="mb-lg flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
-        <div className="min-w-0 flex-1">
-          <h1 className="text-h2 font-semibold text-on-surface tracking-tight mb-1 truncate">
-            Monitoramento de Moradores
-          </h1>
-          <p className="text-on-surface-variant text-body-sm">
-            Reconhecimento via câmera local com OCR
-          </p>
+        <div className="min-w-0 flex-1 flex items-start gap-3">
+          <div className="w-11 h-11 rounded-full bg-primary/10 ring-4 ring-primary/5 text-primary flex items-center justify-center flex-shrink-0">
+            <Activity className="w-5 h-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-h2 font-semibold text-on-surface tracking-tight mb-1 truncate">
+              Monitoramento de Moradores
+            </h1>
+            <p className="text-on-surface-variant text-body-sm">
+              Reconhecimento via câmera local com OCR
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <button
             onClick={handleLimparMonitoramento}
-            className="flex items-center gap-2 px-4 py-2 rounded-btn border border-outline-variant text-on-surface-variant bg-transparent hover:bg-surface-container transition-colors text-button"
+            className="flex items-center gap-2 px-4 py-2 rounded-btn border border-error/40 text-error bg-transparent hover:bg-error/10 transition-colors text-button"
           >
             <RotateCcw className="w-4 h-4" />
             <span className="hidden sm:inline">Limpar</span>
@@ -301,8 +306,8 @@ export default function Monitoramento() {
             onClick={() => setShowHelp(!showHelp)}
             className={`flex items-center gap-2 px-4 py-2 rounded-btn border transition-colors text-button ${
               showHelp
-                ? 'border-primary text-primary bg-primary/5'
-                : 'border-outline-variant text-on-surface-variant bg-transparent hover:bg-surface-container'
+                ? 'border-primary text-primary bg-primary/10 shadow-ambient-1'
+                : 'border-outline-variant text-on-surface-variant bg-transparent hover:bg-primary/5 hover:border-primary/40 hover:text-primary'
             }`}
           >
             <HelpCircle className="w-4 h-4" />
@@ -327,9 +332,18 @@ export default function Monitoramento() {
         
         {/* Painel de Resultado + Pipeline */}
         <div className="lg:col-span-2 2xl:col-span-4 flex flex-col gap-3 lg:h-full lg:max-h-[530px] lg:overflow-hidden">
-          <div className="bg-surface-container-lowest rounded-card border border-outline-variant shadow-ambient-1 flex flex-col">
+          {(() => {
+            const cardAccent = !displayedDetection
+              ? 'border-l-primary'
+              : displayedDetection.morador
+                ? 'border-l-secondary'
+                : displayedDetection.visitante
+                  ? 'border-l-tertiary'
+                  : 'border-l-error';
+            return (
+          <div className={`bg-surface-container-lowest rounded-card border border-outline-variant shadow-ambient-1 flex flex-col border-l-4 ${cardAccent}`}>
             {/* Header do card */}
-            <div className="px-4 py-2.5 border-b border-outline-variant flex items-center justify-between">
+            <div className="px-4 py-2.5 border-b border-outline-variant flex items-center justify-between bg-primary/5">
               <h3 className="font-semibold text-on-surface flex items-center gap-2 text-body-sm">
                 <Activity className="w-4 h-4 text-primary" />
                 <span>Resultado</span>
@@ -475,17 +489,18 @@ export default function Monitoramento() {
                   <div className="space-y-1.5 max-h-[150px] overflow-y-auto pr-1">
                     {detectionHistory.slice(0, 8).map((det, idx) => {
                       const accent = det.morador ? 'bg-secondary' : det.visitante ? 'bg-tertiary' : 'bg-error';
+                      const tint = det.morador ? 'bg-secondary/5' : det.visitante ? 'bg-tertiary/5' : 'bg-error/5';
                       return (
                         <button 
                           key={det.id || idx}
                           onClick={() => handleHistoryClick(det.id)}
-                          className={`w-full text-left relative overflow-hidden p-2 pl-3 rounded-lg border bg-surface-container-low text-[12px] transition-all
+                          className={`w-full text-left relative overflow-hidden p-2 pl-3.5 rounded-lg border text-[12px] transition-all
                             ${selectedDetectionId === det.id 
-                              ? 'border-primary ring-1 ring-primary/30' 
-                              : 'border-outline-variant hover:bg-surface-container'
+                              ? 'border-primary border-2 ring-2 ring-primary/20 bg-primary/5' 
+                              : `border-outline-variant ${tint} hover:shadow-ambient-1 hover:-translate-y-0.5`
                             }`}
                         >
-                          <span className={`absolute left-0 top-0 bottom-0 w-0.5 ${accent}`} />
+                          <span className={`absolute left-0 top-0 bottom-0 w-1.5 ${accent}`} />
                           <div className="flex items-center justify-between gap-1 mb-0.5">
                             <span className="font-mono font-bold text-on-surface">
                               {det.placa}
@@ -517,12 +532,17 @@ export default function Monitoramento() {
               )}
             </div>
           </div>
+            );
+          })()}
           
           {/* Pipeline OCR — também tokenizado */}
           {displayedPipeline && (
-            <div className="bg-surface-container-lowest rounded-card border border-outline-variant shadow-ambient-1 p-3">
+            <div className="bg-surface-container-lowest rounded-card border border-outline-variant shadow-ambient-1 p-3 border-l-4 border-l-primary">
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-[12px] font-medium text-on-surface">Pipeline de processamento OCR</span>
+                <div className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+                  <Camera className="w-3.5 h-3.5" />
+                </div>
+                <span className="text-[12px] font-semibold text-on-surface">Pipeline de processamento OCR</span>
                 {displayedPipeline.rawText && (
                   <span className="text-[11px] bg-surface-container text-on-surface-variant px-2 py-0.5 rounded-full font-mono">
                     {displayedPipeline.rawText} · {Math.round(displayedPipeline.ocrConfidence * 100)}%
@@ -531,8 +551,8 @@ export default function Monitoramento() {
               </div>
               
               <div className="grid grid-cols-2 gap-2">
-                <div className="bg-inverse-surface rounded-lg overflow-hidden">
-                  <div className="text-[10px] text-center text-inverse-on-surface/80 py-1 font-medium">
+                <div className="bg-inverse-surface rounded-lg overflow-hidden border border-primary/40">
+                  <div className="text-[10px] text-center bg-primary/15 text-primary py-1 font-semibold">
                     Placa Processada
                   </div>
                   {displayedPipeline.debugImages?.preprocessed ? (
@@ -549,7 +569,7 @@ export default function Monitoramento() {
                 </div>
                 
                 <div className="bg-inverse-surface rounded-lg overflow-hidden border border-secondary/40">
-                  <div className="text-[10px] text-center text-secondary-fixed-dim py-1 font-medium">
+                  <div className="text-[10px] text-center bg-secondary/15 text-on-secondary-container py-1 font-semibold">
                     Resultado OCR
                   </div>
                   {displayedPipeline.debugImages?.final ? (
@@ -578,8 +598,8 @@ export default function Monitoramento() {
 
         {/* Coluna de Histórico separada — só visível em 2XL */}
         <div className="hidden 2xl:block 2xl:col-span-2 h-full max-h-[530px]">
-          <div className="bg-surface-container-lowest rounded-card border border-outline-variant shadow-ambient-1 flex flex-col h-full overflow-hidden">
-            <div className="px-3 py-2 border-b border-outline-variant flex items-center justify-between bg-surface-container-low">
+          <div className="bg-surface-container-lowest rounded-card border border-outline-variant shadow-ambient-1 flex flex-col h-full overflow-hidden border-l-4 border-l-tertiary">
+            <div className="px-3 py-2 border-b border-outline-variant flex items-center justify-between bg-tertiary/5">
               <h3 className="font-semibold text-on-surface flex items-center gap-2 text-body-sm">
                 <Clock className="w-4 h-4 text-primary" />
                 <span>Histórico</span>
@@ -597,17 +617,18 @@ export default function Monitoramento() {
                 <div className="space-y-1.5">
                   {detectionHistory.map((det, idx) => {
                     const accent = det.morador ? 'bg-secondary' : det.visitante ? 'bg-tertiary' : 'bg-error';
+                    const tint = det.morador ? 'bg-secondary/5' : det.visitante ? 'bg-tertiary/5' : 'bg-error/5';
                     return (
                       <button
                         key={det.id || idx}
                         onClick={() => handleHistoryClick(det.id)}
-                        className={`w-full text-left relative overflow-hidden p-2 pl-3 rounded-lg border bg-surface-container-low text-[12px] transition-all
+                        className={`w-full text-left relative overflow-hidden p-2 pl-3.5 rounded-lg border text-[12px] transition-all
                           ${selectedDetectionId === det.id 
-                            ? 'border-primary ring-1 ring-primary/30' 
-                            : 'border-outline-variant hover:bg-surface-container'
+                            ? 'border-primary border-2 ring-2 ring-primary/20 bg-primary/5' 
+                            : `border-outline-variant ${tint} hover:shadow-ambient-1 hover:-translate-y-0.5`
                           }`}
                       >
-                        <span className={`absolute left-0 top-0 bottom-0 w-0.5 ${accent}`} />
+                        <span className={`absolute left-0 top-0 bottom-0 w-1.5 ${accent}`} />
                         <div className="flex items-center justify-between gap-1 mb-0.5">
                           <span className="font-mono font-bold text-[11px] text-on-surface">
                             {det.placa}
@@ -650,13 +671,15 @@ export default function Monitoramento() {
             }
             setShowVeiculosCadastrados(!showVeiculosCadastrados);
           }}
-          className="w-full bg-surface-container-lowest border border-outline-variant rounded-card p-3 sm:p-4 flex items-center justify-between hover:bg-surface-container-low transition-colors"
+          className={`w-full bg-surface-container-lowest border border-outline-variant border-l-4 border-l-primary p-3 sm:p-4 flex items-center justify-between hover:bg-primary/5 transition-colors ${showVeiculosCadastrados ? 'rounded-t-card' : 'rounded-card'}`}
         >
           <div className="flex items-center gap-2 sm:gap-3">
-            <Car className="w-4 h-4 sm:w-5 sm:h-5 text-on-surface-variant" />
+            <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+              <Car className="w-4 h-4 sm:w-5 sm:h-5" />
+            </div>
             <h2 className="text-body-sm sm:text-body-md font-semibold text-on-surface">
               Veículos cadastrados
-              <span className="ml-1.5 text-on-surface-variant font-normal">({veiculos.length})</span>
+              <span className="ml-1.5 bg-primary/10 text-primary font-semibold text-[11px] px-2 py-0.5 rounded-full">{veiculos.length}</span>
             </h2>
           </div>
           <div className={`transform transition-transform text-on-surface-variant ${showVeiculosCadastrados ? 'rotate-180' : ''}`}>
@@ -718,16 +741,16 @@ export default function Monitoramento() {
             ) : (
               <div className="overflow-x-auto -mx-3 sm:mx-0">
                 <table className="w-full min-w-[400px]">
-                  <thead className="bg-surface-container-low">
+                  <thead className="bg-primary/5 border-b-2 border-primary/30">
                     <tr>
-                      <th className="px-2 sm:px-4 py-2 text-left text-[10px] sm:text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Placa</th>
-                      <th className="px-2 sm:px-4 py-2 text-left text-[10px] sm:text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Casa</th>
-                      <th className="px-2 sm:px-4 py-2 text-right text-[10px] sm:text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Ações</th>
+                      <th className="px-2 sm:px-4 py-2 text-left text-[10px] sm:text-[11px] font-bold text-primary uppercase tracking-wide">Placa</th>
+                      <th className="px-2 sm:px-4 py-2 text-left text-[10px] sm:text-[11px] font-bold text-primary uppercase tracking-wide">Casa</th>
+                      <th className="px-2 sm:px-4 py-2 text-right text-[10px] sm:text-[11px] font-bold text-primary uppercase tracking-wide">Ações</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-outline-variant">
                     {veiculosFiltrados.map(veiculo => (
-                      <tr key={veiculo.id} className="hover:bg-surface-container-low transition-colors">
+                      <tr key={veiculo.id} className="even:bg-surface-container-low/40 hover:bg-primary/5 transition-colors">
                         <td className="px-2 sm:px-4 py-2 sm:py-3">
                           <div className="scale-90 sm:scale-100 origin-left">
                             <PlacaVeiculo placa={veiculo.placa_veiculo} size="sm" />
@@ -735,7 +758,7 @@ export default function Monitoramento() {
                         </td>
                         <td className="px-2 sm:px-4 py-2 sm:py-3">
                           <div className="flex items-center gap-1.5">
-                            <Home className="w-3.5 h-3.5 text-on-surface-variant" />
+                            <Home className="w-3.5 h-3.5 text-primary" />
                             <span className="text-body-sm font-semibold text-on-surface">{veiculo.casa}</span>
                           </div>
                         </td>
@@ -743,7 +766,7 @@ export default function Monitoramento() {
                           <div className="flex justify-end gap-1.5">
                             <button
                               onClick={() => handleEditarVeiculo(veiculo)}
-                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-btn border border-outline-variant text-on-surface-variant hover:bg-surface-container hover:text-on-surface text-[12px] transition-colors"
+                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-btn border border-primary/30 text-primary hover:bg-primary/10 hover:border-primary/60 text-[12px] transition-colors"
                               aria-label="Editar"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
