@@ -71,10 +71,10 @@ export default function SideNavBar() {
             end={path === '/'}
             onClick={onMobileClose}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 ease-in-out font-medium text-button ${
+              `relative flex items-center gap-3 px-3 py-2 pl-4 rounded-lg transition-all duration-200 ease-in-out font-medium text-button ${
                 isActive
-                  ? 'text-primary bg-primary/10 font-semibold'
-                  : 'text-on-surface-variant hover:bg-surface-container hover:text-primary'
+                  ? 'text-primary bg-primary/10 font-semibold shadow-ambient-1 before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-1 before:rounded-r-full before:bg-primary'
+                  : 'text-on-surface-variant hover:bg-surface-container-low hover:text-primary'
               }`
             }
           >
