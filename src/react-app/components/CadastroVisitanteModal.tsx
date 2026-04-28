@@ -349,8 +349,8 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
 
       {etapa === 'dados' && (
         <div>
-          <div className="flex items-center justify-between mb-md">
-            <h3 className="text-h3 text-on-surface">Dados do visitante</h3>
+          <div className="flex items-center justify-between mb-sm">
+            <h3 className="text-body-md font-semibold text-on-surface">Dados do visitante</h3>
             {/* Prisma 3D selecionado — clicável para trocar */}
             <button
               type="button"
