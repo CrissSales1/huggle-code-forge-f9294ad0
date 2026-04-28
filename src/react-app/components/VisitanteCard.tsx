@@ -52,7 +52,7 @@ export default function VisitanteCard({
           <div className="flex items-center gap-1.5 flex-nowrap overflow-hidden">
             {/* Chip Casa visitada */}
             <div className="inline-flex items-center gap-1 bg-primary/10 border border-primary/25 text-primary px-2 py-1 rounded-full text-label-caps font-semibold flex-shrink-0">
-              <Home className="w-3.5 h-3.5" />
+              <Home className="w-3.5 h-3.5 flex-shrink-0" strokeWidth={2.5} />
               <span className="truncate max-w-[70px]" title={visitante.casa_visitada}>
                 {visitante.casa_visitada}
               </span>
@@ -63,7 +63,7 @@ export default function VisitanteCard({
                 className="inline-flex items-center gap-1 bg-secondary/15 border border-secondary/40 text-secondary px-2 py-1 rounded-full text-label-caps font-bold shadow-ambient-1 flex-shrink min-w-0"
                 title="Estacionado em vaga de morador"
               >
-                <Car className="w-3.5 h-3.5 flex-shrink-0" />
+                <Car className="w-3.5 h-3.5 flex-shrink-0" strokeWidth={2.5} />
                 <span className="truncate">VAGA MORADOR</span>
               </div>
             ) : (
@@ -71,7 +71,7 @@ export default function VisitanteCard({
                 className="inline-flex items-center gap-1 bg-tertiary/10 border border-tertiary/30 text-tertiary px-2 py-1 rounded-full text-label-caps font-semibold flex-shrink min-w-0"
                 title="Estacionado em vaga de visitante"
               >
-                <Car className="w-3.5 h-3.5 flex-shrink-0" />
+                <Car className="w-3.5 h-3.5 flex-shrink-0" strokeWidth={2.5} />
                 <span className="truncate">VAGA VISITANTE</span>
               </div>
             )}
