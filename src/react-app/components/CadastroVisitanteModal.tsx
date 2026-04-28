@@ -349,8 +349,7 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
 
       {etapa === 'dados' && (
         <div>
-          <div className="flex items-center justify-between mb-md">
-            <h3 className="text-h3 text-on-surface">Dados do visitante</h3>
+          <div className="flex items-center justify-end mb-sm -mt-2">
             {/* Prisma 3D selecionado — clicável para trocar */}
             <button
               type="button"
@@ -364,214 +363,237 @@ export default function CadastroVisitanteModal({ isOpen, onClose, onSuccess }: C
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-3">
             {error && (
-              <div className="flex items-start gap-2 bg-error-container/40 border border-error/30 text-on-error-container px-4 py-3 rounded-btn">
+              <div className="flex items-start gap-2 bg-error-container/40 border border-error/30 text-on-error-container px-4 py-2.5 rounded-btn">
                 <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0 text-error" />
                 <span className="text-body-sm">{error}</span>
               </div>
             )}
 
-            <div className="relative">
-              <label htmlFor="nome" className="block text-label-caps uppercase text-on-surface-variant mb-1.5">
-                Nome do visitante *
-              </label>
-              <div className="relative">
-                <input
-                  ref={nomeInputRef}
-                  type="text"
-                  id="nome"
-                  value={nome}
-                  onChange={(e) => handleNomeChange(e.target.value)}
-                  className="w-full px-3 py-2.5 pr-9 border border-outline-variant rounded-btn bg-surface-container-lowest text-on-surface uppercase placeholder:normal-case placeholder:text-on-surface-variant/60 focus:border-primary"
-                  placeholder="Digite o nome para buscar ou cadastrar..."
-                  required
-                />
-                {searchingNome && (
-                  <div className="absolute right-2.5 top-1/2 transform -translate-y-1/2">
-                    <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
-                  </div>
-                )}
-                {nomeOptions.length > 0 && !searchingNome && (
-                  <ChevronDown className="absolute right-2.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-on-surface-variant" />
-                )}
-              </div>
-              
-              {/* Dropdown de opções do nome */}
-              {showNomeDropdown && nomeOptions.length > 0 && (
-                <div 
-                  ref={dropdownRef}
-                  className="absolute z-10 w-full mt-1 bg-surface-container-lowest border border-outline-variant rounded-card shadow-ambient-2 max-h-64 overflow-y-auto"
-                >
-                  {nomeOptions.map((visitante, index) => (
-                    <button
-                      key={index}
-                      type="button"
-                      onClick={() => handleSelectVisitante(visitante)}
-                      className="w-full px-4 py-3 text-left hover:bg-primary-container/30 focus:bg-primary-container/30 focus:outline-none border-b border-outline-variant/30 last:border-b-0 transition-colors"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="text-body-md font-semibold text-on-surface uppercase truncate">
-                            {visitante.nome}
-                          </div>
-                          <div className="text-body-sm text-on-surface-variant flex items-center gap-4 mt-0.5">
-                            <span>Casa: <strong className="text-on-surface">{visitante.casa_visitada}</strong></span>
-                            <span>Placa: <strong className="font-mono text-on-surface">{visitante.placa_veiculo}</strong></span>
-                          </div>
-                        </div>
-                        <ChevronDown className="w-4 h-4 text-on-surface-variant transform rotate-[-90deg] flex-shrink-0" />
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            {/* Grid 2 colunas: Quem entra | Veículo & Estacionamento */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-6 gap-y-3">
 
-            {/* Casa Visitada e Placa do Veículo lado a lado */}
-            <div className="grid grid-cols-12 gap-4">
-              <div className="col-span-3">
-                <label htmlFor="casa" className="block text-label-caps uppercase text-on-surface-variant mb-1.5">
-                  Casa/Apto *
-                </label>
-                <input
-                  type="text"
-                  id="casa"
-                  value={casaVisitada}
-                  onChange={(e) => setCasaVisitada(e.target.value.toUpperCase())}
-                  className="w-full px-3 py-2.5 border border-outline-variant rounded-btn bg-surface-container-lowest text-on-surface uppercase text-center font-bold tracking-wide focus:border-primary"
-                  placeholder="Ex: 102A"
-                  maxLength={5}
-                  required
-                />
-              </div>
-              
-              <div className="col-span-9">
-                <label htmlFor="placa" className="block text-label-caps uppercase text-on-surface-variant mb-1.5">
-                  Placa do veículo *
-                </label>
-                <div className="flex gap-2">
-                  <div className="flex-1 relative">
+              {/* ============== COLUNA ESQUERDA: QUEM ESTÁ ENTRANDO ============== */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 pb-1 border-b border-outline-variant/40">
+                  <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
+                    <User className="w-4 h-4 text-primary" />
+                  </div>
+                  <h4 className="text-label-caps uppercase font-bold text-on-surface tracking-wider">
+                    Quem está entrando
+                  </h4>
+                </div>
+
+                {/* Nome */}
+                <div className="relative">
+                  <label htmlFor="nome" className="block text-label-caps uppercase text-on-surface-variant mb-1">
+                    Nome do visitante *
+                  </label>
+                  <div className="relative">
                     <input
+                      ref={nomeInputRef}
                       type="text"
-                      id="placa"
-                      value={placaVeiculo}
-                      onChange={(e) => handlePlacaChange(e.target.value)}
-                      className="w-full px-3 py-2.5 border border-outline-variant rounded-btn bg-surface-container-lowest text-on-surface uppercase tracking-[0.15em] font-mono font-semibold focus:border-primary"
-                      placeholder="ABC-1234"
-                      maxLength={7}
+                      id="nome"
+                      value={nome}
+                      onChange={(e) => handleNomeChange(e.target.value)}
+                      className="w-full px-3 py-2.5 pr-9 border border-outline-variant rounded-btn bg-surface-container-lowest text-on-surface uppercase placeholder:normal-case placeholder:text-on-surface-variant/60 focus:border-primary"
+                      placeholder="Digite o nome..."
                       required
                     />
-                    {placaVeiculo && !isValidPlaca(placaVeiculo) && (
-                      <div className="absolute top-full left-0 mt-1 text-xs text-error font-medium">
-                        Formato inválido. Use ABC1234 ou ABC1A23
+                    {searchingNome && (
+                      <div className="absolute right-2.5 top-1/2 transform -translate-y-1/2">
+                        <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
                       </div>
                     )}
+                    {nomeOptions.length > 0 && !searchingNome && (
+                      <ChevronDown className="absolute right-2.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-on-surface-variant" />
+                    )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowCameraModal(true)}
-                    className="px-4 py-2.5 bg-secondary text-on-secondary rounded-btn hover:bg-on-secondary-fixed-variant hover:shadow-ambient-2 transition-all flex items-center gap-2 whitespace-nowrap text-button font-semibold"
-                    title="Ler placa com câmera"
-                  >
-                    <Camera className="w-4 h-4" />
-                    <span className="hidden sm:inline">Ler Placa (OCR)</span>
-                  </button>
+
+                  {/* Dropdown de opções do nome */}
+                  {showNomeDropdown && nomeOptions.length > 0 && (
+                    <div
+                      ref={dropdownRef}
+                      className="absolute z-10 w-full mt-1 bg-surface-container-lowest border border-outline-variant rounded-card shadow-ambient-2 max-h-64 overflow-y-auto"
+                    >
+                      {nomeOptions.map((visitante, index) => (
+                        <button
+                          key={index}
+                          type="button"
+                          onClick={() => handleSelectVisitante(visitante)}
+                          className="w-full px-4 py-3 text-left hover:bg-primary-container/30 focus:bg-primary-container/30 focus:outline-none border-b border-outline-variant/30 last:border-b-0 transition-colors"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="text-body-md font-semibold text-on-surface uppercase truncate">
+                                {visitante.nome}
+                              </div>
+                              <div className="text-body-sm text-on-surface-variant flex items-center gap-4 mt-0.5">
+                                <span>Casa: <strong className="text-on-surface">{visitante.casa_visitada}</strong></span>
+                                <span>Placa: <strong className="font-mono text-on-surface">{visitante.placa_veiculo}</strong></span>
+                              </div>
+                            </div>
+                            <ChevronDown className="w-4 h-4 text-on-surface-variant transform rotate-[-90deg] flex-shrink-0" />
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Casa */}
+                <div>
+                  <label htmlFor="casa" className="block text-label-caps uppercase text-on-surface-variant mb-1">
+                    Casa visitada *
+                  </label>
+                  <input
+                    type="text"
+                    id="casa"
+                    value={casaVisitada}
+                    onChange={(e) => setCasaVisitada(e.target.value.toUpperCase())}
+                    className="w-full px-3 py-2.5 border border-outline-variant rounded-btn bg-surface-container-lowest text-on-surface uppercase text-center font-bold tracking-wide focus:border-primary"
+                    placeholder="Ex: 102A"
+                    maxLength={5}
+                    required
+                  />
+                </div>
+
+                {/* Liberado por */}
+                <div>
+                  <label htmlFor="liberadoPor" className="block text-label-caps uppercase text-on-surface-variant mb-1">
+                    Liberado por
+                  </label>
+                  <input
+                    type="text"
+                    id="liberadoPor"
+                    value={liberadoPor}
+                    onChange={(e) => setLiberadoPor(e.target.value.toUpperCase())}
+                    className="w-full px-3 py-2.5 border border-outline-variant rounded-btn bg-surface-container-lowest text-on-surface uppercase placeholder:normal-case placeholder:text-on-surface-variant/60 focus:border-primary"
+                    placeholder="Morador responsável"
+                  />
+                </div>
+              </div>
+
+              {/* ============== COLUNA DIREITA: VEÍCULO & ESTACIONAMENTO ============== */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 pb-1 border-b border-outline-variant/40">
+                  <div className="w-7 h-7 rounded-full bg-secondary/10 flex items-center justify-center">
+                    <Car className="w-4 h-4 text-secondary" />
+                  </div>
+                  <h4 className="text-label-caps uppercase font-bold text-on-surface tracking-wider">
+                    Veículo & Estacionamento
+                  </h4>
+                </div>
+
+                {/* Placa + OCR */}
+                <div>
+                  <label htmlFor="placa" className="block text-label-caps uppercase text-on-surface-variant mb-1">
+                    Placa do veículo *
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="flex-1 relative">
+                      <input
+                        type="text"
+                        id="placa"
+                        value={placaVeiculo}
+                        onChange={(e) => handlePlacaChange(e.target.value)}
+                        className="w-full px-3 py-2.5 border border-outline-variant rounded-btn bg-surface-container-lowest text-on-surface uppercase tracking-[0.15em] font-mono font-semibold focus:border-primary"
+                        placeholder="ABC-1234"
+                        maxLength={7}
+                        required
+                      />
+                      {placaVeiculo && !isValidPlaca(placaVeiculo) && (
+                        <div className="absolute top-full left-0 mt-1 text-xs text-error font-medium">
+                          Formato inválido. Use ABC1234 ou ABC1A23
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowCameraModal(true)}
+                      className="px-3 py-2.5 bg-secondary text-on-secondary rounded-btn hover:bg-on-secondary-fixed-variant hover:shadow-ambient-2 transition-all flex items-center gap-2 whitespace-nowrap text-button font-semibold"
+                      title="Ler placa com câmera"
+                    >
+                      <Camera className="w-4 h-4" />
+                      <span className="hidden xl:inline">Ler Placa</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Onde vai estacionar — radios horizontais compactos */}
+                <div>
+                  <label className="block text-label-caps uppercase text-on-surface-variant mb-1">
+                    Onde vai estacionar?
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEstacionarVagaMorador(false)}
+                      className={`flex items-center gap-2 px-3 py-2.5 rounded-btn text-left transition-all ${
+                        !estacionarVagaMorador
+                          ? 'border-2 border-secondary bg-secondary-container/20 shadow-ambient-1'
+                          : 'border border-outline-variant bg-surface-container-lowest hover:bg-surface-container'
+                      }`}
+                    >
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                        !estacionarVagaMorador ? 'bg-secondary/15 text-secondary' : 'bg-surface-container-highest text-on-surface-variant'
+                      }`}>
+                        <Home className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-body-sm font-semibold text-on-surface leading-tight">Vaga Comum</p>
+                        <p className="text-[11px] text-on-surface-variant leading-tight mt-0.5">Padrão visitantes</p>
+                      </div>
+                      {!estacionarVagaMorador && (
+                        <UserCheck className="w-4 h-4 text-secondary shrink-0" />
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setEstacionarVagaMorador(true)}
+                      className={`flex items-center gap-2 px-3 py-2.5 rounded-btn text-left transition-all ${
+                        estacionarVagaMorador
+                          ? 'border-2 border-tertiary bg-tertiary-fixed/30 shadow-ambient-1'
+                          : 'border border-outline-variant bg-surface-container-lowest hover:bg-surface-container'
+                      }`}
+                    >
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                        estacionarVagaMorador ? 'bg-tertiary/15 text-tertiary' : 'bg-surface-container-highest text-on-surface-variant'
+                      }`}>
+                        <Home className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-body-sm font-semibold text-on-surface leading-tight">Vaga Morador</p>
+                        <p className="text-[11px] text-on-surface-variant leading-tight mt-0.5">Vaga da unidade</p>
+                      </div>
+                      {estacionarVagaMorador && (
+                        <UserCheck className="w-4 h-4 text-tertiary shrink-0" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Observações */}
+                <div>
+                  <label htmlFor="observacoes" className="block text-label-caps uppercase text-on-surface-variant mb-1">
+                    Observações
+                  </label>
+                  <textarea
+                    id="observacoes"
+                    value={observacoes}
+                    onChange={(e) => setObservacoes(e.target.value.toUpperCase())}
+                    className="w-full px-3 py-2 border border-outline-variant rounded-btn bg-surface-container-lowest text-on-surface uppercase placeholder:normal-case placeholder:text-on-surface-variant/60 focus:border-primary resize-none"
+                    placeholder="Informações adicionais..."
+                    rows={2}
+                  />
                 </div>
               </div>
             </div>
 
-            <div>
-              <label htmlFor="observacoes" className="block text-label-caps uppercase text-on-surface-variant mb-1.5">
-                Observações
-              </label>
-              <textarea
-                id="observacoes"
-                value={observacoes}
-                onChange={(e) => setObservacoes(e.target.value.toUpperCase())}
-                className="w-full px-3 py-2.5 border border-outline-variant rounded-btn bg-surface-container-lowest text-on-surface uppercase placeholder:normal-case placeholder:text-on-surface-variant/60 focus:border-primary resize-none"
-                placeholder="Informações adicionais relevantes..."
-                rows={3}
-              />
-            </div>
-
-            <div>
-              <label htmlFor="liberadoPor" className="block text-label-caps uppercase text-on-surface-variant mb-1.5">
-                Liberado por
-              </label>
-              <input
-                type="text"
-                id="liberadoPor"
-                value={liberadoPor}
-                onChange={(e) => setLiberadoPor(e.target.value.toUpperCase())}
-                className="w-full px-3 py-2.5 border border-outline-variant rounded-btn bg-surface-container-lowest text-on-surface uppercase placeholder:normal-case placeholder:text-on-surface-variant/60 focus:border-primary"
-                placeholder="Nome do morador responsável pela liberação"
-              />
-            </div>
-
-            {/* Onde vai estacionar? — M3 */}
-            <div className="border-t border-outline-variant/30 pt-lg">
-              <h4 className="text-h3 text-on-surface mb-md">Onde vai estacionar?</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-md">
-                {/* Card A: Vaga Comum */}
-                <button
-                  type="button"
-                  onClick={() => setEstacionarVagaMorador(false)}
-                  className={`flex items-start p-md rounded-xl text-left transition-colors shadow-sm relative overflow-hidden ${
-                    !estacionarVagaMorador
-                      ? 'border-2 border-secondary bg-secondary-container/10'
-                      : 'border border-outline-variant bg-surface hover:bg-surface-container-highest'
-                  }`}
-                >
-                  <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 mr-md ${
-                    !estacionarVagaMorador ? 'bg-secondary/10 text-secondary' : 'bg-surface-container-highest text-on-surface-variant'
-                  }`}>
-                    <Home className="w-5 h-5" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-body-md font-semibold text-on-surface">Vaga Comum</p>
-                    <p className={`text-body-sm mt-1 ${!estacionarVagaMorador ? 'text-secondary' : 'text-on-surface-variant'}`}>
-                      PADRÃO: Vaga comum de visitantes
-                    </p>
-                  </div>
-                  {!estacionarVagaMorador && (
-                    <div className="absolute top-md right-md text-secondary">
-                      <UserCheck className="w-5 h-5" />
-                    </div>
-                  )}
-                </button>
-
-                {/* Card B: Vaga Morador */}
-                <button
-                  type="button"
-                  onClick={() => setEstacionarVagaMorador(true)}
-                  className={`flex items-start p-md rounded-xl text-left transition-colors shadow-sm relative overflow-hidden ${
-                    estacionarVagaMorador
-                      ? 'border-2 border-tertiary bg-tertiary-fixed/30'
-                      : 'border border-outline-variant bg-surface hover:bg-surface-container-highest'
-                  }`}
-                >
-                  <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 mr-md ${
-                    estacionarVagaMorador ? 'bg-tertiary/10 text-tertiary' : 'bg-surface-container-highest text-on-surface-variant'
-                  }`}>
-                    <Home className="w-5 h-5" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-body-md font-semibold text-on-surface">Vaga Morador</p>
-                    <p className={`text-body-sm mt-1 ${estacionarVagaMorador ? 'text-tertiary' : 'text-on-surface-variant'}`}>
-                      Estacionará na vaga da própria unidade
-                    </p>
-                  </div>
-                  {estacionarVagaMorador && (
-                    <div className="absolute top-md right-md text-tertiary">
-                      <UserCheck className="w-5 h-5" />
-                    </div>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between pt-md border-t border-outline-variant/30">
+            {/* Footer de ações */}
+            <div className="flex items-center justify-between pt-3 border-t border-outline-variant/30">
               <button
                 type="button"
                 onClick={handleVoltar}
