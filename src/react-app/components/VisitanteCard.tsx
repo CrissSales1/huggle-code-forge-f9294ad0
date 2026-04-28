@@ -35,9 +35,6 @@ export default function VisitanteCard({
       .toString()
       .padStart(2, '0')}min`;
   };
-
-  const tipoVaga = visitante.estacionar_vaga_morador ? 'Morador' : 'Visitante';
-
   const topAccent = alertaPermanenciaProlongada ? 'border-t-error' : 'border-t-[#E65100]';
   const headerBg = alertaPermanenciaProlongada ? 'bg-error/5' : 'bg-[#FFF3E0]/40';
 
