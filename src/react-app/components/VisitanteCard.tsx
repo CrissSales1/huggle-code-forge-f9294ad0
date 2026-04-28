@@ -1,5 +1,6 @@
 import { AlertTriangle, Edit, LogOut, Home, Car, Info } from 'lucide-react';
 import PlacaVeiculo from './PlacaVeiculo';
+import PrismaBadge from './PrismaBadge';
 import { useLiveTimer } from '@/react-app/hooks/useLiveTimer';
 import type { VisitanteAtivo } from '@/shared/types';
 
@@ -88,10 +89,13 @@ export default function VisitanteCard({
             </div>
           )}
         </div>
-        {/* Badge prisma */}
-        <div className="w-11 h-11 rounded-full bg-[#FFF3E0] text-[#E65100] flex items-center justify-center font-bold text-h3 shadow-ambient-2 ring-4 ring-[#E65100]/10 flex-shrink-0">
-          {visitante.numero_prisma ?? '?'}
-        </div>
+        {/* Badge prisma 3D */}
+        <PrismaBadge
+          numero={visitante.numero_prisma}
+          size="sm"
+          variant={alertaPermanenciaProlongada ? 'error' : 'orange'}
+          className="flex-shrink-0"
+        />
       </div>
 
       {/* Conteúdo */}
