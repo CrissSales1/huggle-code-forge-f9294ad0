@@ -489,17 +489,18 @@ export default function Monitoramento() {
                   <div className="space-y-1.5 max-h-[150px] overflow-y-auto pr-1">
                     {detectionHistory.slice(0, 8).map((det, idx) => {
                       const accent = det.morador ? 'bg-secondary' : det.visitante ? 'bg-tertiary' : 'bg-error';
+                      const tint = det.morador ? 'bg-secondary/5' : det.visitante ? 'bg-tertiary/5' : 'bg-error/5';
                       return (
                         <button 
                           key={det.id || idx}
                           onClick={() => handleHistoryClick(det.id)}
-                          className={`w-full text-left relative overflow-hidden p-2 pl-3 rounded-lg border bg-surface-container-low text-[12px] transition-all
+                          className={`w-full text-left relative overflow-hidden p-2 pl-3.5 rounded-lg border text-[12px] transition-all
                             ${selectedDetectionId === det.id 
-                              ? 'border-primary ring-1 ring-primary/30' 
-                              : 'border-outline-variant hover:bg-surface-container'
+                              ? 'border-primary border-2 ring-2 ring-primary/20 bg-primary/5' 
+                              : `border-outline-variant ${tint} hover:shadow-ambient-1 hover:-translate-y-0.5`
                             }`}
                         >
-                          <span className={`absolute left-0 top-0 bottom-0 w-0.5 ${accent}`} />
+                          <span className={`absolute left-0 top-0 bottom-0 w-1.5 ${accent}`} />
                           <div className="flex items-center justify-between gap-1 mb-0.5">
                             <span className="font-mono font-bold text-on-surface">
                               {det.placa}
