@@ -1,99 +1,110 @@
 ## Objetivo
 
-Eliminar a rolagem da etapa **"Dados do Visitante"** (etapa 2) do modal de cadastro, distribuindo os campos de forma clara em duas colunas, agrupados por contexto. O foco é facilitar o uso para pessoas com pouca familiaridade com informática: tudo visível de uma só vez, sem precisar rolar.
+Dar ao card de Visitantes Ativos uma estética mais comercial/SaaS moderna (densidade, hierarquia, micro‑interações) e modernizar o bloco de relógio + data da barra lateral, eliminando o corte do dia da semana.
 
 ---
 
-## Diagnóstico atual
+## 1. `VisitanteCard.tsx` — redesign moderno
 
-O modal `CadastroVisitanteModal.tsx` (size `lg`, max-h `90vh`) hoje empilha **verticalmente** na etapa 2:
-
-1. Header + Stepper + título + chip "Trocar Prisma"
-2. Nome do visitante (linha inteira)
-3. Casa + Placa (linha já dividida)
-4. Observações (textarea, 3 linhas)
-5. Liberado por (linha inteira)
-6. "Onde vai estacionar?" (2 cards grandes)
-7. Botões de ação (Trocar / Cancelar / Finalizar)
-
-Total estimado ≈ 780–850 px de altura útil → ultrapassa os ~620 px disponíveis em viewport 1106×718, gerando rolagem.
-
----
-
-## Nova organização (sem rolagem)
-
-Dividir o formulário em **duas colunas** (`grid grid-cols-1 lg:grid-cols-2 gap-x-6 gap-y-4`) com agrupamentos visuais claros:
+### Estrutura
 
 ```text
-┌───────────────────────────────────────────────────────────────┐
-│  Stepper                          [Prisma 12] [Trocar ✎]      │
-├───────────────────────────────┬───────────────────────────────┤
-│  👤 QUEM ESTÁ ENTRANDO         │  🚗 VEÍCULO                   │
-│  ─────────────────────────    │  ─────────────────────────    │
-│  Nome do visitante *          │  Placa *      [📷 Ler placa]  │
-│  [______________________]     │  [_______]                    │
-│                               │                               │
-│  Casa visitada *              │  Onde vai estacionar?         │
-│  [______]                     │  ◉ Vaga Comum  ○ Vaga Morador │
-│                               │   (radios compactos lado-lado)│
-│  Liberado por                 │                               │
-│  [______________________]     │  Observações                  │
-│                               │  [___________________]        │
-│                               │  [___________________]        │
-├───────────────────────────────┴───────────────────────────────┤
-│  ← Trocar Prisma                    [Cancelar] [✓ Finalizar] │
-└───────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────┐
+│ [accent bar ───────────────] (gradient)    │  ← faixa superior 2px com gradiente laranja→âmbar
+│                                            │
+│  Nome do Visitante              ┌──────┐   │
+│  ──────────────────────         │ ▙▟ 12│   │  ← prisma 3D (sm) à direita, alinhado ao topo
+│  ⌂ Casa 04   🚗 Vaga Visitante  └──────┘   │
+│                                            │
+├────────────────────────────────────────────┤
+│  [  Placa centralizada  ]                  │
+│                                            │
+│  ┌─────────────┬─────────────┐             │
+│  │ ENTRADA     │ PERMANÊNCIA │             │
+│  │ 14:32 · Hoje│ ● 02h15min  │   ← dot pulsante no tempo "vivo"
+│  └─────────────┴─────────────┘             │
+│                                            │
+│  ⓘ Liberado por João · obs...              │
+├────────────────────────────────────────────┤
+│  [ Editar ]            [ Dar Baixa ↗ ]     │
+└────────────────────────────────────────────┘
 ```
 
-### Mudanças por bloco
+### Mudanças visuais
 
-**1. Cabeçalho compacto**
-- Manter o stepper, mas reduzir margem inferior (`mb-md` → `mb-sm`).
-- Remover o título redundante "Dados do visitante" — o stepper já indica a etapa. O chip "Prisma X / Trocar" fica alinhado à direita do stepper.
+- **Card container**: remover `border-t-[3px]` colorido e substituir por uma faixa interna com gradiente (`bg-gradient-to-r from-[#E65100] via-[#F36F1A] to-[#FFB74D]`, h‑1) no topo. Em alerta +24h, usar gradiente em tons de error.
+- **Background**: `bg-surface-container-lowest` com sutil overlay `bg-gradient-to-b from-surface-container-low/40 to-transparent` no header (substitui o `headerBg` laranja, fica mais limpo).
+- **Hover**: aumentar elevação para `shadow-ambient-3`, `-translate-y-1`, e revelar uma borda lateral `ring-1 ring-primary/20`.
+- **Nome**: `text-base font-semibold tracking-tight` + linha divisória sutil (`h-px bg-outline-variant/40`) abaixo, dando ar editorial.
+- **Chip Casa**: pill mais slim e moderno — fundo `bg-primary/8`, ícone Home em círculo menor (5x5), tipografia `text-xs font-semibold`, sem sombra. Alinhamento à esquerda.
+- **Chip Vaga**: redesenhar como "tag" minimalista (sem fundo cheio): `border border-secondary/40 text-secondary` para vaga morador, `border-outline-variant text-on-surface-variant` para visitante. Texto em `text-[10px] font-bold uppercase tracking-wider`.
+- **Alerta +24h**: virar um chip discreto vermelho com ícone pulsante (`animate-pulse` no AlertTriangle).
+- **Bloco Entrada/Permanência**: substituir o card laranja por um painel `bg-surface-container/60 backdrop-blur` com cantos arredondados `rounded-xl`, sem borda divisora vertical — usar duas colunas com labels uppercase em `text-outline` e valores em fonte mono (`font-mono tabular-nums`) para vibe "dashboard". Adicionar um `<span>` verde pulsante (●) antes da permanência ativa.
+- **Observações**: caixa mais leve (`bg-surface-container-low`, sem borda destacada), ícone Info menor.
+- **Botões de ação**:
+  - Editar: ghost moderno, `bg-transparent hover:bg-primary/8`, sem borda visível por padrão (apenas underline ao hover).
+  - Dar Baixa: botão sólido com gradiente sutil `bg-gradient-to-br from-secondary to-secondary-fixed-dim`, ícone `LogOut` rotacionado 0° + animação `group-hover:translate-x-0.5`.
+  - Dividir com `gap-2`, padding `py-2.5`, fonte `text-sm font-semibold`.
+- **PrismaBadge**: manter `size="sm"`, mas envelopar em um pequeno wrapper com `withGroundShadow` para reforçar o 3D.
 
-**2. Coluna esquerda — "Quem está entrando"**
-- Mini-cabeçalho com ícone (`User`) + label uppercase pequeno: "QUEM ESTÁ ENTRANDO".
-- Campos: Nome → Casa visitada → Liberado por.
-- Casa fica em linha própria (já não está combinada com placa).
+### Acessibilidade
 
-**3. Coluna direita — "Veículo & Estacionamento"**
-- Mini-cabeçalho com ícone (`Car`) + label "VEÍCULO".
-- Placa + botão "Ler Placa (OCR)" lado a lado (como já está).
-- "Onde vai estacionar?" — converter os dois cards grandes em **dois radios horizontais compactos** (uma linha só, ~56 px de altura cada), mantendo o destaque visual de seleção (borda + cor) mas reduzindo a área:
-  ```text
-  [ 🏠 Vaga Comum    ●selecionado ]  [ 🏘️ Vaga Morador        ]
-  ```
-- Observações: textarea com `rows={2}` em vez de 3.
-
-**4. Botões de ação**
-- Manter footer fixo abaixo do grid, com a mesma divisão (esquerda: Trocar Prisma / direita: Cancelar + Finalizar).
-
-**5. Tipografia/espaçamento**
-- `space-y-4` → `gap-y-3` no grid.
-- Labels: manter `text-label-caps` mas reduzir `mb-1.5` → `mb-1`.
-- Inputs: manter `py-2.5` (boa área de toque).
+- Manter `title` e `aria-label` atuais.
+- Garantir contraste AA nos novos tons translúcidos (verificar primary/8 sobre surface-lowest).
 
 ---
 
-## Mobile (fallback)
+## 2. `SideNavBar.tsx` — relógio e data modernos
 
-Em telas `< lg` (≤ 1024 px), o grid colapsa para 1 coluna naturalmente (`grid-cols-1`). Nesse caso, manter rolagem é aceitável — o foco do pedido é desktop, onde a página é usada pela portaria.
+Problema atual: a data longa (`segunda-feira, 28 de abril de 2026`) é truncada porque o sidebar tem 16rem (`w-64`). O bloco também aparece como duas pílulas separadas, visualmente datadas.
 
-Opcional: aumentar o tamanho do modal (`size="lg"` → criar variante `xl` com `max-w-4xl`) para garantir folga horizontal nas duas colunas em desktops 1280+.
+### Novo design
+
+Unificar relógio + data em **um único cartão** estilo "widget":
+
+```text
+┌──────────────────────────────┐
+│  14:32:08         ●          │  ← hora grande mono, dot pulsante (live)
+│  Ter, 28 abr · 2026          │  ← data compacta em uma linha
+└──────────────────────────────┘
+```
+
+### Implementação
+
+- Substituir os dois `<div>` (Clock + Calendar) por um único container:
+  - `bg-gradient-to-br from-surface-container to-surface-container-high`
+  - `rounded-xl border border-outline-variant/50 px-3 py-2.5 shadow-ambient-1`
+- Linha 1: hora em `font-mono font-bold text-xl tabular-nums text-on-surface tracking-tight`, com dot verde `w-1.5 h-1.5 rounded-full bg-secondary animate-pulse` à direita.
+- Linha 2: data **compacta** — adicionar no `useDateTime` (ou formatar inline) um `formattedDateShort`:
+  - Formato: `Ter, 28 abr · 2026` (weekday `short` + day `2-digit` + month `short` + year `numeric`).
+  - Classes: `text-[11px] font-medium text-on-surface-variant capitalize tracking-wide truncate`.
+- Remover ícones Clock/Calendar do bloco (ficam redundantes); manter o visual limpo.
+
+### Mobile top bar
+
+- Trocar `font-mono font-bold text-sm` para o mesmo `tabular-nums` e adicionar dot live para consistência.
+
+---
+
+## 3. Pequenos ajustes de hook
+
+`src/react-app/hooks/useDateTime.ts`: adicionar `formattedDateShort` exposto no retorno (sem quebrar consumidores existentes — só acrescenta um campo).
+
+```ts
+const formatDateShort = (d: Date) =>
+  d.toLocaleDateString('pt-BR', {
+    weekday: 'short', day: '2-digit', month: 'short', year: 'numeric',
+  }).replace('.', ''); // remove ponto do "abr."
+```
+
+Retornar `formattedDateShort` adicional.
 
 ---
 
 ## Arquivos afetados
 
-- **`src/react-app/components/CadastroVisitanteModal.tsx`** — reestruturação do JSX da etapa `'dados'` (linhas 350–614). Sem mudanças em lógica, hooks, validação ou submit.
-- **`src/react-app/components/Modal.tsx`** — adicionar variante de tamanho `xl` (`max-w-4xl`) em `sizeClasses`, para acomodar as duas colunas com conforto.
+- `src/react-app/components/VisitanteCard.tsx` — redesign completo do layout/estilos (mantém props e lógica).
+- `src/react-app/components/SideNavBar.tsx` — substituir bloco relógio/data por widget unificado.
+- `src/react-app/hooks/useDateTime.ts` — adicionar `formattedDateShort`.
 
-Sem mudanças em tipos, API, banco ou outros componentes.
-
----
-
-## Resultado esperado
-
-- Etapa 2 cabe inteira em uma viewport de 1106×718 sem rolagem.
-- Agrupamento visual ("Quem entra" × "Veículo") torna o fluxo intuitivo para usuários iniciantes.
-- Cards grandes de vaga substituídos por radios horizontais compactos, sem perder clareza de seleção.
+Sem mudanças em tipos, rotas, API ou lógica de negócio.
