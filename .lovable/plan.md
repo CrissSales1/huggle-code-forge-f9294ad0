@@ -1,50 +1,110 @@
-## Prisma 3D estilo "saquinho laranja" — card + modal de cadastro
+## Objetivo
 
-Vou criar **um único componente reutilizável** com a forma 3D do prisma magnético (igual à foto enviada — corpo laranja brilhante, base larga, topo estreito, número escuro impresso) e aplicá-lo em todos os lugares onde o prisma aparece visualmente.
+Dar ao card de Visitantes Ativos uma estética mais comercial/SaaS moderna (densidade, hierarquia, micro‑interações) e modernizar o bloco de relógio + data da barra lateral, eliminando o corte do dia da semana.
 
-### Novo componente
+---
 
-**`src/react-app/components/PrismaBadge.tsx`** — props:
-- `numero: number | string | null`
-- `size?: 'sm' | 'md' | 'lg' | 'xl'` (sm para cards/chip, lg para grade de seleção, xl para destaque opcional)
-- `variant?: 'orange' | 'error'` (vermelho quando alerta +24h)
+## 1. `VisitanteCard.tsx` — redesign moderno
 
-Estrutura visual (CSS puro, sem libs 3D — performático e nítido em qualquer DPI):
+### Estrutura
 
 ```text
-        ┌──────────┐        ← topo estreito, brilho especular
-       /            \
-      /     15       \       ← face frontal: gradiente laranja
-     /                \
-    └──────────────────┘    ← base larga + sombra projetada no chão
+┌────────────────────────────────────────────┐
+│ [accent bar ───────────────] (gradient)    │  ← faixa superior 2px com gradiente laranja→âmbar
+│                                            │
+│  Nome do Visitante              ┌──────┐   │
+│  ──────────────────────         │ ▙▟ 12│   │  ← prisma 3D (sm) à direita, alinhado ao topo
+│  ⌂ Casa 04   🚗 Vaga Visitante  └──────┘   │
+│                                            │
+├────────────────────────────────────────────┤
+│  [  Placa centralizada  ]                  │
+│                                            │
+│  ┌─────────────┬─────────────┐             │
+│  │ ENTRADA     │ PERMANÊNCIA │             │
+│  │ 14:32 · Hoje│ ● 02h15min  │   ← dot pulsante no tempo "vivo"
+│  └─────────────┴─────────────┘             │
+│                                            │
+│  ⓘ Liberado por João · obs...              │
+├────────────────────────────────────────────┤
+│  [ Editar ]            [ Dar Baixa ↗ ]     │
+└────────────────────────────────────────────┘
 ```
 
-Camadas:
-1. **Wrapper** com `filter: drop-shadow(...)` (sombra projetada respeita o clip).
-2. **Face frontal** trapezoidal via `clip-path: polygon(18% 0%, 82% 0%, 100% 100%, 0% 100%)` com `linear-gradient(160deg, #FF8A3D 0%, #F36F1A 45%, #C94E08 100%)` (tons do laranja vinílico da foto).
-3. **Highlight especular** — segundo div, mesmo `clip-path`, gradiente branco vertical estreito à esquerda (`linear-gradient(105deg, transparent 8%, rgba(255,255,255,.55) 14%, transparent 22%)`) imitando o brilho do plástico.
-4. **Sombreamento lateral direito** — gradiente `to-right` preto/transparente baixa opacidade dando volume.
-5. **Vinco superior** — linha fina escura no topo (`border-top` interno + leve gradiente) sugerindo a costura/dobra do saquinho.
-6. **Número** — `<span>` absoluto centralizado, `font-black`, cor `#1a1a1a`, leve `text-shadow` quase imperceptível para parecer impresso. Levemente deslocado para baixo (`translate-y-[8%]`) acompanhando a perspectiva da face.
-7. **Variant `error`**: troca a paleta para vermelhos (`#E0402E → #B0140A`), mantendo highlight branco.
-8. **Sombra de chão** opcional (`::after` ou div irmão) — elipse escura com blur abaixo, sugerindo apoio na superfície (usada apenas em `lg`/`xl`).
+### Mudanças visuais
 
-### Onde aplicar
+- **Card container**: remover `border-t-[3px]` colorido e substituir por uma faixa interna com gradiente (`bg-gradient-to-r from-[#E65100] via-[#F36F1A] to-[#FFB74D]`, h‑1) no topo. Em alerta +24h, usar gradiente em tons de error.
+- **Background**: `bg-surface-container-lowest` com sutil overlay `bg-gradient-to-b from-surface-container-low/40 to-transparent` no header (substitui o `headerBg` laranja, fica mais limpo).
+- **Hover**: aumentar elevação para `shadow-ambient-3`, `-translate-y-1`, e revelar uma borda lateral `ring-1 ring-primary/20`.
+- **Nome**: `text-base font-semibold tracking-tight` + linha divisória sutil (`h-px bg-outline-variant/40`) abaixo, dando ar editorial.
+- **Chip Casa**: pill mais slim e moderno — fundo `bg-primary/8`, ícone Home em círculo menor (5x5), tipografia `text-xs font-semibold`, sem sombra. Alinhamento à esquerda.
+- **Chip Vaga**: redesenhar como "tag" minimalista (sem fundo cheio): `border border-secondary/40 text-secondary` para vaga morador, `border-outline-variant text-on-surface-variant` para visitante. Texto em `text-[10px] font-bold uppercase tracking-wider`.
+- **Alerta +24h**: virar um chip discreto vermelho com ícone pulsante (`animate-pulse` no AlertTriangle).
+- **Bloco Entrada/Permanência**: substituir o card laranja por um painel `bg-surface-container/60 backdrop-blur` com cantos arredondados `rounded-xl`, sem borda divisora vertical — usar duas colunas com labels uppercase em `text-outline` e valores em fonte mono (`font-mono tabular-nums`) para vibe "dashboard". Adicionar um `<span>` verde pulsante (●) antes da permanência ativa.
+- **Observações**: caixa mais leve (`bg-surface-container-low`, sem borda destacada), ícone Info menor.
+- **Botões de ação**:
+  - Editar: ghost moderno, `bg-transparent hover:bg-primary/8`, sem borda visível por padrão (apenas underline ao hover).
+  - Dar Baixa: botão sólido com gradiente sutil `bg-gradient-to-br from-secondary to-secondary-fixed-dim`, ícone `LogOut` rotacionado 0° + animação `group-hover:translate-x-0.5`.
+  - Dividir com `gap-2`, padding `py-2.5`, fonte `text-sm font-semibold`.
+- **PrismaBadge**: manter `size="sm"`, mas envelopar em um pequeno wrapper com `withGroundShadow` para reforçar o 3D.
 
-1. **`VisitanteCard.tsx`** — substitui o círculo `w-11 h-11` no header por `<PrismaBadge size="sm" numero={visitante.numero_prisma} variant={alertaPermanenciaProlongada ? 'error' : 'orange'} />`. Ajustar largura para ~`w-14 h-12` para acomodar a base trapezoidal sem comprimir o nome.
+### Acessibilidade
 
-2. **`CadastroVisitanteModal.tsx` — etapa "prisma"** (grade de seleção, linhas 328–341): cada botão da grade passa a renderizar `<PrismaBadge size="lg" numero={prisma.numero} />` no lugar do número grande + label "Prisma". Hover mantém destaque (ex.: `hover:scale-105 hover:drop-shadow-lg`). Mantém aspect-square e o label "PRISMA" pequeno embaixo do badge para clareza.
+- Manter `title` e `aria-label` atuais.
+- Garantir contraste AA nos novos tons translúcidos (verificar primary/8 sobre surface-lowest).
 
-3. **`CadastroVisitanteModal.tsx` — etapa "dados"** (chip do prisma selecionado, linhas 350–359): substitui o chip pill atual por uma versão compacta com `<PrismaBadge size="sm" />` + texto "Trocar" + ícone lápis, mantendo o mesmo botão clicável que volta para a etapa de seleção.
+---
 
-### Fora do escopo (não alterado)
+## 2. `SideNavBar.tsx` — relógio e data modernos
 
-- `EditarVisitanteModal.tsx` usa apenas um `<select>` nativo — sem visual de prisma para trocar.
-- `Relatorios`, `Configuracoes`, `pdfExport` — só leem o número, sem badge visual.
-- Lógica, props, dados e tipos permanecem inalterados — mudança puramente visual.
+Problema atual: a data longa (`segunda-feira, 28 de abril de 2026`) é truncada porque o sidebar tem 16rem (`w-64`). O bloco também aparece como duas pílulas separadas, visualmente datadas.
 
-### Notas técnicas
+### Novo design
 
-- Tudo via CSS/Tailwind + `style` inline para `clip-path` e gradientes (clip-path arbitrário não tem utilitário nativo no Tailwind).
-- Sem dependências novas, sem WebGL/Three.js — leve, acessível e renderiza igual em qualquer navegador moderno.
-- Tamanhos definidos em rem para escalar bem em mobile/desktop.
+Unificar relógio + data em **um único cartão** estilo "widget":
+
+```text
+┌──────────────────────────────┐
+│  14:32:08         ●          │  ← hora grande mono, dot pulsante (live)
+│  Ter, 28 abr · 2026          │  ← data compacta em uma linha
+└──────────────────────────────┘
+```
+
+### Implementação
+
+- Substituir os dois `<div>` (Clock + Calendar) por um único container:
+  - `bg-gradient-to-br from-surface-container to-surface-container-high`
+  - `rounded-xl border border-outline-variant/50 px-3 py-2.5 shadow-ambient-1`
+- Linha 1: hora em `font-mono font-bold text-xl tabular-nums text-on-surface tracking-tight`, com dot verde `w-1.5 h-1.5 rounded-full bg-secondary animate-pulse` à direita.
+- Linha 2: data **compacta** — adicionar no `useDateTime` (ou formatar inline) um `formattedDateShort`:
+  - Formato: `Ter, 28 abr · 2026` (weekday `short` + day `2-digit` + month `short` + year `numeric`).
+  - Classes: `text-[11px] font-medium text-on-surface-variant capitalize tracking-wide truncate`.
+- Remover ícones Clock/Calendar do bloco (ficam redundantes); manter o visual limpo.
+
+### Mobile top bar
+
+- Trocar `font-mono font-bold text-sm` para o mesmo `tabular-nums` e adicionar dot live para consistência.
+
+---
+
+## 3. Pequenos ajustes de hook
+
+`src/react-app/hooks/useDateTime.ts`: adicionar `formattedDateShort` exposto no retorno (sem quebrar consumidores existentes — só acrescenta um campo).
+
+```ts
+const formatDateShort = (d: Date) =>
+  d.toLocaleDateString('pt-BR', {
+    weekday: 'short', day: '2-digit', month: 'short', year: 'numeric',
+  }).replace('.', ''); // remove ponto do "abr."
+```
+
+Retornar `formattedDateShort` adicional.
+
+---
+
+## Arquivos afetados
+
+- `src/react-app/components/VisitanteCard.tsx` — redesign completo do layout/estilos (mantém props e lógica).
+- `src/react-app/components/SideNavBar.tsx` — substituir bloco relógio/data por widget unificado.
+- `src/react-app/hooks/useDateTime.ts` — adicionar `formattedDateShort`.
+
+Sem mudanças em tipos, rotas, API ou lógica de negócio.

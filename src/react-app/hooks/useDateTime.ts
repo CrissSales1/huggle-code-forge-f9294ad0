@@ -28,9 +28,21 @@ export function useDateTime() {
     });
   };
 
+  const formatDateShort = (date: Date) => {
+    return date
+      .toLocaleDateString('pt-BR', {
+        weekday: 'short',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      })
+      .replace(/\./g, '');
+  };
+
   return {
     dateTime,
     formattedDate: formatDate(dateTime),
+    formattedDateShort: formatDateShort(dateTime),
     formattedTime: formatTime(dateTime),
   };
 }
