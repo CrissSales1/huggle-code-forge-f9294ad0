@@ -63,32 +63,32 @@ export default function VisitanteCard({
             <div className="mt-2.5 flex items-center gap-2 flex-wrap">
               {/* Chip Casa visitada */}
               <div
-                className="inline-flex items-center gap-1.5 bg-primary/10 text-primary pl-1 pr-2.5 py-0.5 rounded-full"
+                className="inline-flex items-center gap-1.5 bg-primary/10 text-primary pl-1 pr-3 py-1 rounded-full"
                 title={`Casa ${visitante.casa_visitada}`}
               >
-                <span className="w-5 h-5 rounded-full bg-primary text-on-primary flex items-center justify-center flex-shrink-0">
-                  <Home className="w-3 h-3" strokeWidth={2.75} />
+                <span className="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center flex-shrink-0">
+                  <Home className="w-3.5 h-3.5" strokeWidth={2.75} />
                 </span>
-                <span className="text-xs font-semibold leading-none truncate max-w-[100px]">
+                <span className="text-sm font-bold leading-none truncate max-w-[110px]">
                   {visitante.casa_visitada}
                 </span>
               </div>
 
-              {/* Tag Vaga — minimalista */}
+              {/* Tag Vaga — cores distintas por tipo */}
               {visitante.estacionar_vaga_morador ? (
                 <span
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-secondary/40 text-secondary text-[10px] font-bold uppercase tracking-wider"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/40 text-amber-700 dark:text-amber-400 text-xs font-bold uppercase tracking-wider"
                   title="Estacionado em vaga de morador"
                 >
-                  <Car className="w-3 h-3" strokeWidth={2.5} />
+                  <Car className="w-4 h-4" strokeWidth={2.5} />
                   Vaga Morador
                 </span>
               ) : (
                 <span
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-outline-variant text-on-surface-variant text-[10px] font-bold uppercase tracking-wider"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-500/10 border border-sky-500/40 text-sky-700 dark:text-sky-400 text-xs font-bold uppercase tracking-wider"
                   title="Estacionado em vaga de visitante"
                 >
-                  <Car className="w-3 h-3" strokeWidth={2.5} />
+                  <Car className="w-4 h-4" strokeWidth={2.5} />
                   Vaga Visitante
                 </span>
               )}
@@ -188,7 +188,7 @@ export default function VisitanteCard({
         <button
           onClick={() => onRegistrarSaida(visitante.id!)}
           disabled={loading}
-          className="group/btn bg-gradient-to-br from-secondary to-secondary-fixed-dim text-on-secondary text-sm font-semibold rounded-lg px-4 py-2.5 hover:shadow-ambient-2 transition-all shadow-ambient-1 disabled:opacity-50 flex items-center justify-center gap-1.5"
+          className="group/btn bg-rose-500/90 hover:bg-rose-600 text-white text-sm font-semibold rounded-lg px-4 py-2.5 hover:shadow-ambient-2 transition-all shadow-ambient-1 disabled:opacity-50 flex items-center justify-center gap-1.5"
         >
           <LogOut className="w-4 h-4 transition-transform group-hover/btn:translate-x-0.5" />
           Dar Baixa
