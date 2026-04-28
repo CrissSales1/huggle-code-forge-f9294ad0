@@ -49,11 +49,16 @@ export default function VisitanteCard({
           <h3 className="text-h3 font-semibold text-on-surface mb-2 truncate" title={visitante.nome}>
             {visitante.nome}
           </h3>
-          <div className="flex items-center gap-1.5 flex-nowrap overflow-hidden">
-            {/* Chip Casa visitada */}
-            <div className="inline-flex items-center gap-1 bg-primary/10 border border-primary/25 text-primary px-2 py-1 rounded-full text-label-caps font-semibold flex-shrink-0">
-              <Home className="w-3.5 h-3.5 flex-shrink-0" strokeWidth={2.5} />
-              <span className="truncate max-w-[70px]" title={visitante.casa_visitada}>
+          <div className="flex items-center gap-2 flex-nowrap overflow-hidden">
+            {/* Chip Casa visitada — destaque principal */}
+            <div className="inline-flex items-center gap-1.5 bg-primary/10 border border-primary/30 text-primary pl-1.5 pr-2.5 py-1 rounded-full shadow-ambient-1 flex-shrink-0">
+              <span className="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center flex-shrink-0">
+                <Home className="w-3.5 h-3.5" strokeWidth={2.75} />
+              </span>
+              <span
+                className="font-bold text-body-sm leading-none truncate max-w-[90px]"
+                title={`Casa ${visitante.casa_visitada}`}
+              >
                 {visitante.casa_visitada}
               </span>
             </div>
