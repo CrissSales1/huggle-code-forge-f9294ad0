@@ -3,6 +3,7 @@ import { Search, Download, FileText, Clock, TrendingUp, ChevronLeft, ChevronRigh
 import { useRelatorios, buscarTodosParaExportar } from '@/react-app/hooks/useApi';
 import { normalizarNumeroCasa } from '@/react-app/utils/formatters';
 import PlacaVeiculo from '@/react-app/components/PlacaVeiculo';
+import PrismaBadge from '@/react-app/components/PrismaBadge';
 import { exportarRelatorioPDF } from '@/react-app/utils/pdfExport';
 import type { FiltroRelatorioType, RelatorioResultado } from '@/shared/types';
 
@@ -739,25 +740,7 @@ export default function Relatorios() {
                         <td className="px-3 lg:px-4 py-3 lg:py-4 whitespace-nowrap text-center">
                           {visitante.numero_prisma ? (
                             <div className="flex justify-center">
-                              <div className="relative w-10 h-10">
-                                {/* Face frontal do prisma */}
-                                <div className="absolute inset-0 bg-gradient-to-br from-orange-400 to-orange-600 rounded-lg transform perspective-1000 shadow-lg border border-orange-500">
-                                  {/* Face lateral direita (efeito 3D) */}
-                                  <div className="absolute top-0 right-0 w-1.5 h-full bg-gradient-to-b from-orange-500 to-orange-700 transform skew-y-12 origin-top-right rounded-r-lg"></div>
-                                  {/* Face superior (efeito 3D) */}
-                                  <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-orange-300 to-orange-500 transform skew-x-12 origin-top-left rounded-t-lg"></div>
-                                  
-                                  {/* Número do prisma centralizado */}
-                                  <div className="absolute inset-0 flex items-center justify-center">
-                                    <span className="font-black text-white text-base drop-shadow-lg tracking-tight" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-                                      {visitante.numero_prisma}
-                                    </span>
-                                  </div>
-                                  
-                                  {/* Brilho/highlight no prisma */}
-                                  <div className="absolute top-1 left-1 w-2 h-2 bg-white opacity-30 rounded-full blur-sm"></div>
-                                </div>
-                              </div>
+                              <PrismaBadge numero={visitante.numero_prisma} size="sm" variant="orange" />
                             </div>
                           ) : (
                             <span className="text-gray-400 text-sm">-</span>
