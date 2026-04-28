@@ -11,8 +11,6 @@ import {
   LogOut,
   Menu,
   X,
-  Clock,
-  Calendar,
 } from 'lucide-react';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { useDateTime } from '@/react-app/hooks/useDateTime';
@@ -32,7 +30,7 @@ const navigationItems = [
 export default function SideNavBar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { logout } = useAuth();
-  const { formattedDate, formattedTime } = useDateTime();
+  const { formattedDateShort, formattedTime } = useDateTime();
   const { isActive: isMonitoringActive } = useMonitoring();
   const { isActive: isVigilanciaActive } = useVigilancia();
 
@@ -107,13 +105,17 @@ export default function SideNavBar() {
           </div>
         )}
 
-        <div className="flex items-center gap-2 px-3 py-2 text-on-surface-variant rounded-lg bg-surface-container">
-          <Clock className="w-4 h-4 text-outline" />
-          <span className="font-mono font-bold text-sm text-on-surface">{formattedTime}</span>
-        </div>
-        <div className="flex items-center gap-2 px-3 py-2 text-on-surface-variant rounded-lg bg-surface-container">
-          <Calendar className="w-4 h-4 text-outline" />
-          <span className="text-xs font-medium capitalize truncate">{formattedDate}</span>
+        {/* Widget unificado de relógio + data */}
+        <div className="px-3 py-2.5 rounded-xl border border-outline-variant/50 bg-gradient-to-br from-surface-container to-surface-container-high shadow-ambient-1">
+          <div className="flex items-center justify-between">
+            <span className="font-mono font-bold text-xl tabular-nums tracking-tight text-on-surface leading-none">
+              {formattedTime}
+            </span>
+            <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse" aria-hidden />
+          </div>
+          <div className="mt-1.5 text-[11px] font-medium text-on-surface-variant capitalize tracking-wide truncate">
+            {formattedDateShort}
+          </div>
         </div>
 
         <button
@@ -145,7 +147,10 @@ export default function SideNavBar() {
           <h1 className="text-base font-bold text-primary truncate">Águas da Fonte</h1>
         </div>
         <div className="flex items-center gap-2">
-          <span className="font-mono font-bold text-sm text-on-surface">{formattedTime}</span>
+          <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-surface-container">
+            <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse" aria-hidden />
+            <span className="font-mono font-bold text-sm tabular-nums text-on-surface">{formattedTime}</span>
+          </span>
           <button
             onClick={() => setMobileOpen((v) => !v)}
             aria-label="Abrir menu"
