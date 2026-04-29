@@ -23,6 +23,7 @@ export default function EditarVisitanteModal({ isOpen, onClose, visitante, onSuc
   const [estacionarVagaMorador, setEstacionarVagaMorador] = useState(false);
   const [numeroPrisma, setNumeroPrisma] = useState<number | null>(null);
   const [prismasDisponiveis, setPrismasDisponiveis] = useState<number[]>([]);
+  const [editandoPrisma, setEditandoPrisma] = useState(false);
 
   const { editarVisitante, loading, error } = useVisitanteActions();
 
