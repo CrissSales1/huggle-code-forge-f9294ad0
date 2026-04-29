@@ -124,7 +124,7 @@ export default function VisitanteCard({
           <div className="h-px bg-outline-variant/40" aria-hidden />
 
           {/* Coluna esquerda — base: placa centralizada na largura da linha (colada nela) */}
-          <div className="pt-1.5 flex justify-center">
+          <div className="pt-0.5 flex justify-center">
             <PlacaVeiculo placa={visitante.placa_veiculo} size="md" />
           </div>
         </div>
@@ -139,11 +139,14 @@ export default function VisitanteCard({
             className="inline-flex items-center gap-1.5 bg-primary/10 text-primary pl-0.5 pr-2.5 py-1 rounded-full"
             title={`Casa ${visitante.casa_visitada}`}
           >
-            <span className="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center flex-shrink-0">
+            <span className="relative w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center flex-shrink-0">
               <Home className="w-4 h-4" strokeWidth={2.75} />
             </span>
-            <span className="text-xs font-bold leading-none truncate max-w-[70px]">
-              {visitante.casa_visitada}
+            <span className="flex flex-col leading-none">
+              <span className="text-[8px] font-bold uppercase tracking-wider text-primary/70">Casa</span>
+              <span className="text-xs font-bold leading-none truncate max-w-[70px] mt-0.5">
+                {visitante.casa_visitada}
+              </span>
             </span>
           </div>
 
