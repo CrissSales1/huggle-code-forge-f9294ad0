@@ -151,13 +151,17 @@ export default function VisitanteCard({
           </div>
 
           {/* Prisma 3D */}
-          <PrismaBadge
-            numero={visitante.numero_prisma}
-            size="sm"
-            variant={alertaPermanenciaProlongada ? 'error' : 'orange'}
-            withGroundShadow
-            className="flex-shrink-0"
-          />
+          <div className="flex flex-col items-center flex-shrink-0">
+            <span className="text-[9px] font-bold uppercase tracking-wider text-outline mb-0.5">
+              Prisma
+            </span>
+            <PrismaBadge
+              numero={visitante.numero_prisma}
+              size="sm"
+              variant={alertaPermanenciaProlongada ? 'error' : 'orange'}
+              withGroundShadow
+            />
+          </div>
         </div>
       </div>
 
