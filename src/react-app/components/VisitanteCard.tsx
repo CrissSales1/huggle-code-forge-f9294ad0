@@ -221,23 +221,61 @@ export default function VisitanteCard({
       </div>
 
       {/* Ações */}
-      <div className="px-4 py-3 border-t border-outline-variant/40 grid grid-cols-[1fr_auto] gap-2 bg-surface-container-low/40">
-        <button
-          onClick={() => onEdit(visitante)}
-          disabled={loading}
-          className="text-primary text-sm font-semibold rounded-lg py-2.5 hover:bg-primary/10 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
-        >
-          <Edit className="w-4 h-4" />
-          Editar
-        </button>
-        <button
-          onClick={() => onRegistrarSaida(visitante.id!)}
-          disabled={loading}
-          className="group/btn bg-rose-500/90 hover:bg-rose-600 text-white text-sm font-semibold rounded-lg px-4 py-2.5 hover:shadow-ambient-2 transition-all shadow-ambient-1 disabled:opacity-50 flex items-center justify-center gap-1.5"
-        >
-          <LogOut className="w-4 h-4 transition-transform group-hover/btn:translate-x-0.5" />
-          Dar Baixa
-        </button>
+      <div className="px-4 py-3 border-t border-outline-variant/40 bg-surface-container-low/40">
+        {!confirmandoBaixa ? (
+          <div className="grid grid-cols-[1fr_auto] gap-2">
+            <button
+              onClick={() => onEdit(visitante)}
+              disabled={loading}
+              className="text-primary text-sm font-semibold rounded-lg py-2.5 hover:bg-primary/10 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+            >
+              <Edit className="w-4 h-4" />
+              Editar
+            </button>
+            <button
+              onClick={iniciarConfirmacao}
+              disabled={loading}
+              className="group/btn bg-rose-500/90 hover:bg-rose-600 text-white text-sm font-semibold rounded-lg px-4 py-2.5 hover:shadow-ambient-2 transition-all shadow-ambient-1 disabled:opacity-50 flex items-center justify-center gap-1.5"
+            >
+              <LogOut className="w-4 h-4 transition-transform group-hover/btn:translate-x-0.5" />
+              Dar Baixa
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <p
+                className="text-[12px] font-semibold text-on-surface flex items-center gap-1.5"
+                aria-live="polite"
+              >
+                <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                Confirmando saída em <span className="font-mono tabular-nums text-rose-500 text-sm">{countdown}s</span>…
+              </p>
+            </div>
+            <div className="h-1.5 w-full rounded-full bg-rose-500/15 overflow-hidden">
+              <div
+                className="h-full bg-rose-500 transition-all duration-1000 ease-linear"
+                style={{ width: `${(countdown / COUNTDOWN_INICIAL) * 100}%` }}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2 mt-1">
+              <button
+                onClick={cancelarConfirmacao}
+                className="text-on-surface text-sm font-semibold rounded-lg py-2 border border-outline-variant hover:bg-surface-container transition-colors flex items-center justify-center gap-1.5"
+              >
+                <X className="w-4 h-4" />
+                Cancelar
+              </button>
+              <button
+                onClick={confirmarAgora}
+                className="bg-rose-500 hover:bg-rose-600 text-white text-sm font-semibold rounded-lg py-2 transition-colors flex items-center justify-center gap-1.5 shadow-ambient-1"
+              >
+                <Check className="w-4 h-4" />
+                Confirmar
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
