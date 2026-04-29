@@ -127,7 +127,7 @@ export default function VisitanteCard({
           <div className="h-px bg-outline-variant/40" aria-hidden />
 
           {/* Coluna esquerda — base: placa colada logo abaixo da linha */}
-          <div className="pt-1.5 flex justify-center self-start">
+          <div className="flex justify-center self-start -mt-0.5">
             <PlacaVeiculo placa={visitante.placa_veiculo} size="sm" />
           </div>
         </div>
