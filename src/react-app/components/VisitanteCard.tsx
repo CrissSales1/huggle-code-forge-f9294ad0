@@ -126,8 +126,8 @@ export default function VisitanteCard({
           {/* Linha divisória atravessando o card (apenas na coluna esquerda, alinhada ao meio do badge) */}
           <div className="h-px bg-outline-variant/40" aria-hidden />
 
-          {/* Coluna esquerda — base: placa centralizada na largura da linha (colada nela) */}
-          <div className="pt-1 flex justify-center">
+          {/* Coluna esquerda — base: placa colada logo abaixo da linha */}
+          <div className="pt-1.5 flex justify-center self-start">
             <PlacaVeiculo placa={visitante.placa_veiculo} size="sm" />
           </div>
         </div>
