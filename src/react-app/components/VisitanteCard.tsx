@@ -1,4 +1,5 @@
-import { AlertTriangle, Edit, LogOut, Home, Car, Info } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { AlertTriangle, Edit, LogOut, Home, Car, Info, X, Check } from 'lucide-react';
 import PlacaVeiculo from './PlacaVeiculo';
 import PrismaBadge from './PrismaBadge';
 import { useLiveTimer } from '@/react-app/hooks/useLiveTimer';
@@ -19,6 +20,50 @@ export default function VisitanteCard({
 }: VisitanteCardProps) {
   const tempoPermanenciaHoras = useLiveTimer(visitante.hora_entrada!);
   const alertaPermanenciaProlongada = tempoPermanenciaHoras > 24;
+
+  const COUNTDOWN_INICIAL = 5;
+  const [confirmandoBaixa, setConfirmandoBaixa] = useState(false);
+  const [countdown, setCountdown] = useState(COUNTDOWN_INICIAL);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const limparInterval = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  };
+
+  useEffect(() => () => limparInterval(), []);
+
+  const iniciarConfirmacao = () => {
+    setCountdown(COUNTDOWN_INICIAL);
+    setConfirmandoBaixa(true);
+    limparInterval();
+    intervalRef.current = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          limparInterval();
+          setConfirmandoBaixa(false);
+          onRegistrarSaida(visitante.id!);
+          return COUNTDOWN_INICIAL;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const cancelarConfirmacao = () => {
+    limparInterval();
+    setConfirmandoBaixa(false);
+    setCountdown(COUNTDOWN_INICIAL);
+  };
+
+  const confirmarAgora = () => {
+    limparInterval();
+    setConfirmandoBaixa(false);
+    setCountdown(COUNTDOWN_INICIAL);
+    onRegistrarSaida(visitante.id!);
+  };
 
   const formatarHoraCurta = (hora: string) =>
     new Date(hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -61,23 +106,23 @@ export default function VisitanteCard({
             <div className="mt-1 h-px bg-outline-variant/40" />
 
             <div className="mt-2.5 flex items-center gap-2 flex-wrap">
-              {/* Chip Casa visitada */}
+              {/* Chip Casa visitada — ícone maior */}
               <div
-                className="inline-flex items-center gap-1.5 bg-primary/10 text-primary pl-1 pr-3 py-1 rounded-full"
+                className="inline-flex items-center gap-2 bg-primary/10 text-primary pl-1 pr-3.5 py-1 rounded-full"
                 title={`Casa ${visitante.casa_visitada}`}
               >
-                <span className="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center flex-shrink-0">
-                  <Home className="w-3.5 h-3.5" strokeWidth={2.75} />
+                <span className="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center flex-shrink-0">
+                  <Home className="w-5 h-5" strokeWidth={2.75} />
                 </span>
-                <span className="text-sm font-bold leading-none truncate max-w-[110px]">
+                <span className="text-sm font-bold leading-none truncate max-w-[80px]">
                   {visitante.casa_visitada}
                 </span>
               </div>
 
-              {/* Tag Vaga — cores distintas por tipo */}
+              {/* Tag Vaga — ao lado do chip casa */}
               {visitante.estacionar_vaga_morador ? (
                 <span
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/40 text-amber-700 dark:text-amber-400 text-xs font-bold uppercase tracking-wider"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/40 text-amber-700 dark:text-amber-400 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap"
                   title="Estacionado em vaga de morador"
                 >
                   <Car className="w-4 h-4" strokeWidth={2.5} />
@@ -85,7 +130,7 @@ export default function VisitanteCard({
                 </span>
               ) : (
                 <span
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-500/10 border border-sky-500/40 text-sky-700 dark:text-sky-400 text-xs font-bold uppercase tracking-wider"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-500/10 border border-sky-500/40 text-sky-700 dark:text-sky-400 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap"
                   title="Estacionado em vaga de visitante"
                 >
                   <Car className="w-4 h-4" strokeWidth={2.5} />
@@ -176,23 +221,61 @@ export default function VisitanteCard({
       </div>
 
       {/* Ações */}
-      <div className="px-4 py-3 border-t border-outline-variant/40 grid grid-cols-[1fr_auto] gap-2 bg-surface-container-low/40">
-        <button
-          onClick={() => onEdit(visitante)}
-          disabled={loading}
-          className="text-primary text-sm font-semibold rounded-lg py-2.5 hover:bg-primary/10 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
-        >
-          <Edit className="w-4 h-4" />
-          Editar
-        </button>
-        <button
-          onClick={() => onRegistrarSaida(visitante.id!)}
-          disabled={loading}
-          className="group/btn bg-rose-500/90 hover:bg-rose-600 text-white text-sm font-semibold rounded-lg px-4 py-2.5 hover:shadow-ambient-2 transition-all shadow-ambient-1 disabled:opacity-50 flex items-center justify-center gap-1.5"
-        >
-          <LogOut className="w-4 h-4 transition-transform group-hover/btn:translate-x-0.5" />
-          Dar Baixa
-        </button>
+      <div className="px-4 py-3 border-t border-outline-variant/40 bg-surface-container-low/40">
+        {!confirmandoBaixa ? (
+          <div className="grid grid-cols-[1fr_auto] gap-2">
+            <button
+              onClick={() => onEdit(visitante)}
+              disabled={loading}
+              className="text-primary text-sm font-semibold rounded-lg py-2.5 hover:bg-primary/10 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+            >
+              <Edit className="w-4 h-4" />
+              Editar
+            </button>
+            <button
+              onClick={iniciarConfirmacao}
+              disabled={loading}
+              className="group/btn bg-rose-500/90 hover:bg-rose-600 text-white text-sm font-semibold rounded-lg px-4 py-2.5 hover:shadow-ambient-2 transition-all shadow-ambient-1 disabled:opacity-50 flex items-center justify-center gap-1.5"
+            >
+              <LogOut className="w-4 h-4 transition-transform group-hover/btn:translate-x-0.5" />
+              Dar Baixa
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <p
+                className="text-[12px] font-semibold text-on-surface flex items-center gap-1.5"
+                aria-live="polite"
+              >
+                <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                Confirmando saída em <span className="font-mono tabular-nums text-rose-500 text-sm">{countdown}s</span>…
+              </p>
+            </div>
+            <div className="h-1.5 w-full rounded-full bg-rose-500/15 overflow-hidden">
+              <div
+                className="h-full bg-rose-500 transition-all duration-1000 ease-linear"
+                style={{ width: `${(countdown / COUNTDOWN_INICIAL) * 100}%` }}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2 mt-1">
+              <button
+                onClick={cancelarConfirmacao}
+                className="text-on-surface text-sm font-semibold rounded-lg py-2 border border-outline-variant hover:bg-surface-container transition-colors flex items-center justify-center gap-1.5"
+              >
+                <X className="w-4 h-4" />
+                Cancelar
+              </button>
+              <button
+                onClick={confirmarAgora}
+                className="bg-rose-500 hover:bg-rose-600 text-white text-sm font-semibold rounded-lg py-2 transition-colors flex items-center justify-center gap-1.5 shadow-ambient-1"
+              >
+                <Check className="w-4 h-4" />
+                Confirmar
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
