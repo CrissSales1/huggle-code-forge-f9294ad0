@@ -139,15 +139,23 @@ export default function VisitanteCard({
         {/* Casa + Tipo de vaga ocupando a largura do card */}
         <div className="grid grid-cols-[auto_1fr] gap-1.5 items-stretch">
           <div
-            className="inline-flex items-center gap-1.5 bg-primary/10 text-primary pl-0.5 pr-2.5 py-1 rounded-full"
+            className="inline-flex items-center gap-2 bg-gradient-to-br from-primary/15 to-primary/5 text-primary pl-1 pr-3 py-1 rounded-full ring-1 ring-primary/30 shadow-ambient-1"
             title={`Casa ${visitante.casa_visitada}`}
           >
-            <span className="relative w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center flex-shrink-0">
-              <Home className="w-4 h-4" strokeWidth={2.75} />
+            <span className="relative w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary-container text-on-primary flex items-center justify-center flex-shrink-0 shadow-ambient-2 ring-2 ring-primary/20">
+              <Home className="w-4.5 h-4.5" strokeWidth={2.75} style={{ width: '1.125rem', height: '1.125rem' }} />
             </span>
             <span className="flex flex-col leading-none">
-              <span className="text-[8px] font-bold uppercase tracking-wider text-primary/70">Casa</span>
-              <span className="text-xs font-bold leading-none truncate max-w-[70px] mt-0.5">
+              <span
+                className="text-[9px] font-bold uppercase tracking-[0.12em] text-primary/70"
+                style={{ fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif" }}
+              >
+                Casa
+              </span>
+              <span
+                className="text-sm font-extrabold leading-none truncate max-w-[80px] mt-0.5 text-primary"
+                style={{ fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif", letterSpacing: '-0.01em' }}
+              >
                 {visitante.casa_visitada}
               </span>
             </span>

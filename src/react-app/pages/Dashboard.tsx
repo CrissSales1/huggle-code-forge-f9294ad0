@@ -95,7 +95,7 @@ export default function Dashboard() {
           value={stats?.prismas_disponiveis ?? 0}
           icon={Hash}
           color="blue"
-          subtitle="no claviculário"
+          subtitle="na portaria"
           loading={loadingStats}
         />
         <StatsCard
