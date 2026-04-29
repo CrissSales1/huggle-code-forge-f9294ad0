@@ -117,7 +117,7 @@ export default function VisitanteCard({
             </span>
             <PrismaBadge
               numero={visitante.numero_prisma}
-              size="lg"
+              size="md"
               variant={alertaPermanenciaProlongada ? 'error' : 'orange'}
               withGroundShadow
             />
