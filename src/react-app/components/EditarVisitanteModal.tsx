@@ -257,56 +257,96 @@ export default function EditarVisitanteModal({ isOpen, onClose, visitante, onSuc
           </div>
         </div>
 
-        {/* Seleção de Prisma — grade visual */}
+        {/* Seleção de Prisma — colapsado por padrão */}
         <div className="pt-1">
           <label className="block text-label-caps uppercase text-on-surface-variant mb-1.5">
             Prisma magnético
           </label>
-          <div className="grid grid-cols-6 sm:grid-cols-8 gap-2">
-            {/* Sem prisma */}
-            <button
-              type="button"
-              onClick={() => setNumeroPrisma(null)}
-              className={`aspect-square flex flex-col items-center justify-center gap-1 rounded-card p-2 transition-all ${
-                numeroPrisma === null
-                  ? 'border-2 border-primary bg-primary-container/30 shadow-ambient-1'
-                  : 'border border-outline-variant bg-surface-container-low hover:bg-surface-container hover:-translate-y-0.5'
-              }`}
-              title="Sem prisma"
-            >
-              <Ban className={`w-5 h-5 ${numeroPrisma === null ? 'text-primary' : 'text-on-surface-variant'}`} />
-              <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Sem</span>
-            </button>
 
-            {opcoesPrismas.map((numero) => {
-              const isSelecionado = numero === numeroPrisma;
-              const isAtual = numero === prismaAtualOriginal;
-              return (
+          {!editandoPrisma ? (
+            <div className="flex items-center gap-3 px-3 py-2.5 rounded-btn border border-outline-variant bg-surface-container-low">
+              {numeroPrisma !== null ? (
+                <PrismaBadge numero={numeroPrisma} size="sm" withGroundShadow />
+              ) : (
+                <span className="w-9 h-9 rounded-full bg-surface-container-highest flex items-center justify-center">
+                  <Ban className="w-4 h-4 text-on-surface-variant" />
+                </span>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-body-md font-semibold text-on-surface leading-tight">
+                  {numeroPrisma !== null ? `Prisma ${numeroPrisma}` : 'Sem prisma'}
+                </p>
+                <p className="text-[11px] text-on-surface-variant mt-0.5">
+                  Prisma atual do visitante
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditandoPrisma(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-button font-semibold text-primary hover:bg-primary-container/40 rounded-btn transition-colors"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                Alterar
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-6 sm:grid-cols-8 gap-2">
+                {/* Sem prisma */}
                 <button
-                  key={numero}
                   type="button"
-                  onClick={() => setNumeroPrisma(numero)}
-                  className={`group relative aspect-square flex flex-col items-center justify-center gap-1 rounded-card p-2 transition-all ${
-                    isSelecionado
-                      ? 'border-2 border-primary bg-primary-container/30 shadow-ambient-2'
-                      : 'border border-outline-variant bg-surface-container-low hover:bg-primary-container/20 hover:border-primary/60 hover:-translate-y-0.5'
+                  onClick={() => setNumeroPrisma(null)}
+                  className={`aspect-square flex flex-col items-center justify-center gap-1 rounded-card p-2 transition-all ${
+                    numeroPrisma === null
+                      ? 'border-2 border-primary bg-primary-container/30 shadow-ambient-1'
+                      : 'border border-outline-variant bg-surface-container-low hover:bg-surface-container hover:-translate-y-0.5'
                   }`}
+                  title="Sem prisma"
                 >
-                  <PrismaBadge
-                    numero={numero}
-                    size="md"
-                    withGroundShadow
-                    className="group-hover:scale-105 transition-transform"
-                  />
-                  {isAtual && (
-                    <span className="absolute -top-1.5 -right-1.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-primary text-on-primary shadow-ambient-1">
-                      Atual
-                    </span>
-                  )}
+                  <Ban className={`w-5 h-5 ${numeroPrisma === null ? 'text-primary' : 'text-on-surface-variant'}`} />
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Sem</span>
                 </button>
-              );
-            })}
-          </div>
+
+                {opcoesPrismas.map((numero) => {
+                  const isSelecionado = numero === numeroPrisma;
+                  const isAtual = numero === prismaAtualOriginal;
+                  return (
+                    <button
+                      key={numero}
+                      type="button"
+                      onClick={() => setNumeroPrisma(numero)}
+                      className={`group relative aspect-square flex flex-col items-center justify-center gap-1 rounded-card p-2 transition-all ${
+                        isSelecionado
+                          ? 'border-2 border-primary bg-primary-container/30 shadow-ambient-2'
+                          : 'border border-outline-variant bg-surface-container-low hover:bg-primary-container/20 hover:border-primary/60 hover:-translate-y-0.5'
+                      }`}
+                    >
+                      <PrismaBadge
+                        numero={numero}
+                        size="md"
+                        withGroundShadow
+                        className="group-hover:scale-105 transition-transform"
+                      />
+                      {isAtual && (
+                        <span className="absolute -top-1.5 -right-1.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-primary text-on-primary shadow-ambient-1">
+                          Atual
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex justify-end mt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditandoPrisma(false)}
+                  className="text-button font-semibold text-on-surface-variant hover:text-on-surface transition-colors"
+                >
+                  Recolher
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Rodapé */}
