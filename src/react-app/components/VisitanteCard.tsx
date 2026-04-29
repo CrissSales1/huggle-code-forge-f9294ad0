@@ -93,43 +93,37 @@ export default function VisitanteCard({
       {/* Faixa de acento superior */}
       <div className={`h-0.5 w-full ${accentGradient}`} aria-hidden />
 
-      {/* Header — linha divisória centralizada no badge */}
-      <div className="relative p-3 pb-2">
-        <div className="grid grid-cols-[1fr_auto] gap-x-2.5">
-          {/* Coluna esquerda — topo: nome */}
-          <div className="min-w-0 pb-1 flex items-end">
-            <h3
-              className="text-[15px] font-extrabold tracking-tight text-on-surface truncate leading-none"
-              style={{ fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif", letterSpacing: '-0.02em' }}
-              title={visitante.nome}
-            >
-              {visitante.nome}
-            </h3>
-          </div>
+      {/* Header — placa próxima da linha, sem herdar altura do prisma */}
+      <div className="relative p-3 pb-1.5">
+        <div className="min-w-0 pr-16">
+          <h3
+            className="text-[15px] font-extrabold tracking-tight text-on-surface truncate leading-none"
+            style={{ fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif", letterSpacing: '-0.02em' }}
+            title={visitante.nome}
+          >
+            {visitante.nome}
+          </h3>
 
-          {/* Coluna direita — badge ocupa as duas linhas, centralizado verticalmente */}
-          <div className="row-span-2 self-center flex flex-col items-center flex-shrink-0">
-            <span
-              className="text-[9px] font-bold uppercase tracking-[0.12em] text-outline mb-1"
-              style={{ fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif" }}
-            >
-              Prisma
-            </span>
-            <PrismaBadge
-              numero={visitante.numero_prisma}
-              size="md"
-              variant={alertaPermanenciaProlongada ? 'error' : 'orange'}
-              withGroundShadow
-            />
-          </div>
+          <div className="h-px bg-outline-variant/40 mt-1" aria-hidden />
 
-          {/* Linha divisória atravessando o card (apenas na coluna esquerda, alinhada ao meio do badge) */}
-          <div className="h-px bg-outline-variant/40" aria-hidden />
-
-          {/* Coluna esquerda — base: placa colada logo abaixo da linha */}
-          <div className="flex justify-center self-start -mt-0.5">
+          <div className="flex justify-center mt-0.5">
             <PlacaVeiculo placa={visitante.placa_veiculo} size="sm" />
           </div>
+        </div>
+
+        <div className="absolute top-3 right-3 flex flex-col items-center flex-shrink-0">
+          <span
+            className="text-[9px] font-bold uppercase tracking-[0.12em] text-outline mb-1"
+            style={{ fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif" }}
+          >
+            Prisma
+          </span>
+          <PrismaBadge
+            numero={visitante.numero_prisma}
+            size="md"
+            variant={alertaPermanenciaProlongada ? 'error' : 'orange'}
+            withGroundShadow
+          />
         </div>
       </div>
 
