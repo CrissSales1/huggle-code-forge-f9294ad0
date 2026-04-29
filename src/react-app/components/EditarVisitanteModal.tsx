@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, Home, UserCheck, Ban } from 'lucide-react';
+import { AlertTriangle, Home, UserCheck, Ban, Pencil } from 'lucide-react';
 import Modal from './Modal';
 import PrismaBadge from './PrismaBadge';
 import { useVisitanteActions } from '@/react-app/hooks/useApi';
