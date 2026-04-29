@@ -40,6 +40,7 @@ export default function Dashboard() {
   };
 
   const handleEditSuccess = () => {
+    refetchStats();
     refetchVisitantes();
     setVisitanteEditando(null);
   };
