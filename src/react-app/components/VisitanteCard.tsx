@@ -207,22 +207,32 @@ export default function VisitanteCard({
           </div>
         </div>
 
-        {/* Observações / liberado por */}
-        {(visitante.observacoes || visitante.liberado_por) && (
+        {/* Liberado por — card próprio */}
+        {visitante.liberado_por && (
+          <div className="flex items-start gap-2 bg-emerald-500/5 border border-emerald-500/20 p-2.5 rounded-lg">
+            <UserCheck className="text-emerald-600 dark:text-emerald-400 w-4 h-4 mt-0.5 flex-shrink-0" />
+            <div className="min-w-0 leading-snug">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 mb-0.5">
+                Liberado por
+              </p>
+              <p className="text-[12px] font-semibold text-on-surface truncate" title={visitante.liberado_por}>
+                {visitante.liberado_por}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Observações — card próprio */}
+        {visitante.observacoes && (
           <div className="flex items-start gap-2 bg-surface-container-low/60 p-2.5 rounded-lg">
-            <Info className="text-outline w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-            <div className="text-[12px] text-on-surface-variant min-w-0 leading-snug">
-              {visitante.liberado_por && (
-                <p className="truncate">
-                  <span className="font-semibold text-on-surface">Liberado por:</span>{' '}
-                  {visitante.liberado_por}
-                </p>
-              )}
-              {visitante.observacoes && (
-                <p className="line-clamp-2" title={visitante.observacoes}>
-                  {visitante.observacoes}
-                </p>
-              )}
+            <MessageSquare className="text-outline w-4 h-4 mt-0.5 flex-shrink-0" />
+            <div className="min-w-0 leading-snug">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-outline mb-0.5">
+                Observações
+              </p>
+              <p className="text-[12px] text-on-surface-variant line-clamp-2" title={visitante.observacoes}>
+                {visitante.observacoes}
+              </p>
             </div>
           </div>
         )}
