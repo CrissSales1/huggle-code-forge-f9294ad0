@@ -104,14 +104,14 @@ export default function VisitanteCard({
             {visitante.nome}
           </h3>
 
-          <div className="h-px bg-outline-variant/40 my-1.5" aria-hidden />
+          <div className="h-px bg-outline-variant/40 my-3" aria-hidden />
 
           <div className="flex justify-center">
             <PlacaVeiculo placa={visitante.placa_veiculo} size="sm" />
           </div>
         </div>
 
-        <div className="absolute top-3 right-3 flex flex-col items-center flex-shrink-0">
+        <div className="absolute top-1/2 -translate-y-1/2 right-3 flex flex-col items-center flex-shrink-0">
           <span
             className="text-[10px] font-bold uppercase tracking-[0.12em] text-outline mb-1"
             style={{ fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif" }}
