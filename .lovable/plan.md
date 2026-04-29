@@ -1,52 +1,57 @@
-## Ajustes no `VisitanteCard.tsx`
+## Reestruturação do Header e do Painel de Observações no `VisitanteCard`
 
-### 1. Chip da Casa + Tag da Vaga lado a lado
+### 1. Novo Header — linha divisória centralizada no badge
 
-Atualmente o chip "Casa" e a tag "Vaga" ficam em um `flex-wrap` que quebra para linha de baixo em cards estreitos. Vamos forçar lado a lado e dar mais destaque ao ícone da casa.
+Hoje o nome, a linha divisória e o grupo Casa+Vaga estão empilhados na coluna esquerda, e o badge do Prisma fica solto na direita ocupando toda a altura. Vamos reorganizar para que a linha horizontal atravesse o card no meio do badge, com:
 
-- Remover `flex-wrap` da linha de chips (manter `flex items-center gap-2`, com `min-w-0` para truncar nome da casa se necessário).
-- **Chip Casa (maior e mais destacado):**
-  - Aumentar o círculo do ícone de `w-6 h-6` → `w-8 h-8`.
-  - Aumentar o ícone `Home` de `w-3.5 h-3.5` → `w-5 h-5` (strokeWidth 2.75 mantido).
-  - Padding do chip: `pl-1 pr-3 py-1` → `pl-1 pr-3.5 py-1.5`.
-  - Texto da casa permanece `text-sm font-bold`, com `truncate` e `max-w-[80px]` para garantir que a tag de vaga não seja empurrada para baixo.
-- **Tag Vaga (ao lado, não abaixo):**
-  - Manter as duas variantes (Vaga Morador âmbar / Vaga Visitante azul) com `Car` icon.
-  - Reduzir levemente o texto se necessário (`text-[11px]`) para caber junto ao chip maior em viewport estreito.
-  - Adicionar `whitespace-nowrap` para não quebrar.
-- O badge `+24h` continua na mesma linha quando houver espaço; caso contrário, segue para baixo (mantém `flex-wrap` apenas se for o terceiro item — alternativa: mover `+24h` para próximo do `PrismaBadge`). **Decisão:** manter `+24h` como terceiro item com `flex-wrap` permitido só após a tag de vaga, usando `flex items-center gap-2` + um `<div>` interno com `flex gap-2 min-w-0` para Casa+Vaga e o `+24h` fora dele.
+- **Acima da linha:** Nome do visitante (esquerda) + label "PRISMA" (direita, sobre o topo do badge)
+- **Linha divisória:** atravessa o card inteiro, alinhada verticalmente com o meio do badge 3D
+- **Abaixo da linha:** Chip Casa + Tag Vaga (esquerda, centralizados verticalmente) + metade inferior do badge Prisma (direita)
 
-Estrutura final da linha:
+Layout esquemático:
+
+```text
+┌─────────────────────────────────────────────┐
+│  ULISSES                          PRISMA    │
+│                                  ╱─────╲    │
+│                                 │   1   │   │
+│ ─────────────────────────────── ├───────┤ ──│  ← linha no meio do badge
+│  [🏠 46]  [🚗 VAGA MORADOR]    │       │   │
+│                                  ╲─────╱    │
+└─────────────────────────────────────────────┘
 ```
-[ Chip Casa (ícone grande + nº) ] [ Tag Vaga Morador/Visitante ]   [ +24h opcional ]
-```
 
-### 2. Confirmação de 5s ao "Dar Baixa"
+**Implementação:**
+- Trocar a estrutura `flex items-start gap-3` por um grid de 2 colunas (`grid grid-cols-[1fr_auto] gap-3`) com 2 linhas internas (topo e base) separadas por um `border-t` que ocupa as duas colunas.
+- Coluna direita: container do PrismaBadge com `justify-self-end`, ocupando as duas linhas (`row-span-2`) e centralizado verticalmente — isso garante que a borda horizontal (linha divisória) corte exatamente no meio do badge.
+- Label "PRISMA" passa a ficar acima do header (mesma linha do nome), à direita, sutilmente acima do topo do badge.
+- A linha divisória vira um `<div className="col-span-2 h-px bg-outline-variant/40" />` posicionado entre as duas linhas do grid (com offsets de padding ajustados para casar com o centro do badge `sm` ≈ 2.6rem de altura).
+- Chip Casa e Tag Vaga descem para a linha de baixo, mantendo `flex items-center gap-2 flex-nowrap` (lado a lado, como já está). Tag `+24h` permanece como terceiro item com `flex-wrap` permitido só após a vaga.
 
-Substituir a ação imediata por um fluxo de confirmação com countdown e cancelamento.
+### 2. Separar "Liberado por" de "Observações"
 
-- Adicionar estado local no `VisitanteCard`:
-  - `confirmandoBaixa: boolean`
-  - `countdown: number` (inicia em 5)
-- Ao clicar em **Dar Baixa**:
-  - Setar `confirmandoBaixa = true`, `countdown = 5`.
-  - Iniciar `setInterval` de 1s decrementando o countdown.
-  - Ao chegar em 0: limpar interval e chamar `onRegistrarSaida(visitante.id)` automaticamente.
-- Enquanto `confirmandoBaixa` estiver ativo, o rodapé do card troca de layout:
-  - Esconde os botões "Editar" e "Dar Baixa".
-  - Mostra um painel de confirmação ocupando toda a largura do rodapé:
-    - Texto: `Confirmando saída em {countdown}s…`
-    - Barra de progresso (largura animada baseada em `countdown/5`) com cor `bg-rose-500`.
-    - Botão **Cancelar** (estilo neutro, ícone `X`) que limpa o interval e volta ao estado inicial.
-    - Botão **Confirmar agora** (opcional, estilo `bg-rose-500`) que dispara `onRegistrarSaida` imediatamente sem esperar o countdown.
-- `useEffect` de cleanup: limpar o interval no unmount e quando `confirmandoBaixa` virar `false`.
-- Acessibilidade: `aria-live="polite"` no texto do countdown.
+Hoje os dois compartilham a mesma caixa cinza com um único ícone `Info`. Vamos dividir em **dois cards distintos**, exibidos apenas quando o respectivo campo existir:
+
+- **Card "Liberado por"** (quando `visitante.liberado_por` existir):
+  - Ícone `UserCheck` (lucide) em verde/teal sutil
+  - Label pequena "LIBERADO POR" em uppercase tracking-wider
+  - Valor em destaque (font-semibold)
+  - Fundo: `bg-emerald-500/5` + borda `border-emerald-500/20`
+
+- **Card "Observações"** (quando `visitante.observacoes` existir):
+  - Ícone `MessageSquare` (lucide) em cinza
+  - Label pequena "OBSERVAÇÕES" em uppercase tracking-wider
+  - Texto em `text-on-surface-variant` com `line-clamp-2` (mantém o tooltip via `title`)
+  - Fundo: `bg-surface-container-low/60` (igual ao atual)
+
+Os dois cards ficam empilhados com `gap-2`, abaixo da placa e do painel Entrada/Permanência. Se só um dos campos existir, apenas aquele card aparece — sem caixa vazia.
 
 ### 3. Detalhes técnicos
 
-- Imports adicionais em `VisitanteCard.tsx`: `useState`, `useEffect`, `useRef` (para guardar o id do interval), e `X`, `Check` de `lucide-react`.
-- Nenhuma mudança em `Dashboard.tsx` — `handleRegistrarSaida` continua igual.
-- Nenhuma mudança no hook `useVisitanteActions` nem no backend.
+- Imports adicionais em `VisitanteCard.tsx`: `UserCheck`, `MessageSquare` de `lucide-react` (substituindo o uso único de `Info` para o bloco antigo; `Info` pode ser removido se não usado em outro lugar).
+- Nenhuma mudança em props, hooks, tipos ou em `Dashboard.tsx`.
+- A altura do badge `sm` é `2.6rem` — usar `pt-3` no topo do header e `pb-3` na linha de baixo com a borda no meio garante o alinhamento visual. Caso necessário, ajustar com `items-center` no container do badge (`row-span-2 self-center`).
+- Manter todo o resto do card intacto: faixa de acento superior, painel Entrada/Permanência, rodapé de ações com fluxo de confirmação de 5s.
 
 ### Arquivos afetados
 
