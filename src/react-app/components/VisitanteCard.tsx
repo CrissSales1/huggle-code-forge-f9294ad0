@@ -1,4 +1,5 @@
-import { AlertTriangle, Edit, LogOut, Home, Car, Info } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { AlertTriangle, Edit, LogOut, Home, Car, Info, X, Check } from 'lucide-react';
 import PlacaVeiculo from './PlacaVeiculo';
 import PrismaBadge from './PrismaBadge';
 import { useLiveTimer } from '@/react-app/hooks/useLiveTimer';

@@ -1,48 +1,53 @@
-## Refatorar `EditarVisitanteModal.tsx` para alinhar com o modal de Cadastro
+## Ajustes no `VisitanteCard.tsx`
 
-Reorganizar os campos e padronizar estilos (tokens M3, mesmas classes do `CadastroVisitanteModal`).
+### 1. Chip da Casa + Tag da Vaga lado a lado
 
-### Mudanças no formulário
+Atualmente o chip "Casa" e a tag "Vaga" ficam em um `flex-wrap` que quebra para linha de baixo em cards estreitos. Vamos forçar lado a lado e dar mais destaque ao ícone da casa.
 
-1. **Tamanho do Modal**: usar `size="lg"` (igual ao Cadastro) para acomodar a grade de 12 colunas sem rolagem.
+- Remover `flex-wrap` da linha de chips (manter `flex items-center gap-2`, com `min-w-0` para truncar nome da casa se necessário).
+- **Chip Casa (maior e mais destacado):**
+  - Aumentar o círculo do ícone de `w-6 h-6` → `w-8 h-8`.
+  - Aumentar o ícone `Home` de `w-3.5 h-3.5` → `w-5 h-5` (strokeWidth 2.75 mantido).
+  - Padding do chip: `pl-1 pr-3 py-1` → `pl-1 pr-3.5 py-1.5`.
+  - Texto da casa permanece `text-sm font-bold`, com `truncate` e `max-w-[80px]` para garantir que a tag de vaga não seja empurrada para baixo.
+- **Tag Vaga (ao lado, não abaixo):**
+  - Manter as duas variantes (Vaga Morador âmbar / Vaga Visitante azul) com `Car` icon.
+  - Reduzir levemente o texto se necessário (`text-[11px]`) para caber junto ao chip maior em viewport estreito.
+  - Adicionar `whitespace-nowrap` para não quebrar.
+- O badge `+24h` continua na mesma linha quando houver espaço; caso contrário, segue para baixo (mantém `flex-wrap` apenas se for o terceiro item — alternativa: mover `+24h` para próximo do `PrismaBadge`). **Decisão:** manter `+24h` como terceiro item com `flex-wrap` permitido só após a tag de vaga, usando `flex items-center gap-2` + um `<div>` interno com `flex gap-2 min-w-0` para Casa+Vaga e o `+24h` fora dele.
 
-2. **Casa Visitada + Placa do Veículo lado a lado**:
-   - Substituir os dois blocos verticais por uma `grid grid-cols-12 gap-4`
-   - `col-span-3`: Casa/Apto (centralizado, fonte bold, `maxLength=5`, placeholder `Ex: 102A`)
-   - `col-span-9`: Placa (fonte mono, tracking `0.15em`, `maxLength=7`, placeholder `ABC-1234`)
-   - Manter validação de formato (mensagem de erro abaixo)
+Estrutura final da linha:
+```
+[ Chip Casa (ícone grande + nº) ] [ Tag Vaga Morador/Visitante ]   [ +24h opcional ]
+```
 
-3. **Observações em uma única linha**:
-   - Trocar o `<textarea rows={3}>` por `<input type="text" />` (igual ao Cadastro)
-   - Placeholder: `Informações adicionais relevantes...`
+### 2. Confirmação de 5s ao "Dar Baixa"
 
-4. **Tipo de Vaga (mesmo padrão do Cadastro)**:
-   - Remover os radio buttons atuais
-   - Usar dois botões `grid grid-cols-2 gap-2` com ícone `Home`, label e check `UserCheck`
-   - Vaga Comum (selected → `border-secondary` + `bg-secondary-container/20`) com selo "Padrão"
-   - Vaga Morador (selected → `border-tertiary` + `bg-tertiary-fixed/30`)
-   - Renomear o label para "Onde vai estacionar?"
+Substituir a ação imediata por um fluxo de confirmação com countdown e cancelamento.
 
-5. **Seleção de Prisma (mesmo padrão do Cadastro)**:
-   - Remover o `<select>` HTML
-   - Renderizar uma grade `grid grid-cols-6 sm:grid-cols-8 gap-2` com `PrismaBadge` (size `md`) clicáveis para cada prisma livre + o atual marcado como destacado (border `primary`, ring)
-   - Mostrar o prisma atualmente selecionado com ring/destaque visual e badge "Atual"
-   - Ao clicar, atualiza `numeroPrisma`
-   - Opção "Sem prisma" como botão neutro no início da grade
+- Adicionar estado local no `VisitanteCard`:
+  - `confirmandoBaixa: boolean`
+  - `countdown: number` (inicia em 5)
+- Ao clicar em **Dar Baixa**:
+  - Setar `confirmandoBaixa = true`, `countdown = 5`.
+  - Iniciar `setInterval` de 1s decrementando o countdown.
+  - Ao chegar em 0: limpar interval e chamar `onRegistrarSaida(visitante.id)` automaticamente.
+- Enquanto `confirmandoBaixa` estiver ativo, o rodapé do card troca de layout:
+  - Esconde os botões "Editar" e "Dar Baixa".
+  - Mostra um painel de confirmação ocupando toda a largura do rodapé:
+    - Texto: `Confirmando saída em {countdown}s…`
+    - Barra de progresso (largura animada baseada em `countdown/5`) com cor `bg-rose-500`.
+    - Botão **Cancelar** (estilo neutro, ícone `X`) que limpa o interval e volta ao estado inicial.
+    - Botão **Confirmar agora** (opcional, estilo `bg-rose-500`) que dispara `onRegistrarSaida` imediatamente sem esperar o countdown.
+- `useEffect` de cleanup: limpar o interval no unmount e quando `confirmandoBaixa` virar `false`.
+- Acessibilidade: `aria-live="polite"` no texto do countdown.
 
-6. **Estilos de input/labels**: substituir as classes legadas (`border-gray-300`, `text-gray-700`, `focus:ring-blue-500`) pelos tokens M3 usados no Cadastro:
-   - Labels: `text-label-caps uppercase text-on-surface-variant mb-1.5`
-   - Inputs: `px-3 py-2.5 border border-outline-variant rounded-btn bg-surface-container-lowest text-on-surface uppercase ... focus:border-primary`
+### 3. Detalhes técnicos
 
-7. **Botões do rodapé**: harmonizar com o Cadastro
-   - Cancelar: `text-on-surface-variant hover:bg-surface-container-high rounded-btn`
-   - Salvar: `bg-primary text-on-primary rounded-btn shadow-ambient-1` com ícone `UserCheck` e estado de loading com spinner
+- Imports adicionais em `VisitanteCard.tsx`: `useState`, `useEffect`, `useRef` (para guardar o id do interval), e `X`, `Check` de `lucide-react`.
+- Nenhuma mudança em `Dashboard.tsx` — `handleRegistrarSaida` continua igual.
+- Nenhuma mudança no hook `useVisitanteActions` nem no backend.
 
-8. **Erro**: caixa de erro com `bg-error-container/40 border border-error/30` + ícone `AlertTriangle` (idêntico ao Cadastro).
+### Arquivos afetados
 
-### Lógica preservada
-- Toda a lógica existente (`useEffect` de carga, busca de prismas livres via `supabase`, `editarVisitante`, normalização de casa, uppercase) permanece intacta.
-- O comportamento de "prisma atual sempre disponível" continua via `opcoesPrismas`.
-
-### Arquivo afetado
-- `src/react-app/components/EditarVisitanteModal.tsx` (única alteração)
+- `src/react-app/components/VisitanteCard.tsx` (único arquivo alterado)
