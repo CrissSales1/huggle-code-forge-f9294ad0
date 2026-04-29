@@ -104,16 +104,16 @@ export default function VisitanteCard({
             {visitante.nome}
           </h3>
 
-          <div className="h-px bg-outline-variant/40 mt-1" aria-hidden />
+          <div className="h-px bg-outline-variant/40 my-1.5" aria-hidden />
 
-          <div className="flex justify-center mt-0.5">
+          <div className="flex justify-center">
             <PlacaVeiculo placa={visitante.placa_veiculo} size="sm" />
           </div>
         </div>
 
         <div className="absolute top-3 right-3 flex flex-col items-center flex-shrink-0">
           <span
-            className="text-[9px] font-bold uppercase tracking-[0.12em] text-outline mb-1"
+            className="text-[10px] font-bold uppercase tracking-[0.12em] text-outline mb-1"
             style={{ fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif" }}
           >
             Prisma
@@ -141,13 +141,13 @@ export default function VisitanteCard({
             </span>
             <span className="flex flex-col leading-none">
               <span
-                className="text-[9px] font-bold uppercase tracking-[0.12em] text-primary/70"
+                className="text-[10px] font-bold uppercase tracking-[0.12em] text-primary/70"
                 style={{ fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif" }}
               >
                 Casa
               </span>
               <span
-                className="text-sm font-extrabold leading-none truncate max-w-[80px] mt-0.5 text-primary"
+                className="text-[15px] font-extrabold leading-none truncate max-w-[80px] mt-0.5 text-primary"
                 style={{ fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif", letterSpacing: '-0.01em' }}
               >
                 {visitante.casa_visitada}
@@ -157,7 +157,7 @@ export default function VisitanteCard({
 
           {visitante.estacionar_vaga_morador ? (
             <span
-              className="flex items-center justify-center gap-1.5 px-2 py-1 rounded-full bg-amber-500/10 border border-amber-500/40 text-amber-700 dark:text-amber-400 text-[10px] font-bold uppercase tracking-wider whitespace-nowrap"
+              className="flex items-center justify-center gap-1.5 px-2 py-1 rounded-full bg-amber-500/10 border border-amber-500/40 text-amber-700 dark:text-amber-400 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap"
               title="Estacionado em vaga de morador"
             >
               <Car className="w-3.5 h-3.5" strokeWidth={2.5} />
@@ -165,7 +165,7 @@ export default function VisitanteCard({
             </span>
           ) : (
             <span
-              className="flex items-center justify-center gap-1.5 px-2 py-1 rounded-full bg-sky-500/10 border border-sky-500/40 text-sky-700 dark:text-sky-400 text-[10px] font-bold uppercase tracking-wider whitespace-nowrap"
+              className="flex items-center justify-center gap-1.5 px-2 py-1 rounded-full bg-sky-500/10 border border-sky-500/40 text-sky-700 dark:text-sky-400 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap"
               title="Estacionado em vaga de visitante"
             >
               <Car className="w-3.5 h-3.5" strokeWidth={2.5} />
@@ -176,7 +176,7 @@ export default function VisitanteCard({
 
         {alertaPermanenciaProlongada && (
           <div className="flex justify-center">
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-error/10 text-error text-[9px] font-bold uppercase tracking-wider">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-error/10 text-error text-[10px] font-bold uppercase tracking-wider">
               <AlertTriangle className="w-3 h-3 animate-pulse" />
               +24h
             </span>
@@ -184,24 +184,24 @@ export default function VisitanteCard({
         )}
 
         {/* Painel Entrada / Permanência */}
-        <div className="rounded-lg bg-surface-container/70 backdrop-blur-sm border border-outline-variant/40 p-2 grid grid-cols-2 gap-2">
+        <div className="rounded-lg bg-surface-container/70 backdrop-blur-sm border border-outline-variant/40 p-2 grid grid-cols-2 gap-1.5">
           <div>
-            <p className="text-[9px] font-bold uppercase tracking-wider text-outline mb-0.5">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-outline mb-0.5">
               Entrada
             </p>
-            <p className="font-mono tabular-nums text-xs font-semibold text-on-surface leading-tight">
+            <p className="font-mono tabular-nums text-[13px] font-semibold text-on-surface leading-tight">
               {formatarHoraCurta(visitante.hora_entrada!)}
             </p>
-            <p className="text-[10px] text-on-surface-variant mt-0.5">
+            <p className="text-[11px] text-on-surface-variant mt-0.5">
               {formatarDataDia(visitante.hora_entrada!)}
             </p>
           </div>
           <div className="border-l border-outline-variant/40 pl-2.5">
-            <p className="text-[9px] font-bold uppercase tracking-wider text-outline mb-0.5">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-outline mb-0.5">
               Permanência
             </p>
             <p
-              className={`font-mono tabular-nums text-xs font-semibold leading-tight inline-flex items-center gap-1 ${
+              className={`font-mono tabular-nums text-[13px] font-semibold leading-tight inline-flex items-center gap-1 ${
                 alertaPermanenciaProlongada ? 'text-error' : 'text-on-surface'
               }`}
             >
@@ -213,7 +213,7 @@ export default function VisitanteCard({
               />
               {formatarTempoPermanencia(tempoPermanenciaHoras)}
             </p>
-            <p className="text-[10px] text-on-surface-variant mt-0.5">em tempo real</p>
+            <p className="text-[11px] text-on-surface-variant mt-0.5">em tempo real</p>
           </div>
         </div>
 
@@ -222,10 +222,10 @@ export default function VisitanteCard({
           <div className="flex items-start gap-1.5 bg-emerald-500/5 border border-emerald-500/20 p-2 rounded-lg">
             <UserCheck className="text-emerald-600 dark:text-emerald-400 w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
             <div className="min-w-0 leading-snug">
-              <p className="text-[9px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 mb-0.5">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 mb-0.5">
                 Liberado por
               </p>
-              <p className="text-[11px] font-semibold text-on-surface truncate" title={visitante.liberado_por}>
+              <p className="text-[12px] font-semibold text-on-surface truncate" title={visitante.liberado_por}>
                 {visitante.liberado_por}
               </p>
             </div>
@@ -237,10 +237,10 @@ export default function VisitanteCard({
           <div className="flex items-start gap-1.5 bg-surface-container-low/60 p-2 rounded-lg">
             <MessageSquare className="text-outline w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
             <div className="min-w-0 leading-snug">
-              <p className="text-[9px] font-bold uppercase tracking-wider text-outline mb-0.5">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-outline mb-0.5">
                 Observações
               </p>
-              <p className="text-[11px] text-on-surface-variant line-clamp-2" title={visitante.observacoes}>
+              <p className="text-[12px] text-on-surface-variant line-clamp-2" title={visitante.observacoes}>
                 {visitante.observacoes}
               </p>
             </div>
@@ -255,7 +255,7 @@ export default function VisitanteCard({
             <button
               onClick={() => onEdit(visitante)}
               disabled={loading}
-              className="text-primary text-xs font-semibold rounded-lg py-2 hover:bg-primary/10 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+              className="text-primary text-[13px] font-semibold rounded-lg py-2 hover:bg-primary/10 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
             >
               <Edit className="w-3.5 h-3.5" />
               Editar
@@ -263,7 +263,7 @@ export default function VisitanteCard({
             <button
               onClick={iniciarConfirmacao}
               disabled={loading}
-              className="group/btn bg-rose-500/90 hover:bg-rose-600 text-white text-xs font-semibold rounded-lg px-3 py-2 hover:shadow-ambient-2 transition-all shadow-ambient-1 disabled:opacity-50 flex items-center justify-center gap-1.5"
+              className="group/btn bg-rose-500/90 hover:bg-rose-600 text-white text-[13px] font-semibold rounded-lg px-3 py-2 hover:shadow-ambient-2 transition-all shadow-ambient-1 disabled:opacity-50 flex items-center justify-center gap-1.5"
             >
               <LogOut className="w-3.5 h-3.5 transition-transform group-hover/btn:translate-x-0.5" />
               Dar Baixa
@@ -273,11 +273,11 @@ export default function VisitanteCard({
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center justify-between">
               <p
-                className="text-[11px] font-semibold text-on-surface flex items-center gap-1.5"
+                className="text-[12px] font-semibold text-on-surface flex items-center gap-1.5"
                 aria-live="polite"
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
-                Confirmando saída em <span className="font-mono tabular-nums text-rose-500 text-xs">{countdown}s</span>…
+                Confirmando saída em <span className="font-mono tabular-nums text-rose-500 text-[13px]">{countdown}s</span>…
               </p>
             </div>
             <div className="h-1 w-full rounded-full bg-rose-500/15 overflow-hidden">
@@ -289,14 +289,14 @@ export default function VisitanteCard({
             <div className="grid grid-cols-2 gap-1.5 mt-0.5">
               <button
                 onClick={cancelarConfirmacao}
-                className="text-on-surface text-xs font-semibold rounded-lg py-1.5 border border-outline-variant hover:bg-surface-container transition-colors flex items-center justify-center gap-1.5"
+                className="text-on-surface text-[13px] font-semibold rounded-lg py-1.5 border border-outline-variant hover:bg-surface-container transition-colors flex items-center justify-center gap-1.5"
               >
                 <X className="w-3.5 h-3.5" />
                 Cancelar
               </button>
               <button
                 onClick={confirmarAgora}
-                className="bg-rose-500 hover:bg-rose-600 text-white text-xs font-semibold rounded-lg py-1.5 transition-colors flex items-center justify-center gap-1.5 shadow-ambient-1"
+                className="bg-rose-500 hover:bg-rose-600 text-white text-[13px] font-semibold rounded-lg py-1.5 transition-colors flex items-center justify-center gap-1.5 shadow-ambient-1"
               >
                 <Check className="w-3.5 h-3.5" />
                 Confirmar
