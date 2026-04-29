@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
+import { AlertTriangle, Home, UserCheck, Ban } from 'lucide-react';
 import Modal from './Modal';
+import PrismaBadge from './PrismaBadge';
 import { useVisitanteActions } from '@/react-app/hooks/useApi';
 import { supabase } from '@/integrations/supabase/client';
 import { normalizarNumeroCasa } from '@/react-app/utils/formatters';
@@ -23,6 +25,15 @@ export default function EditarVisitanteModal({ isOpen, onClose, visitante, onSuc
   const [prismasDisponiveis, setPrismasDisponiveis] = useState<number[]>([]);
 
   const { editarVisitante, loading, error } = useVisitanteActions();
+
+  // Validação de placa
+  const isValidPlaca = (placa: string): boolean => {
+    const placaLimpa = placa.replace(/[^A-Z0-9]/g, '').toUpperCase();
+    if (placaLimpa.length !== 7) return false;
+    const formatoAntigo = /^[A-Z]{3}[0-9]{4}$/;
+    const formatoMercosul = /^[A-Z]{3}[0-9][A-Z][0-9]{2}$/;
+    return formatoAntigo.test(placaLimpa) || formatoMercosul.test(placaLimpa);
+  };
 
   useEffect(() => {
     if (!isOpen || !visitante) return;
@@ -71,7 +82,7 @@ export default function EditarVisitanteModal({ isOpen, onClose, visitante, onSuc
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!visitante) return;
 
     const sucesso = await editarVisitante({
@@ -95,139 +106,213 @@ export default function EditarVisitanteModal({ isOpen, onClose, visitante, onSuc
     onClose();
   };
 
+  const prismaAtualOriginal = visitante?.numero_prisma ?? null;
+
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Editar Visitante">
-      <form onSubmit={handleSubmit} className="space-y-4">
+    <Modal isOpen={isOpen} onClose={handleClose} title="Editar Visitante" size="lg">
+      <form onSubmit={handleSubmit} className="space-y-3">
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-            {error}
+          <div className="flex items-start gap-2 bg-error-container/40 border border-error/30 text-on-error-container px-4 py-3 rounded-btn">
+            <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0 text-error" />
+            <span className="text-body-sm">{error}</span>
           </div>
         )}
 
+        {/* Nome */}
         <div>
-          <label htmlFor="nome" className="block text-sm font-medium text-gray-700 mb-2">
-            Nome do Visitante
+          <label htmlFor="nome" className="block text-label-caps uppercase text-on-surface-variant mb-1.5">
+            Nome do visitante *
           </label>
           <input
             type="text"
             id="nome"
             value={nome}
             onChange={(e) => setNome(e.target.value.toUpperCase())}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase"
+            className="w-full px-3 py-2.5 border border-outline-variant rounded-btn bg-surface-container-lowest text-on-surface uppercase placeholder:normal-case placeholder:text-on-surface-variant/60 focus:border-primary"
             required
           />
         </div>
 
-        <div>
-          <label htmlFor="casa" className="block text-sm font-medium text-gray-700 mb-2">
-            Casa Visitada
-          </label>
-          <input
-            type="text"
-            id="casa"
-            value={casaVisitada}
-            onChange={(e) => setCasaVisitada(e.target.value.toUpperCase())}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase"
-            required
-          />
-        </div>
-
-        <div>
-          <label htmlFor="placa" className="block text-sm font-medium text-gray-700 mb-2">
-            Placa do Veículo
-          </label>
-          <input
-            type="text"
-            id="placa"
-            value={placaVeiculo}
-            onChange={(e) => setPlacaVeiculo(e.target.value.toUpperCase())}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            placeholder="ABC1234 ou ABC1A23"
-            maxLength={7}
-            required
-          />
-        </div>
-
-        <div>
-          <label htmlFor="prisma" className="block text-sm font-medium text-gray-700 mb-2">
-            Prisma Magnético
-          </label>
-          <select
-            id="prisma"
-            value={numeroPrisma ?? ''}
-            onChange={(e) => setNumeroPrisma(e.target.value ? Number(e.target.value) : null)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-          >
-            <option value="">Sem prisma</option>
-            {opcoesPrismas.map((numero) => (
-              <option key={numero} value={numero}>
-                Prisma {numero}{numero === visitante?.numero_prisma ? ' (atual)' : ''}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-3">
-            Tipo de Vaga
-          </label>
-          <div className="flex items-center space-x-4">
-            <label className="flex items-center">
-              <input
-                type="radio"
-                name="tipoVaga"
-                checked={!estacionarVagaMorador}
-                onChange={() => setEstacionarVagaMorador(false)}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
-              />
-              <span className="ml-2 text-sm text-gray-700">Vaga de Visitantes</span>
+        {/* Casa + Placa lado a lado */}
+        <div className="grid grid-cols-12 gap-4">
+          <div className="col-span-3">
+            <label htmlFor="casa" className="block text-label-caps uppercase text-on-surface-variant mb-1.5">
+              Casa/Apto *
             </label>
-            <label className="flex items-center">
-              <input
-                type="radio"
-                name="tipoVaga"
-                checked={estacionarVagaMorador}
-                onChange={() => setEstacionarVagaMorador(true)}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
-              />
-              <span className="ml-2 text-sm text-gray-700">Vaga do Morador</span>
+            <input
+              type="text"
+              id="casa"
+              value={casaVisitada}
+              onChange={(e) => setCasaVisitada(e.target.value.toUpperCase())}
+              className="w-full px-3 py-2.5 border border-outline-variant rounded-btn bg-surface-container-lowest text-on-surface uppercase text-center font-bold tracking-wide focus:border-primary"
+              placeholder="Ex: 102A"
+              maxLength={5}
+              required
+            />
+          </div>
+
+          <div className="col-span-9 relative">
+            <label htmlFor="placa" className="block text-label-caps uppercase text-on-surface-variant mb-1.5">
+              Placa do veículo *
             </label>
+            <input
+              type="text"
+              id="placa"
+              value={placaVeiculo}
+              onChange={(e) => {
+                const v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                if (v.length <= 7) setPlacaVeiculo(v);
+              }}
+              className="w-full px-3 py-2.5 border border-outline-variant rounded-btn bg-surface-container-lowest text-on-surface uppercase tracking-[0.15em] font-mono font-semibold focus:border-primary"
+              placeholder="ABC-1234"
+              maxLength={7}
+              required
+            />
+            {placaVeiculo && !isValidPlaca(placaVeiculo) && (
+              <div className="absolute top-full left-0 mt-1 text-xs text-error font-medium">
+                Formato inválido. Use ABC1234 ou ABC1A23
+              </div>
+            )}
           </div>
         </div>
 
+        {/* Observações em linha única */}
         <div>
-          <label htmlFor="observacoes" className="block text-sm font-medium text-gray-700 mb-2">
+          <label htmlFor="observacoes" className="block text-label-caps uppercase text-on-surface-variant mb-1.5">
             Observações
           </label>
-          <textarea
+          <input
+            type="text"
             id="observacoes"
             value={observacoes}
             onChange={(e) => setObservacoes(e.target.value.toUpperCase())}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase"
-            placeholder="Ex: Entregador, Uber, motorista particular, etc."
-            rows={3}
+            className="w-full px-3 py-2.5 border border-outline-variant rounded-btn bg-surface-container-lowest text-on-surface uppercase placeholder:normal-case placeholder:text-on-surface-variant/60 focus:border-primary"
+            placeholder="Informações adicionais relevantes..."
           />
         </div>
 
+        {/* Liberado por */}
         <div>
-          <label htmlFor="liberadoPor" className="block text-sm font-medium text-gray-700 mb-2">
-            Liberado Por
+          <label htmlFor="liberadoPor" className="block text-label-caps uppercase text-on-surface-variant mb-1.5">
+            Liberado por
           </label>
           <input
             type="text"
             id="liberadoPor"
             value={liberadoPor}
             onChange={(e) => setLiberadoPor(e.target.value.toUpperCase())}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase"
-            placeholder="Nome de quem autorizou a entrada"
+            className="w-full px-3 py-2.5 border border-outline-variant rounded-btn bg-surface-container-lowest text-on-surface uppercase placeholder:normal-case placeholder:text-on-surface-variant/60 focus:border-primary"
+            placeholder="Nome do morador responsável pela liberação"
           />
         </div>
 
-        <div className="flex justify-end space-x-3 pt-4">
+        {/* Onde vai estacionar? — mesmo padrão do Cadastro */}
+        <div className="pt-1">
+          <label className="block text-label-caps uppercase text-on-surface-variant mb-1.5">
+            Onde vai estacionar?
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setEstacionarVagaMorador(false)}
+              className={`flex items-center gap-2 px-3 py-2.5 rounded-btn text-left transition-colors ${
+                !estacionarVagaMorador
+                  ? 'border-2 border-secondary bg-secondary-container/20'
+                  : 'border border-outline-variant bg-surface hover:bg-surface-container-highest'
+              }`}
+            >
+              <Home className={`w-4 h-4 shrink-0 ${!estacionarVagaMorador ? 'text-secondary' : 'text-on-surface-variant'}`} />
+              <span className="text-body-sm font-semibold text-on-surface truncate">
+                Vaga Comum
+              </span>
+              <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                !estacionarVagaMorador ? 'bg-secondary/15 text-secondary' : 'bg-surface-container-highest text-on-surface-variant'
+              }`}>
+                Padrão
+              </span>
+              {!estacionarVagaMorador && (
+                <UserCheck className="w-4 h-4 ml-auto text-secondary shrink-0" />
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setEstacionarVagaMorador(true)}
+              className={`flex items-center gap-2 px-3 py-2.5 rounded-btn text-left transition-colors ${
+                estacionarVagaMorador
+                  ? 'border-2 border-tertiary bg-tertiary-fixed/30'
+                  : 'border border-outline-variant bg-surface hover:bg-surface-container-highest'
+              }`}
+            >
+              <Home className={`w-4 h-4 shrink-0 ${estacionarVagaMorador ? 'text-tertiary' : 'text-on-surface-variant'}`} />
+              <span className="text-body-sm font-semibold text-on-surface truncate">
+                Vaga Morador
+              </span>
+              {estacionarVagaMorador && (
+                <UserCheck className="w-4 h-4 ml-auto text-tertiary shrink-0" />
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Seleção de Prisma — grade visual */}
+        <div className="pt-1">
+          <label className="block text-label-caps uppercase text-on-surface-variant mb-1.5">
+            Prisma magnético
+          </label>
+          <div className="grid grid-cols-6 sm:grid-cols-8 gap-2">
+            {/* Sem prisma */}
+            <button
+              type="button"
+              onClick={() => setNumeroPrisma(null)}
+              className={`aspect-square flex flex-col items-center justify-center gap-1 rounded-card p-2 transition-all ${
+                numeroPrisma === null
+                  ? 'border-2 border-primary bg-primary-container/30 shadow-ambient-1'
+                  : 'border border-outline-variant bg-surface-container-low hover:bg-surface-container hover:-translate-y-0.5'
+              }`}
+              title="Sem prisma"
+            >
+              <Ban className={`w-5 h-5 ${numeroPrisma === null ? 'text-primary' : 'text-on-surface-variant'}`} />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Sem</span>
+            </button>
+
+            {opcoesPrismas.map((numero) => {
+              const isSelecionado = numero === numeroPrisma;
+              const isAtual = numero === prismaAtualOriginal;
+              return (
+                <button
+                  key={numero}
+                  type="button"
+                  onClick={() => setNumeroPrisma(numero)}
+                  className={`group relative aspect-square flex flex-col items-center justify-center gap-1 rounded-card p-2 transition-all ${
+                    isSelecionado
+                      ? 'border-2 border-primary bg-primary-container/30 shadow-ambient-2'
+                      : 'border border-outline-variant bg-surface-container-low hover:bg-primary-container/20 hover:border-primary/60 hover:-translate-y-0.5'
+                  }`}
+                >
+                  <PrismaBadge
+                    numero={numero}
+                    size="md"
+                    withGroundShadow
+                    className="group-hover:scale-105 transition-transform"
+                  />
+                  {isAtual && (
+                    <span className="absolute -top-1.5 -right-1.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-primary text-on-primary shadow-ambient-1">
+                      Atual
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Rodapé */}
+        <div className="flex items-center justify-end gap-2 pt-3 border-t border-outline-variant/30">
           <button
             type="button"
             onClick={handleClose}
-            className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+            className="px-4 py-2 text-button font-semibold text-on-surface-variant hover:bg-surface-container-high rounded-btn transition-colors"
             disabled={loading}
           >
             Cancelar
@@ -235,9 +320,19 @@ export default function EditarVisitanteModal({ isOpen, onClose, visitante, onSuc
           <button
             type="submit"
             disabled={loading}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-on-primary text-button font-semibold rounded-btn shadow-ambient-1 hover:bg-primary-container hover:shadow-ambient-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Salvando...' : 'Salvar Alterações'}
+            {loading ? (
+              <>
+                <div className="w-4 h-4 border-2 border-on-primary border-t-transparent rounded-full animate-spin" />
+                <span>Salvando...</span>
+              </>
+            ) : (
+              <>
+                <UserCheck className="w-4 h-4" />
+                <span>Salvar Alterações</span>
+              </>
+            )}
           </button>
         </div>
       </form>
