@@ -123,56 +123,59 @@ export default function VisitanteCard({
           {/* Linha divisória atravessando o card (apenas na coluna esquerda, alinhada ao meio do badge) */}
           <div className="h-px bg-outline-variant/40" aria-hidden />
 
-          {/* Coluna esquerda — base: chips Casa + Vaga centralizados */}
-          <div className="pt-1.5 flex items-center gap-1.5 flex-wrap">
-            <div className="flex items-center gap-1.5 min-w-0 flex-nowrap">
-              <div
-                className="inline-flex items-center gap-1.5 bg-primary/10 text-primary pl-0.5 pr-2.5 py-0.5 rounded-full flex-shrink-0"
-                title={`Casa ${visitante.casa_visitada}`}
-              >
-                <span className="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center flex-shrink-0">
-                  <Home className="w-4 h-4" strokeWidth={2.75} />
-                </span>
-                <span className="text-xs font-bold leading-none truncate max-w-[60px]">
-                  {visitante.casa_visitada}
-                </span>
-              </div>
-
-              {visitante.estacionar_vaga_morador ? (
-                <span
-                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/40 text-amber-700 dark:text-amber-400 text-[9px] font-bold uppercase tracking-wider whitespace-nowrap flex-shrink-0"
-                  title="Estacionado em vaga de morador"
-                >
-                  <Car className="w-3 h-3" strokeWidth={2.5} />
-                  Vaga Morador
-                </span>
-              ) : (
-                <span
-                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-sky-500/10 border border-sky-500/40 text-sky-700 dark:text-sky-400 text-[9px] font-bold uppercase tracking-wider whitespace-nowrap flex-shrink-0"
-                  title="Estacionado em vaga de visitante"
-                >
-                  <Car className="w-3 h-3" strokeWidth={2.5} />
-                  Vaga Visitante
-                </span>
-              )}
-            </div>
-
-            {alertaPermanenciaProlongada && (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-error/10 text-error text-[9px] font-bold uppercase tracking-wider">
-                <AlertTriangle className="w-3 h-3 animate-pulse" />
-                +24h
-              </span>
-            )}
-          </div>
+          {/* Coluna esquerda — base: espaçador para manter altura simétrica do badge */}
+          <div className="pt-1.5" />
         </div>
       </div>
 
       {/* Conteúdo */}
-      <div className="px-3 pb-2 flex-1 flex flex-col gap-1.5">
-        {/* Placa */}
-        <div className="flex justify-center">
-          <PlacaVeiculo placa={visitante.placa_veiculo} size="sm" />
+      <div className="px-3 pb-2 flex-1 flex flex-col gap-2">
+        {/* Placa centralizada abaixo do nome / meio do badge */}
+        <div className="flex justify-center pt-0.5">
+          <PlacaVeiculo placa={visitante.placa_veiculo} size="md" />
         </div>
+
+        {/* Casa + Tipo de vaga ocupando a largura do card */}
+        <div className="grid grid-cols-[auto_1fr] gap-1.5 items-stretch">
+          <div
+            className="inline-flex items-center gap-1.5 bg-primary/10 text-primary pl-0.5 pr-2.5 py-1 rounded-full"
+            title={`Casa ${visitante.casa_visitada}`}
+          >
+            <span className="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center flex-shrink-0">
+              <Home className="w-4 h-4" strokeWidth={2.75} />
+            </span>
+            <span className="text-xs font-bold leading-none truncate max-w-[70px]">
+              {visitante.casa_visitada}
+            </span>
+          </div>
+
+          {visitante.estacionar_vaga_morador ? (
+            <span
+              className="flex items-center justify-center gap-1.5 px-2 py-1 rounded-full bg-amber-500/10 border border-amber-500/40 text-amber-700 dark:text-amber-400 text-[10px] font-bold uppercase tracking-wider whitespace-nowrap"
+              title="Estacionado em vaga de morador"
+            >
+              <Car className="w-3.5 h-3.5" strokeWidth={2.5} />
+              Vaga Morador
+            </span>
+          ) : (
+            <span
+              className="flex items-center justify-center gap-1.5 px-2 py-1 rounded-full bg-sky-500/10 border border-sky-500/40 text-sky-700 dark:text-sky-400 text-[10px] font-bold uppercase tracking-wider whitespace-nowrap"
+              title="Estacionado em vaga de visitante"
+            >
+              <Car className="w-3.5 h-3.5" strokeWidth={2.5} />
+              Vaga Visitante
+            </span>
+          )}
+        </div>
+
+        {alertaPermanenciaProlongada && (
+          <div className="flex justify-center">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-error/10 text-error text-[9px] font-bold uppercase tracking-wider">
+              <AlertTriangle className="w-3 h-3 animate-pulse" />
+              +24h
+            </span>
+          </div>
+        )}
 
         {/* Painel Entrada / Permanência */}
         <div className="rounded-lg bg-surface-container/70 backdrop-blur-sm border border-outline-variant/40 p-2 grid grid-cols-2 gap-2">
