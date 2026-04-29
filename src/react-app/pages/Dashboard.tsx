@@ -117,7 +117,7 @@ export default function Dashboard() {
           </span>
         </div>
 
-        {loadingVisitantes ? (
+        {loadingVisitantes && visitantes.length === 0 ? (
           <div className="text-center py-12 bg-surface-container-lowest rounded-card shadow-ambient-1">
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto" />
             <p className="mt-4 text-on-surface-variant text-body-sm">Carregando visitantes...</p>
