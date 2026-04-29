@@ -21,6 +21,50 @@ export default function VisitanteCard({
   const tempoPermanenciaHoras = useLiveTimer(visitante.hora_entrada!);
   const alertaPermanenciaProlongada = tempoPermanenciaHoras > 24;
 
+  const COUNTDOWN_INICIAL = 5;
+  const [confirmandoBaixa, setConfirmandoBaixa] = useState(false);
+  const [countdown, setCountdown] = useState(COUNTDOWN_INICIAL);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const limparInterval = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  };
+
+  useEffect(() => () => limparInterval(), []);
+
+  const iniciarConfirmacao = () => {
+    setCountdown(COUNTDOWN_INICIAL);
+    setConfirmandoBaixa(true);
+    limparInterval();
+    intervalRef.current = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          limparInterval();
+          setConfirmandoBaixa(false);
+          onRegistrarSaida(visitante.id!);
+          return COUNTDOWN_INICIAL;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const cancelarConfirmacao = () => {
+    limparInterval();
+    setConfirmandoBaixa(false);
+    setCountdown(COUNTDOWN_INICIAL);
+  };
+
+  const confirmarAgora = () => {
+    limparInterval();
+    setConfirmandoBaixa(false);
+    setCountdown(COUNTDOWN_INICIAL);
+    onRegistrarSaida(visitante.id!);
+  };
+
   const formatarHoraCurta = (hora: string) =>
     new Date(hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
