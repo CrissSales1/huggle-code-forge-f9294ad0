@@ -97,9 +97,10 @@ export default function VisitanteCard({
       <div className="relative p-3 pb-2">
         <div className="grid grid-cols-[1fr_auto] gap-x-2.5">
           {/* Coluna esquerda — topo: nome */}
-          <div className="min-w-0 pb-1.5">
+          <div className="min-w-0 pb-0.5 flex items-end">
             <h3
-              className="text-sm font-semibold tracking-tight text-on-surface truncate leading-snug"
+              className="text-base font-bold tracking-tight text-on-surface truncate leading-none font-display"
+              style={{ fontFamily: "'Space Grotesk', 'Inter', system-ui, sans-serif", letterSpacing: '-0.015em' }}
               title={visitante.nome}
             >
               {visitante.nome}
