@@ -123,17 +123,15 @@ export default function VisitanteCard({
           {/* Linha divisória atravessando o card (apenas na coluna esquerda, alinhada ao meio do badge) */}
           <div className="h-px bg-outline-variant/40" aria-hidden />
 
-          {/* Coluna esquerda — base: espaçador para manter altura simétrica do badge */}
-          <div className="pt-1.5" />
+          {/* Coluna esquerda — base: placa centralizada na largura da linha (colada nela) */}
+          <div className="pt-1.5 flex justify-center">
+            <PlacaVeiculo placa={visitante.placa_veiculo} size="md" />
+          </div>
         </div>
       </div>
 
       {/* Conteúdo */}
-      <div className="px-3 pb-2 flex-1 flex flex-col gap-2">
-        {/* Placa centralizada abaixo do nome / meio do badge */}
-        <div className="flex justify-center pt-0.5">
-          <PlacaVeiculo placa={visitante.placa_veiculo} size="md" />
-        </div>
+      <div className="px-3 pb-2 flex-1 flex flex-col gap-2 pt-1">
 
         {/* Casa + Tipo de vaga ocupando a largura do card */}
         <div className="grid grid-cols-[auto_1fr] gap-1.5 items-stretch">
