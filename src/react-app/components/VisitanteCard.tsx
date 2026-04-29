@@ -167,14 +167,14 @@ export default function VisitanteCard({
       </div>
 
       {/* Conteúdo */}
-      <div className="px-3 pb-3 flex-1 flex flex-col gap-2">
+      <div className="px-3 pb-2 flex-1 flex flex-col gap-1.5">
         {/* Placa */}
         <div className="flex justify-center">
           <PlacaVeiculo placa={visitante.placa_veiculo} size="sm" />
         </div>
 
         {/* Painel Entrada / Permanência */}
-        <div className="rounded-lg bg-surface-container/70 backdrop-blur-sm border border-outline-variant/40 p-2.5 grid grid-cols-2 gap-2.5">
+        <div className="rounded-lg bg-surface-container/70 backdrop-blur-sm border border-outline-variant/40 p-2 grid grid-cols-2 gap-2">
           <div>
             <p className="text-[9px] font-bold uppercase tracking-wider text-outline mb-0.5">
               Entrada
