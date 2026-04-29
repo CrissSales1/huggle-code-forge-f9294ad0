@@ -46,6 +46,7 @@ export default function EditarVisitanteModal({ isOpen, onClose, visitante, onSuc
     setLiberadoPor(visitante.liberado_por || '');
     setEstacionarVagaMorador(visitante.estacionar_vaga_morador ?? false);
     setNumeroPrisma(visitante.numero_prisma ?? null);
+    setEditandoPrisma(false);
 
     // Buscar prismas livres no momento exato da abertura (sempre fresco)
     (async () => {
