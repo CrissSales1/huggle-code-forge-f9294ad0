@@ -74,8 +74,8 @@ export const SceneLPR: React.FC = () => {
             top: "50%",
             left: "50%",
             transform: "translate(-50%, -50%)",
-            width: 420,
-            height: 130,
+            width: 520,
+            height: 140,
             background: COLORS.cream,
             borderRadius: 10,
             border: "4px solid #1a1a1a",
@@ -84,10 +84,11 @@ export const SceneLPR: React.FC = () => {
             justifyContent: "center",
             opacity: plateOp,
             fontFamily: "monospace",
-            fontSize: 78,
+            fontSize: 72,
             fontWeight: 800,
             color: "#0a0a0a",
-            letterSpacing: 6,
+            letterSpacing: 4,
+            whiteSpace: "nowrap",
           }}
         >
           ABC-1D23
