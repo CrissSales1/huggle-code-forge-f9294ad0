@@ -1,65 +1,36 @@
-# Vídeo Promocional — Sistema de Controle de Acesso Águas da Fonte
+## Roteiro/Narração Comercial — arquivo .md
 
-Gerar um vídeo MP4 de ~20 segundos (600 frames @ 30fps, 1920x1080) com identidade Premium/Tecnológico, usando Remotion no sandbox, salvo em `/mnt/documents/video-promocional-aguasdafonte.mp4`.
+Vou criar `comercial-assets/roteiro-narracao-comercial.md` com a narração completa de um comercial do **Sistema de Controle de Acesso – Águas da Fonte**, em português brasileiro, linguagem acessível (sem jargão técnico: "inteligência artificial", "visão computacional", "processamento local", em vez de YOLO/ONNX/PaddleOCR).
 
-## Direção criativa
+### Estrutura do documento
 
-- **Paleta**: Navy profundo `#0A1628` / `#0F1F3D` + Dourado `#D4AF37` / `#F0D78C` + Off-white `#F5F3EE`
-- **Tipografia**: Display *Syne* (700) + Body *Inter* (400/600) — via `@remotion/google-fonts`
-- **Aesthetic**: Tech Product + Luxury — cortes precisos, springs suaves, grade sutil, brilhos dourados, parallax leve
-- **Motifs**: linhas/grade tech animadas, scanner de placa (LPR), badge dourado, números crescendo
-- **Trilha**: sem áudio (`muted: true` — limitação do ffmpeg do sandbox)
+1. **Ficha técnica do comercial** — duração sugerida (60–90s versão longa + corte de 30s + corte de 20s), tom de voz (locutor masculino, grave, confiante, premium), trilha sugerida (cinematográfica/tecnológica).
 
-## Roteiro (7 cenas, ~20s)
+2. **Roteiro narrado em blocos com timing**, cada bloco com:
+   - **[CENA]** — descrição visual
+   - **[NARRAÇÃO]** — texto falado
+   - **[LEGENDA/ARTE]** — texto na tela
 
-1. **Abertura (0–2.5s)** — Logo/título "Sistema de Controle de Acesso" surgindo em blur→sharp sobre grade animada; subtítulo "Águas da Fonte"
-2. **Problema (2.5–5s)** — Texto editorial: "Portarias manuais. Filas. Erros." com palavras riscadas em dourado
-3. **Solução / LPR (5–9s)** — Mock de câmera escaneando placa "ABC-1D23" com bounding box dourado e "Reconhecimento por IA"
-4. **4 Pilares (9–13s)** — Grid 2x2 entrando em stagger: IA de Placas · 100% Local/Offline · Vigilância 360° · Relatórios & BI
-5. **Dashboard (13–16s)** — Mock de KPIs (visitantes, veículos, alertas) com números animados via interpolate
-6. **Premium / Local (16–18s)** — Selo dourado "100% LOCAL · SEM NUVEM · LGPD-READY"
-7. **Contato (18–20s)** — "Cristian Sales" + ícone WhatsApp + "11 94175-8759" + nome do sistema
+3. **Blocos do comercial**:
+   - **Abertura — A dor**: portaria manual, papel, fila de carros, retrabalho.
+   - **Virada — A solução**: chega o Sistema Águas da Fonte.
+   - **Reconhecimento inteligente de placas**: câmera comum + IA local lê a placa em menos de meio segundo.
+   - **Vigilância 360°**: detecção de pessoas, alertas em horários programados, ronda virtual.
+   - **Fluxo do visitante**: chegada → reconhecimento → cadastro em segundos → prisma → saída automática.
+   - **Relatórios e dashboards**: histórico completo, exportação PDF, BI para o síndico.
+   - **Comparativo com câmeras LPR tradicionais** (tabela narrada):
+     - LPR de mercado: R$ 8 a 25 mil por canal, mensalidade de nuvem, instalação proprietária, dependência de internet.
+     - Águas da Fonte: usa câmeras IP que o condomínio já tem, roda 100% local, sem mensalidade por placa, sem nuvem, sem vazamento de dados (LGPD-ready).
+   - **Custo-benefício**: payback em poucos meses, escalável, atualizações contínuas.
+   - **Prova de confiança**: dados ficam no condomínio, funciona mesmo sem internet, integra com o dia a dia da portaria.
+   - **Encerramento emocional**: "Mais que tecnologia, é tranquilidade para quem mora e profissionalismo para quem trabalha."
+   - **CTA**: Cristian Sales — WhatsApp (11) 94175-8759.
 
-## Estrutura técnica
+4. **Versões curtas** (30s e 20s) com cortes prontos do roteiro principal.
 
-```
-remotion/
-  tsconfig.json
-  package.json
-  src/
-    index.ts                 # registerRoot
-    Root.tsx                 # Composition main 1920x1080 600f 30fps
-    MainVideo.tsx            # TransitionSeries + camadas persistentes
-    components/
-      GridBackground.tsx     # grade tech animada persistente
-      GoldGlow.tsx           # halos dourados em parallax
-    scenes/
-      SceneIntro.tsx
-      SceneProblema.tsx
-      SceneLPR.tsx
-      ScenePilares.tsx
-      SceneDashboard.tsx
-      ScenePremium.tsx
-      SceneContato.tsx
-  scripts/
-    render-remotion.mjs      # bundle + renderMedia (chrome-for-testing, muted)
-```
+5. **Banco de frases de impacto** reutilizáveis em posts e legendas.
 
-- Transições: `fade` curtas (15f) entre cenas, com `wipe` dourado entre Pilares→Dashboard
-- Todas as animações via `useCurrentFrame` + `interpolate`/`spring` (sem CSS transitions)
-- Fontes via `@remotion/google-fonts/Syne` e `/Inter` em escopo de módulo
-- Sem `backdropFilter` (proibido no sandbox); usar `filter: blur` com moderação
-
-## Execução
-
-1. Criar `remotion/` com `bun init` + instalar deps Remotion (musl + gnu compositor fix + symlinks ffmpeg/ffprobe)
-2. Escrever todos os arquivos TSX das 7 cenas + camadas persistentes
-3. Render via `node scripts/render-remotion.mjs` → `/mnt/documents/video-promocional-aguasdafonte.mp4`
-4. QA: `bunx remotion still` em frames-chave (60, 200, 400, 560) para validar layout e legibilidade; ajustar e re-renderizar se necessário
-5. Entregar via `<lov-artifact>` com mime `video/mp4`
-
-## Observações
-
-- Duração total ~20s (600 frames) — bem dentro do limite de 600s de render do sandbox
-- Sem narração/áudio (limitação técnica do ffmpeg Nix); todo storytelling é visual
-- Reaproveita identidade Premium/Tecnológico já estabelecida nos materiais anteriores (PDF/PPTX/PNG)
+### Observações
+- Sem termos como YOLO, ONNX, PaddleOCR, WebGL, WASM, MediaPipe — substituídos por "inteligência artificial", "visão computacional", "processamento direto no computador da portaria".
+- Tom premium/tecnológico, alinhado à identidade já definida (navy + dourado).
+- Nenhum código de aplicação será alterado; apenas um arquivo `.md` novo.
